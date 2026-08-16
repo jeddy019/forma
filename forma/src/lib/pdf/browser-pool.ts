@@ -51,9 +51,19 @@ async function getBrowser(): Promise<Browser> {
   return browserInstance;
 }
 
+export interface GeneratePdfOptions {
+  // Repeated on every printed page via Puppeteer's own header/footer
+  // mechanism - required for content (like the worksheet footer) that must
+  // appear once per page rather than once in the document flow. Omitting
+  // both keeps the previous plain-content-only behaviour.
+  headerTemplate?: string;
+  footerTemplate?: string;
+}
+
 export async function generatePdf(
   html: string,
-  format: 'A4' | 'Letter' = 'A4'
+  format: 'A4' | 'Letter' = 'A4',
+  options: GeneratePdfOptions = {}
 ): Promise<Buffer> {
   while (activeJobs >= MAX_CONCURRENT) {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -64,10 +74,14 @@ export async function generatePdf(
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'load' });
     await page.evaluate(() => (window as unknown as { MathJax?: { typesetPromise?: () => Promise<void> } }).MathJax?.typesetPromise?.());
+    const displayHeaderFooter = Boolean(options.headerTemplate || options.footerTemplate);
     const pdf = await page.pdf({
       format,
       printBackground: true,
       margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' },
+      displayHeaderFooter,
+      headerTemplate: options.headerTemplate ?? '<span></span>',
+      footerTemplate: options.footerTemplate ?? '<span></span>',
     });
     await page.close();
     return Buffer.from(pdf);
