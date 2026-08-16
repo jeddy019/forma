@@ -1,0 +1,32 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+// Bridges a real gap: signUp() does not always return an active session (a
+// Supabase project with email confirmation enabled returns no session until
+// the user clicks the confirmation link), so the users row can't always be
+// inserted at signup time - RLS requires auth.uid() = id, and there is no
+// authenticated caller yet. role/region are instead carried on
+// auth signUp's options.data (user_metadata), and this runs once per
+// dashboard visit to create the row the first time an authenticated request
+// actually arrives - covering both the immediate-session and
+// confirm-later-then-log-in paths with one code path.
+export async function ensureUserProfile(supabase: SupabaseClient, userId: string): Promise<void> {
+  const { data: existing } = await supabase.from('users').select('id').eq('id', userId).maybeSingle();
+  if (existing) return;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const role = typeof user.user_metadata?.role === 'string' ? user.user_metadata.role : 'tutor';
+  const region = typeof user.user_metadata?.region === 'string' ? user.user_metadata.region : 'england';
+  const paperSize = region === 'united_states' ? 'letter' : 'a4';
+
+  await supabase.from('users').insert({
+    id: userId,
+    email: user.email ?? '',
+    role,
+    region,
+    paper_size: paperSize,
+  });
+}
