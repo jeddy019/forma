@@ -25,6 +25,10 @@ export function splitMarkScheme(worksheet: GeneratedWorksheet) {
   const markSchemeJson = {
     questions: worksheet.questions.map((question) => ({
       id: question.id,
+      // Needed by mark-scheme-template.ts to reproduce the same
+      // Warm-up/Challenge section dividers as the worksheet - mark schemes
+      // walk the same 10 questions in the same order.
+      type: question.type,
       parts: question.parts.map((part) => ({
         part_label: part.part_label,
         marks: part.marks,

@@ -69,7 +69,7 @@ export interface WorksheetPdfInput {
 // student names) flows straight into page.setContent() as real HTML, so it
 // must be escaped - an unescaped '<' from the model's output would otherwise
 // be parsed as a tag rather than displayed as text.
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -78,7 +78,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function formatDate(date: Date): string {
+export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
@@ -254,11 +254,13 @@ function renderQrBlock(digitalCode: string): string {
 // Document assembly
 // ---------------------------------------------------------------------------
 
-const FONT_LINKS = `<link rel="preconnect" href="https://fonts.googleapis.com">
+// Shared with mark-scheme-template.ts - identical HTML head requirements
+// (same fonts, same MathJax setup) for both PDF documents.
+export const FONT_LINKS = `<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">`;
 
-const MATHJAX_SCRIPTS = `<script>
+export const MATHJAX_SCRIPTS = `<script>
   window.MathJax = {
     tex: { inlineMath: [['$', '$'], ['\\\\(', '\\\\)']] },
     svg: { fontCache: 'global' }
@@ -309,7 +311,8 @@ body { background: #F7F4EF; color: #1A1A18; font-family: 'Inter', sans-serif; fo
 // Puppeteer renders header/footer templates in an isolated context that
 // doesn't see the main document's <link> stylesheets, so this falls back to
 // a system sans-serif instead of Inter.
-function buildFooterTemplate(): string {
+// Shared with mark-scheme-template.ts - same footer on both documents.
+export function buildFooterTemplate(): string {
   return `<div style="width: 100%; font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #9A9080; padding: 0 22mm; box-sizing: border-box;">
   <div style="border-top: 0.5px solid #E0D9D0; padding-top: 4px; display: flex; justify-content: space-between;">
     <span>Forma</span>
