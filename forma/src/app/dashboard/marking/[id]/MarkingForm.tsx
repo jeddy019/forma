@@ -4,6 +4,14 @@ import { useActionState } from 'react';
 import { saveMarkingAction, type SaveMarkingResult } from './actions';
 import { sectionDividerLabel } from '@/lib/worksheet/sectionDividerLabel';
 import { cardClass, inputClass, labelClass, primaryButtonClass } from '@/lib/ui/formStyles';
+import type { SpeedFlag } from '@/lib/marking/speedAwareness';
+
+// Phase 7 Step 39: "18 min" rather than a raw second count.
+function formatTimeTaken(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) return 'under a minute';
+  return `${minutes} min`;
+}
 
 export interface MergedPart {
   partLabel: string | null;
@@ -43,6 +51,8 @@ export default function MarkingForm({
   reviewed,
   existingFeedback,
   questions,
+  timeTakenSeconds,
+  speedFlag,
 }: {
   submissionId: string;
   studentName: string;
@@ -53,6 +63,8 @@ export default function MarkingForm({
   reviewed: boolean;
   existingFeedback: string | null;
   questions: MergedQuestion[];
+  timeTakenSeconds: number | null;
+  speedFlag: SpeedFlag;
 }) {
   const [state, formAction, pending] = useActionState(saveMarkingAction, initialState);
 
@@ -67,15 +79,23 @@ export default function MarkingForm({
           </h1>
           <p className="text-sm text-[#5C5849]">
             {topic} - submitted {new Date(submittedAt).toLocaleDateString('en-GB')}
+            {timeTakenSeconds !== null && ` - took ${formatTimeTaken(timeTakenSeconds)}`}
           </p>
         </div>
-        <span
-          className={`text-xs font-medium rounded-full px-2.5 py-1 ${
-            reviewed ? 'bg-[#E8F2ED] text-[#1A3D2E]' : 'bg-[#FEF9EC] text-[#B8963C]'
-          }`}
-        >
-          {reviewed ? `Reviewed${scorePercentage !== null ? ` - ${scorePercentage}%` : ''}` : 'Needs review'}
-        </span>
+        <div className="flex items-center gap-2">
+          {speedFlag.isSlow && (
+            <span className="text-xs font-medium rounded-full px-2.5 py-1 bg-[#FEF9EC] text-[#B8963C]">
+              Took longer than usual{speedFlag.averageSeconds !== null && ` (avg ${formatTimeTaken(speedFlag.averageSeconds)})`}
+            </span>
+          )}
+          <span
+            className={`text-xs font-medium rounded-full px-2.5 py-1 ${
+              reviewed ? 'bg-[#E8F2ED] text-[#1A3D2E]' : 'bg-[#FEF9EC] text-[#B8963C]'
+            }`}
+          >
+            {reviewed ? `Reviewed${scorePercentage !== null ? ` - ${scorePercentage}%` : ''}` : 'Needs review'}
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">

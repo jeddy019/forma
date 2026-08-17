@@ -64,7 +64,12 @@ CREATE TABLE worksheets (
   -- generated together for a group ("one worksheet, multiple students") -
   -- not a foreign key, just a random UUID common to that batch. Null
   -- outside group mode. See supabase/add-worksheet-group-id.sql.
-  group_id UUID
+  group_id UUID,
+  -- Phase 7 Step 39 (Speed awareness): set once, the first time /s/[code]
+  -- is opened for this worksheet - captures a real "started working on
+  -- it" event that created_at (generation time) can't. Null until then.
+  -- See supabase/add-worksheet-first-opened-at.sql.
+  first_opened_at TIMESTAMPTZ
 );
 
 CREATE TABLE submissions (
