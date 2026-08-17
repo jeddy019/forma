@@ -6,6 +6,10 @@ import { COUNTRIES, SUBJECTS, type Country, type Subject } from '@/lib/constants
 
 // Security Rule 4: reject student name over 100 characters, server side.
 const NAME_MAX_LENGTH = 100;
+const EMAIL_MAX_LENGTH = 200;
+// Deliberately simple (not RFC 5322) - this only needs to catch obvious
+// typos before Resend's own delivery attempt does, not be a full validator.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export interface CreateStudentResult {
   error?: string;
@@ -28,6 +32,7 @@ export async function createStudentAction(
   const country = String(formData.get('country') ?? '');
   const curriculumLevel = String(formData.get('curriculumLevel') ?? '').trim();
   const yearLevel = String(formData.get('yearLevel') ?? '').trim();
+  const email = String(formData.get('email') ?? '').trim();
   const weaknesses = String(formData.get('weaknesses') ?? '').trim();
   const subjects = formData.getAll('subjects').map(String);
 
@@ -46,6 +51,10 @@ export async function createStudentAction(
   if (!yearLevel) {
     return { error: 'Please enter a year or grade.' };
   }
+  // Optional - see CLAUDE.md's Student Accounts and Data Processor Status.
+  if (email && (email.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(email))) {
+    return { error: 'Please enter a valid email address, or leave it blank.' };
+  }
 
   const validSubjects = subjects.filter((subject): subject is Subject =>
     (SUBJECTS as readonly string[]).includes(subject)
@@ -58,6 +67,7 @@ export async function createStudentAction(
     curriculum_level: curriculumLevel,
     year_level: yearLevel,
     subjects: validSubjects,
+    email: email || null,
     weaknesses: weaknesses || null,
   });
 

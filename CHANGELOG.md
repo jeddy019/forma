@@ -855,3 +855,157 @@ Next real work is Phase 4 (Automation and Email), starting with Step 20:
 Resend integration and the 8 React Email templates in src/emails/, with
 unsubscribe headers on emails 3/4/5 per the Legal Requirements section.
 Decisions: covered above (Step 19 folded into Step 18).
+
+---
+
+SESSION UPDATE (following the one above):
+Opened with a real, sizeable scope addition from the user, delivered across
+two messages that directly contradicted each other on one point - caught
+before acting on either side rather than guessing: the user's own reply
+said both "do NOT add an email column to student_profiles at all... Do not
+add student email anywhere" (with GDPR/COPPA reasoning) and, further down
+the same message under a "Student Accounts - Revised Decision" heading,
+"Add student_profiles.email as optional... Student login is optional but
+supported." Asked directly which was current rather than picking one -
+confirmed: the Revised Decision stands (optional email, optional login,
+tutor/parent as data controller and Forma as data processor - see
+CLAUDE.md's new Student Accounts and Data Processor Status subsection under
+Legal Requirements).
+
+Completed, before any Step 20 code: folded a large Kumon-methodology
+addition into the plan documents (CLAUDE.md), applied the resulting schema
+changes live, and extended the one already-built feature the schema change
+touches (the student profile form) - all as documentation/schema work, not
+as an attempt to build the Kumon mastery logic itself in this session (see
+Decision below for why that's deliberately deferred).
+- New "Kumon Methodology and Question Quality" section in CLAUDE.md
+  (mastery-before-progression at an 85%-across-two-worksheets threshold,
+  per-sub-skill tracking, speed awareness, daily 5-question practice mode,
+  return-to-fundamentals on sub-50% scores, a human-verified question bank)
+  - placed after Adaptive Difficulty with a forward-note that Phase 7
+  eventually supersedes that section's single current_difficulty dial with
+  per-sub-skill mastery, not yet.
+- New "PHASE 7 - Kumon Mastery Model" in Build Phases, Steps 37-42, one
+  step per principle above - deliberately its own phase after Phase 6
+  rather than squeezed into whichever phase happened to be active, since
+  this is genuinely multi-session work (sub-skill AI schema/prompt changes,
+  a mastery algorithm, a prerequisite-sub-skill map, a whole new generation
+  mode, and educator-facing verification tooling are each real features).
+  Two open questions flagged inline rather than guessed at: how "time
+  spent" is actually captured for speed awareness (Step 39), and what
+  mechanism backs the sub-skill prerequisite map for return-to-fundamentals
+  (Step 41) - both explicitly deferred to when those steps are actually
+  built, not decided now.
+- New "Student Accounts and Data Processor Status" subsection under Legal
+  Requirements, and student_profiles.email/skill_map added to Database
+  Schema, both matching the confirmed Revised Decision.
+- Fixed a real, separate drift while touching the Database Schema section
+  anyway: CLAUDE.md's embedded copy of the worksheets table never got
+  expires_at added when Phase 2 Step 13 added it live and updated
+  schema.sql - only schema.sql was fixed at the time, this file's own copy
+  silently went stale. Caught by diffing against the real schema.sql before
+  editing rather than trusting this file's own text.
+- Onboarding Flows and Permissions Summary updated to match (email field
+  in the student-profile form fields list; STUDENT permissions line no
+  longer says "no account required" outright).
+
+Schema changes applied live against the production Supabase project (same
+temporary-local-`pg`-dependency, install-then-uninstall pattern as every
+previous live DB fix in this file) and confirmed via information_schema
+queries immediately after: student_profiles.email (TEXT), student_profiles.
+skill_map (JSONB, default '{}'), and a new question_bank table (RLS
+enabled, zero policies - not user-owned, same service-role-only pattern as
+usage_log/webhook_events, since educators write/verify these and only the
+generation pipeline reads them). supabase/add-student-email-skillmap-
+questionbank.sql has the standalone fix; schema.sql updated to match.
+
+Extended the already-built student profile form (src/app/dashboard/
+students/{StudentForm,actions}.tsx) with the new optional email field -
+simple format validation server-side (not full RFC 5322, just enough to
+catch obvious typos before Resend's own delivery attempt would), 200 char
+max. Did not add anything to the students list page's display or build
+student login itself - login is still Phase 6 Step 36, unbuilt.
+
+Completed: Phase 4 Step 20 - Resend integration and all 8 React Email
+templates. src/emails/components/EmailLayout.tsx is the shared wrapper (one
+definition of the Forma email chrome so the 8 templates can't drift from
+each other or from the Design System) - real constraint handled correctly
+rather than assumed away: email clients strip <link> tags, so the Design
+System's actual web fonts can't be relied on the way the PDF's <link> tags
+can. Used React Email's <Font> component (declares intent + a real
+web-safe fallback stack) rather than just hoping Playfair Display/Inter
+load. React Email's fallbackFontFamily prop only accepts a fixed keyword
+enum (not an arbitrary CSS font-stack string) - caught by tsc, fixed by
+keeping two versions of each fallback (the constrained array for <Font>,
+a full CSS string for inline styles).
+
+All 8 templates built (src/emails/*.tsx) with the props each actually has
+available - notably, users has no "name" column anywhere in the schema
+(email/role/plan only), so every template greets by role or by the
+student's name, never a tutor/parent name that doesn't exist. Only emails
+3, 4, and 5 (WeeklyDelivery, MondayParentSummary, TutorParentReport) pass
+showUnsubscribeFooterLine and get the List-Unsubscribe header, per Legal
+Requirements. That header is a mailto: link, not a one-click HTTP
+unsubscribe endpoint - deliberate, not a shortcut: CLAUDE.md's spec here
+just says "Use Resend's built-in support" and "Include the List-Unsubscribe
+header," and there is no per-recipient subscription-preference table
+anywhere in the schema to back a stateful one-click flow. A mailto: link is
+a genuinely compliant mechanism on its own (CAN-SPAM/CASL/GDPR require *a*
+working unsubscribe path, not specifically a one-click HTTP one) -
+documented as a real design choice in EmailLayout.tsx's own comment, to
+revisit only if a real preference centre is ever built.
+
+src/lib/email/resend.ts (client + EMAIL_FROM constant) and src/lib/email/
+send.tsx (one typed wrapper function per template, e.g.
+sendWorksheetReadyEmail()) - every wrapper returns a boolean and never
+throws, by design: a failed email send must never break the flow that
+triggered it (a failed welcome email must not fail signup, same principle
+already established for Tier 2 marking calls in /api/submit). EMAIL 2/3's
+recipient (student directly vs. the account owner) is decided by the
+caller, not the template - the template only needs to know
+sentToStudentDirectly for its wording, matching the confirmed Student
+Accounts decision.
+
+Wired up the one trigger point that already exists: EMAIL 1 (Welcome) now
+actually sends on signup, via a new src/app/signup/actions.ts server action
+(signup/page.tsx is 'use client', RESEND_API_KEY is server-only per
+Security Rules 5, same reason createStudentAction/saveMarkingAction are
+server actions). Fired for both the instant-session and
+confirm-later-then-log-in signup paths (CLAUDE.md says "sent immediately on
+signup," not "once confirmed"), never awaited in a way that could block or
+fail the redirect. EMAILS 2-8 are not wired into any trigger yet -
+deliberately: 2's trigger (manual generation) belongs to whichever future
+change touches /api/generate, 3's trigger is the Step 22 cron job, 4 is
+Step 24, 5 is Step 25, 6/7/8 are Phase 5's webhook handler - none of those
+exist yet, so there is nothing real to wire into. Building send.tsx now and
+wiring each call in when its actual trigger gets built (rather than wiring
+early against a placeholder) avoids a half-connected email firing at the
+wrong time later.
+
+Verified for real, to the extent possible: RESEND_API_KEY is empty in
+.env.local (confirmed by grep before claiming otherwise), so no live send
+could be tested this session - flagging plainly rather than skipping past
+it. What was verified: all 8 templates render to valid HTML via
+@react-email/render (a throwaway script rendered each with realistic props
+and checked for a real <html> document, all 8 passed), and the
+unsubscribe-footer-link logic was checked directly against the rendered
+HTML - present on WeeklyDelivery/MondayParentSummary/TutorParentReport,
+absent on Welcome, matching the emails-3/4/5-only rule exactly. tsc --noEmit
+and eslint clean across the whole project. Signup's new call site compiles
+and type-checks against the real sendWelcomeEmail() signature, but was not
+exercised through a live signup + inbox check this session, since there is
+no real API key to send through yet.
+
+Next: Phase 4 Step 21 - Schedule UI (all fields from the schedules table,
+editable at any time, pause with a date picker) - the first user-facing
+page in Phase 4. Before Step 21 has anything real to schedule against, note
+Steps 22 (the cron endpoint) and 23 (adaptive difficulty) are still
+unbuilt, so a schedule created via Step 21's UI won't actually fire
+anything yet - same "build the UI ahead of its backend, flag it, keep
+going" pattern as Phase 2's Generation UI session. Also carry forward: a
+real RESEND_API_KEY needs to land in .env.local (and on Vercel) before any
+of Step 20's 8 templates can actually be test-fired end to end - ask the
+user for one, or proceed and defer that verification again, whichever they
+prefer, next time email sending needs to be exercised for real.
+Decisions: covered above (Kumon addition confirmed and documented; Student
+Accounts contradiction resolved in favour of the Revised Decision).

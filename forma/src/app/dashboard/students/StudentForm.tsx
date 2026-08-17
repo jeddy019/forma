@@ -91,6 +91,20 @@ export default function StudentForm() {
       </div>
 
       <div>
+        <label className={labelClass} htmlFor="email">
+          Student email (optional)
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          maxLength={200}
+          className={inputClass}
+          placeholder="Leave blank to send worksheets to your own email instead"
+        />
+      </div>
+
+      <div>
         <label className={labelClass} htmlFor="weaknesses">
           Weaknesses (optional)
         </label>

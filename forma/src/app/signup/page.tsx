@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
+import { sendWelcomeEmailAction } from './actions';
 
 const REGIONS = [
   { value: 'england', label: 'England' },
@@ -48,6 +49,12 @@ export default function SignupPage() {
       setError('Could not create an account - please try again.');
       return;
     }
+
+    // EMAIL 1: sent immediately on signup, regardless of whether email
+    // confirmation is pending - never awaited/blocking, and the action
+    // itself never throws (see send.tsx), so this can't affect the signup
+    // flow either way.
+    void sendWelcomeEmailAction(email, role);
 
     if (!data.session) {
       setNotice('Check your email to confirm your account before signing in.');

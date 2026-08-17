@@ -23,6 +23,13 @@ CREATE TABLE student_profiles (
   subjects TEXT[],
   weaknesses TEXT,
   current_difficulty TEXT DEFAULT 'standard',
+  -- Optional - never required. Tutor/parent is data controller, Forma is
+  -- data processor (see CLAUDE.md's Student Accounts and Data Processor
+  -- Status). When set, worksheet-ready/weekly-delivery emails go straight
+  -- to the student instead of the account owner.
+  email TEXT,
+  -- Kumon Methodology: per-sub-skill mastery state. Empty until Phase 7.
+  skill_map JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -116,6 +123,23 @@ CREATE TABLE webhook_events (
   processed_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Kumon Methodology: human-verified question bank (Phase 7 Step 42). Not
+-- user-owned - educators write/verify these, generation reads them
+-- server-side only. See the RLS note below (zero policies, same as
+-- usage_log/webhook_events).
+CREATE TABLE question_bank (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  country TEXT,
+  curriculum_level TEXT,
+  subject TEXT,
+  topic TEXT,
+  sub_skill TEXT,
+  question_json JSONB,
+  verified_by TEXT,
+  verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX idx_worksheets_owner ON worksheets(owner_id);
 CREATE INDEX idx_worksheets_student ON worksheets(student_id);
@@ -127,6 +151,7 @@ CREATE INDEX idx_schedules_owner ON schedules(owner_id);
 CREATE INDEX idx_schedules_paused ON schedules(is_paused);
 CREATE INDEX idx_notes_student ON session_notes(student_id);
 CREATE INDEX idx_usage_user_action ON usage_log(user_id, action);
+CREATE INDEX idx_question_bank_lookup ON question_bank(country, curriculum_level, subject, sub_skill);
 
 -- Enable RLS
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -137,6 +162,7 @@ ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE question_bank ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies
 CREATE POLICY users_own ON users FOR ALL USING (auth.uid() = id);
@@ -164,6 +190,13 @@ CREATE POLICY submissions_owner ON submissions FOR ALL USING (
 -- query, with or without a code. Confirmed live: an anon SELECT with no
 -- filter and no known code returned another user's full worksheet row,
 -- mark scheme included.
+--
+-- usage_log, webhook_events, and question_bank also have no policy beyond
+-- RLS-enabled: none is ever queried by an authenticated client (usage_log is
+-- written only by the SECURITY DEFINER function below, which runs as the
+-- table owner and bypasses RLS; webhook_events and question_bank are
+-- service_role-only), so "enabled with zero policies" (deny-all to
+-- anon/authenticated) is correct for all three, not an oversight.
 
 -- Atomic free tier function
 CREATE OR REPLACE FUNCTION check_and_log_generation(p_user_id UUID)
