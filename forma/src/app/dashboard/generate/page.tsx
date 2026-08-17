@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import GenerateForm from './GenerateForm';
 import { cardClass, secondaryButtonClass } from '@/lib/ui/formStyles';
+import { isActivePro } from '@/lib/payments/planStatus';
 
 interface StudentOption {
   id: string;
@@ -21,10 +22,10 @@ export default async function GeneratePage() {
     // a picker, not a browsable list - but still capped rather than truly
     // unbounded, per Performance Rule 3.
     supabase.from('student_profiles').select('id, name').order('name').limit(200),
-    supabase.from('users').select('role, plan').eq('id', user.id).single(),
+    supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single(),
   ]);
 
-  const canDownloadMarkScheme = ownerRow?.role === 'tutor' && ownerRow?.plan === 'pro';
+  const canDownloadMarkScheme = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
 
   if (!students || students.length === 0) {
     return (

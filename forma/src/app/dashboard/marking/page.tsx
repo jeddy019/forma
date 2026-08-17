@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
+import { isActivePro } from '@/lib/payments/planStatus';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -33,8 +34,8 @@ export default async function MarkingPage({
 
   // Permissions Summary: the marking dashboard is a tutor-pro entitlement -
   // free tier and the parent plan don't get it, same gate as mark scheme PDFs.
-  const { data: ownerRow } = await supabase.from('users').select('role, plan').eq('id', user.id).single();
-  if (!ownerRow || ownerRow.role !== 'tutor' || ownerRow.plan !== 'pro') {
+  const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
+  if (!ownerRow || ownerRow.role !== 'tutor' || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return (
       <div className={`${cardClass} text-center`}>
         <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Marking dashboard</h1>

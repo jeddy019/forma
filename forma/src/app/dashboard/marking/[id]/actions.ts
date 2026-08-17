@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { nextDifficulty } from '@/lib/adaptive/nextDifficulty';
 import { DIFFICULTY_LEVELS, type DifficultyLevel } from '@/lib/constants';
+import { isActivePro } from '@/lib/payments/planStatus';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FEEDBACK_MAX_LENGTH = 2000;
@@ -53,8 +54,8 @@ export async function saveMarkingAction(
     return { error: 'You must be signed in to save marking.' };
   }
 
-  const { data: ownerRow } = await supabase.from('users').select('role, plan').eq('id', user.id).single();
-  if (!ownerRow || ownerRow.role !== 'tutor' || ownerRow.plan !== 'pro') {
+  const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
+  if (!ownerRow || ownerRow.role !== 'tutor' || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return { error: 'The marking dashboard is available on the Tutor plan.' };
   }
 

@@ -8,6 +8,7 @@ import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { sendWorksheetReadyEmail } from '@/lib/email/send';
 import type { Country } from '@/lib/constants';
 
 const TOPIC_MAX_LENGTH = 1000;
@@ -24,6 +25,7 @@ interface GenerateRequestBody {
 interface StudentProfileRow {
   id: string;
   name: string;
+  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
   }
   const sanitizedTopic = stripHtmlTags(topicPrompt).trim();
 
-  const { data: ownerRow } = await supabase.from('users').select('plan, plan_expires_at, paper_size').eq('id', user.id).single();
+  const { data: ownerRow } = await supabase.from('users').select('email, plan, plan_expires_at, paper_size').eq('id', user.id).single();
 
   // Phase 5 Step 28: check_and_log_generation enforces the 3/month free
   // cap - it has no notion of plan at all, so an active paid plan must
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
 
   const { data: student, error: studentError } = await supabase
     .from('student_profiles')
-    .select('id, name, country, curriculum_level, year_level, subjects')
+    .select('id, name, email, country, curriculum_level, year_level, subjects')
     .eq('id', studentId)
     .single<StudentProfileRow>();
 
@@ -154,6 +156,24 @@ export async function POST(request: NextRequest) {
   if (insertError || !inserted) {
     console.error('Failed to store worksheet', insertError);
     return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+  }
+
+  // EMAIL 2 (Email Templates): "Worksheet ready - manual generation, sent
+  // to student." Same student.email ?? owner.email fallback as the
+  // scheduled cron's EMAIL 3 send - never fails the request itself (send()
+  // already never throws; this is additionally fire-and-forget so a slow
+  // or failed send can't hold up the response the tutor/parent is waiting
+  // on for their own generation).
+  const recipientEmail = student.email ?? ownerRow?.email;
+  if (recipientEmail) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    void sendWorksheetReadyEmail(recipientEmail, {
+      studentName: student.name,
+      subject: inserted.subject,
+      topic: inserted.topic,
+      worksheetUrl: `${appUrl}/s/${inserted.digital_code}`,
+      sentToStudentDirectly: Boolean(student.email),
+    }).catch((error) => console.error('Failed to send worksheet-ready email', error));
   }
 
   return NextResponse.json({ worksheet: inserted }, { status: 201 });
