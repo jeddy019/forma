@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { computeSpeedFlag, type TimedSubmission } from '@/lib/marking/speedAwareness';
 import MarkingForm, { type MergedQuestion } from './MarkingForm';
 
 interface Tier1PartResult {
@@ -43,12 +44,24 @@ interface SubmissionRow {
   tutor_feedback: string | null;
   score_percentage: number | null;
   worksheet: {
+    id: string;
     subject: string;
     topic: string;
+    first_opened_at: string | null;
     questions_json: { questions: { id: string; type: string; parts: QuestionsJsonPart[] }[] };
     mark_scheme_json: { questions: { id: string; parts: MarkSchemeJsonPart[] }[] } | null;
   } | null;
   student: { name: string } | null;
+}
+
+interface PeerWorksheetRow {
+  id: string;
+  first_opened_at: string | null;
+}
+
+interface PeerSubmissionRow {
+  worksheet_id: string;
+  submitted_at: string;
 }
 
 export default async function MarkingDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -76,7 +89,7 @@ export default async function MarkingDetailPage({ params }: { params: Promise<{ 
   const { data: submission } = await supabase
     .from('submissions')
     .select(
-      'id, submitted_at, answers_json, auto_marks_json, ai_suggested_marks_json, tutor_marks_json, tutor_feedback, score_percentage, worksheet:worksheets(subject, topic, questions_json, mark_scheme_json), student:student_profiles(name)'
+      'id, submitted_at, answers_json, auto_marks_json, ai_suggested_marks_json, tutor_marks_json, tutor_feedback, score_percentage, worksheet:worksheets(id, subject, topic, first_opened_at, questions_json, mark_scheme_json), student:student_profiles(name)'
     )
     .eq('id', id)
     .single<SubmissionRow>();
@@ -86,6 +99,39 @@ export default async function MarkingDetailPage({ params }: { params: Promise<{ 
   }
 
   const { worksheet } = submission;
+
+  // Phase 7 Step 39 (Speed awareness): time taken = submitted_at -
+  // first_opened_at. "Peers" for the slow-flag comparison are other
+  // scored submissions on the tutor's own worksheets sharing this exact
+  // subject+topic - RLS (worksheets_own) already scopes the first query
+  // to this tutor, so no explicit owner_id filter is needed here.
+  const timeTakenSeconds = worksheet.first_opened_at
+    ? Math.round((new Date(submission.submitted_at).getTime() - new Date(worksheet.first_opened_at).getTime()) / 1000)
+    : null;
+
+  const { data: peerWorksheets } = await supabase
+    .from('worksheets')
+    .select('id, first_opened_at')
+    .eq('subject', worksheet.subject)
+    .eq('topic', worksheet.topic)
+    .neq('id', worksheet.id)
+    .returns<PeerWorksheetRow[]>();
+
+  const peerWorksheetIds = (peerWorksheets ?? []).map((w) => w.id);
+  const { data: peerSubmissions } = peerWorksheetIds.length
+    ? await supabase.from('submissions').select('worksheet_id, submitted_at').in('worksheet_id', peerWorksheetIds).returns<PeerSubmissionRow[]>()
+    : { data: [] as PeerSubmissionRow[] };
+
+  const firstOpenedByWorksheetId = new Map((peerWorksheets ?? []).map((w) => [w.id, w.first_opened_at]));
+  const peers: TimedSubmission[] = (peerSubmissions ?? []).map((s) => {
+    const openedAt = firstOpenedByWorksheetId.get(s.worksheet_id);
+    return {
+      worksheetId: s.worksheet_id,
+      timeTakenSeconds: openedAt ? Math.round((new Date(s.submitted_at).getTime() - new Date(openedAt).getTime()) / 1000) : null,
+    };
+  });
+
+  const speedFlag = computeSpeedFlag({ worksheetId: worksheet.id, timeTakenSeconds, scorePercentage: submission.score_percentage }, peers);
   const markSchemeByQuestionId = new Map(
     (worksheet.mark_scheme_json?.questions ?? []).map((q) => [q.id, q.parts] as const)
   );
@@ -136,6 +182,8 @@ export default async function MarkingDetailPage({ params }: { params: Promise<{ 
       reviewed={submission.tutor_marks_json !== null}
       existingFeedback={submission.tutor_feedback}
       questions={mergedQuestions}
+      timeTakenSeconds={timeTakenSeconds}
+      speedFlag={speedFlag}
     />
   );
 }

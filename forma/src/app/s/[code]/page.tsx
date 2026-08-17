@@ -20,6 +20,7 @@ interface WorksheetRow {
   topic: string;
   alignment_note: string | null;
   expires_at: string | null;
+  first_opened_at: string | null;
   questions_json: {
     curriculum: string;
     year_level: string;
@@ -40,11 +41,33 @@ export default async function StudentWorksheetPage({
   const admin = createAdminClient();
   const { data: worksheet } = await admin
     .from('worksheets')
-    .select('id, digital_code, subject, topic, alignment_note, expires_at, questions_json')
+    .select('id, digital_code, subject, topic, alignment_note, expires_at, first_opened_at, questions_json')
     .eq('digital_code', code)
     .single<WorksheetRow>();
 
   if (!worksheet) notFound();
+
+  // Phase 7 Step 39 (Speed awareness): "started working on it" event,
+  // captured once - first view wins, every later view of the same link
+  // (including the student navigating back to it) leaves it untouched.
+  // Awaited, not fire-and-forget: a real bug caught live in this session -
+  // an un-awaited update here never actually landed, because Next.js (and
+  // especially a real serverless deployment) can tear down the request
+  // once the response starts, killing any promise nobody was still
+  // waiting on. This is one small, fast, indexed single-row update -
+  // cheap enough to await - wrapped in try/catch so a failure still can't
+  // break the student actually seeing their worksheet.
+  if (!worksheet.first_opened_at) {
+    try {
+      await admin
+        .from('worksheets')
+        .update({ first_opened_at: new Date().toISOString() })
+        .eq('id', worksheet.id)
+        .is('first_opened_at', null);
+    } catch (error) {
+      console.error('Failed to record first_opened_at', error);
+    }
+  }
 
   const isExpired = worksheet.expires_at !== null && new Date(worksheet.expires_at) < new Date();
 

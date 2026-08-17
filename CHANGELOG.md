@@ -2151,3 +2151,145 @@ Decisions: magic-link over password, service-role + application-layer
 auth over a new RLS policy, and merge-by-email across multiple owners -
 all three documented above with reasoning, none obvious from CLAUDE.md's
 one-line Step 36 description alone.
+
+---
+
+SESSION UPDATE (following the one above):
+User asked for a walkthrough of the app first - seeded a persistent demo
+tutor account (demo-tutor@forma.app, Pro plan, 2 students, 4 worksheets,
+a scored submission, a template, a session note, a schedule) via a new
+seed-demo-account.mts script (uncommitted, re-runnable, idempotent -
+clears and re-seeds its own prior run rather than duplicating rows), and
+wrote a page-by-page navigation guide. Then asked to write that guide to
+a file (NAVIGATION.md, uncommitted per the user's own instruction) and
+move to Phase 7, skipping any step that needs the Anthropic account.
+
+Assessed all six Phase 7 steps before writing any code: 37 (sub-skill AI
+schema/prompt) would modify the Structured Outputs schema CLAUDE.md's own
+Technical Challenges section documents as already fragile (past sessions
+hit "too large" grammar rejections and a 16-param cap, only caught by
+testing against the real API) - changing it blind, with no way to verify
+against Anthropic before the account is back, risks silently breaking
+generation for everyone once it does return, which is worse than not
+touching it. 38 (skill_map tracking) and 41 (return to fundamentals) both
+depend on 37's sub_skill data existing to have anything to track/map. 40
+(daily practice mode) calls generation directly. All four skipped as
+blocked. 39 (speed awareness) and half of 42 (question bank tooling) are
+free of both problems - 39's own "open question" in CLAUDE.md is
+specifically about how to capture a start timestamp, and the spec text
+itself already names the answer ("e.g. when /s/[code] is first opened");
+question-bank submission/verification is a human-only admin tool with no
+AI involved. Built both.
+
+Completed: Phase 7 Step 39 (speed awareness) and Step 42's tooling half
+(question bank submission/verification).
+
+STEP 39: New worksheets.first_opened_at TIMESTAMPTZ (migration applied
+live via the same temporary-pg-dependency, install-then-uninstall pattern
+used for expires_at and group_id previously - via SUPABASE_POOLER_URL,
+confirmed via information_schema afterward, pg uninstalled, package.json
+diff-clean). Set once in /s/[code]/page.tsx, the first time a worksheet
+is opened - guarded with .is('first_opened_at', null) so two
+near-simultaneous first opens can't both win.
+
+New src/lib/marking/speedAwareness.ts: computeSpeedFlag(target, peers) -
+pure, unit-tested (7 tests: null time/score, below-threshold score, no
+peers, correctly flags well-above-average, doesn't flag modestly-above-
+average, excludes the target from its own peer average). SLOW_MULTIPLIER
+(1.5x) and CORRECT_THRESHOLD (70%) are this session's own starting
+values, not a documented spec - CLAUDE.md names no fixed number anywhere,
+only the capture-mechanism question, so these are exported constants a
+future session can retune without touching the comparison logic.
+
+Wired into both marking pages: the list (/dashboard/marking) shows a
+plain "took N min" per row, no flag computation (avoids N+1-ish peer
+queries across a whole page of possibly-different topics); the detail
+page (/dashboard/marking/[id]) computes the real flag, fetching "peers"
+as other scored submissions on the tutor's own worksheets sharing the
+exact same subject+topic (RLS's worksheets_own scopes this automatically
+via the regular, non-admin client - no explicit owner_id filter needed in
+the real page code).
+
+REAL BUG caught and fixed live, not by inspection: the first_opened_at
+write was originally `void ...` (fire-and-forget), reasoning at the time
+being "a slow/failed write here must never block the student seeing their
+worksheet." Verified after building it by actually hitting a real demo
+worksheet's /s/[code] URL against the running dev server and checking the
+database directly - first_opened_at was still null. Root cause: an
+un-awaited promise can get orphaned once Next.js (and especially a real
+serverless deployment) tears down the request context after the response
+starts - "fire and forget" is only safe if something else keeps the
+process alive long enough, which nothing here did. Fixed by awaiting it
+(wrapped in try/catch, so a genuine failure still can't break the page) -
+this is a fast, indexed single-row update, cheap enough to await, so the
+original "must not block" concern didn't actually apply. Re-verified
+against the same real worksheet after the fix: first_opened_at now
+correctly set to a real timestamp.
+
+STEP 42 (tooling half only): New src/lib/admin/isAdminEmail.ts - pure,
+env-gated allowlist check (6 unit tests), same "env-gated, not part of
+the customer permission model" pattern CRON_SECRET already uses
+elsewhere, chosen deliberately over adding a new users.role value or DB
+column: question_bank's own RLS is "enabled with zero policies... only
+the service-role client ever touches this table" (schema.sql), and
+Kumon Methodology's own text names who this is actually for - "the
+founder and overseas teacher contacts," a small static list, not a
+product permission tier. New ADMIN_EMAILS env var (added to CLAUDE.md's
+Environment Variables list and defaulted in .env.local to the user's own
+confirmed email from earlier this session, comma-separated for adding
+teacher contacts).
+
+New /admin/question-bank (outside /dashboard entirely - not a
+tutor-facing route, no dashboard nav link) - its own primary auth gate
+(signed in AND isAdminEmail), same "proxy.ts doesn't cover this, the page
+does" reasoning as /student. Form submits one question at a time
+(text/marks/answer_format/answer/M1/A1/common_error/allow, matching
+QuestionPart's real shape from schema.ts) into question_json; every
+action (create/verify/delete) re-checks admin status server-side itself,
+never trusting the page-level gate alone for a write. sub_skill field
+included and stored but explicitly labelled "not yet used by generation"
+in the form's own helper text - Step 37 is what would consume it, and
+that's skipped this session, so this reserves the shape rather than
+pretending it does something today.
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 72
+tests (13 new: 7 speedAwareness + 6 isAdminEmail). Live-verified against
+the real Supabase project via throwaway scripts (deleted after, cleaned
+up): speed awareness - built 3 real worksheets/submissions (2 "peers" at
+600s/480s, 1 "target" at 1200s, all same subject+topic), confirmed
+timeTakenSeconds computed correctly, confirmed the peer query correctly
+excluded a different owner's same-topic worksheets (an actual scoping bug
+found and fixed IN THE VERIFICATION SCRIPT itself first - it used the
+admin client, which bypasses RLS, and initially picked up unrelated
+"Fractions" worksheets left over from this session's own earlier demo/
+verification data; the real page code is unaffected since it uses the
+RLS-bound client, which scopes correctly on its own - fixed the script to
+explicitly replicate that scoping, not the app), confirmed the flag
+correctly fired (isSlow: true, averageSeconds: 540) matching hand-
+calculated expectations exactly. Question bank - confirmed
+isAdminEmail(user's real email, real ADMIN_EMAILS env) returns true and a
+random email returns false, confirmed insert/verify/list/delete all
+behave exactly as the real actions would. Confirmed /admin/question-bank
+compiles and redirects correctly when unauthenticated (307).
+
+Also, incidentally: found the dev server had somehow stopped responding
+mid-session (unrelated to any of this session's code changes - editing
+.env.local likely triggered it, and Windows-side process listing being
+invisible to Git Bash's own ps/tasklist-via-grep made it look worse than
+it was for a few checks). Cleaned up by killing the stale PID and
+starting one fresh instance rather than leaving two/three node processes
+running - confirmed a single clean instance serves correctly afterward.
+
+Next: nothing left in Phase 5, 6, or 7 that doesn't need the Anthropic
+account. Step 25 (tutor parent report), Step 37 (sub-skill schema/prompt)
+and everything downstream of it (38, 40, 41) all wait for the account.
+Open risks: unchanged from prior entries, plus the two new starting-value
+constants in speedAwareness.ts (SLOW_MULTIPLIER, CORRECT_THRESHOLD) flagged
+as retunable, not fixed spec.
+Decisions: skipped Steps 37/38/40/41 with reasoning documented above,
+rather than attempting any of them partially - given 37's own risk
+profile, a half-built version would be worse than none. SLOW_MULTIPLIER/
+CORRECT_THRESHOLD chosen as reasonable starting defaults rather than
+asked about, since (unlike the 24-month deletion policy) these are
+retunable constants, not a data-model-defining decision - low cost either
+way if they're slightly off.

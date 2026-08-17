@@ -12,8 +12,18 @@ interface SubmissionListRow {
   submitted_at: string;
   score_percentage: number | null;
   tutor_marks_json: unknown | null;
-  worksheet: { subject: string; topic: string } | null;
+  worksheet: { subject: string; topic: string; first_opened_at: string | null } | null;
   student: { name: string } | null;
+}
+
+// Phase 7 Step 39: "12 min" display, same convention as MarkingForm.tsx's
+// own formatTimeTaken on the detail page - kept as its own tiny local
+// copy (different input shape: two timestamps here vs. a seconds count
+// there) rather than a shared import for one display line.
+function timeTakenLabel(worksheetOpenedAt: string | null, submittedAt: string): string | null {
+  if (!worksheetOpenedAt) return null;
+  const minutes = Math.round((new Date(submittedAt).getTime() - new Date(worksheetOpenedAt).getTime()) / 60000);
+  return minutes < 1 ? 'under a minute' : `${minutes} min`;
 }
 
 export default async function MarkingPage({
@@ -54,7 +64,7 @@ export default async function MarkingPage({
   } = await supabase
     .from('submissions')
     .select(
-      'id, submitted_at, score_percentage, tutor_marks_json, worksheet:worksheets(subject, topic), student:student_profiles(name)',
+      'id, submitted_at, score_percentage, tutor_marks_json, worksheet:worksheets(subject, topic, first_opened_at), student:student_profiles(name)',
       { count: 'exact' }
     )
     .order('submitted_at', { ascending: false })
@@ -77,6 +87,7 @@ export default async function MarkingPage({
         )}
         {submissions?.map((submission) => {
           const reviewed = submission.tutor_marks_json !== null;
+          const timeTaken = timeTakenLabel(submission.worksheet?.first_opened_at ?? null, submission.submitted_at);
           return (
             <Link
               key={submission.id}
@@ -89,6 +100,7 @@ export default async function MarkingPage({
                 </p>
                 <p className="text-xs text-[#9A9080]">
                   {submission.worksheet?.topic ?? ''} - {new Date(submission.submitted_at).toLocaleDateString('en-GB')}
+                  {timeTaken && ` - took ${timeTaken}`}
                 </p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
