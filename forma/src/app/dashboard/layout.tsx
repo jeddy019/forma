@@ -41,6 +41,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           <Link href="/dashboard/generate" className="text-sm text-[#5C5849]">
             Generate
           </Link>
+          <Link href="/dashboard/schedule" className="text-sm text-[#5C5849]">
+            Schedule
+          </Link>
           {role === 'tutor' && (
             <Link href="/dashboard/marking" className="text-sm text-[#5C5849]">
               Marking

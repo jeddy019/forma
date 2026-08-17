@@ -1009,3 +1009,75 @@ user for one, or proceed and defer that verification again, whichever they
 prefer, next time email sending needs to be exercised for real.
 Decisions: covered above (Kumon addition confirmed and documented; Student
 Accounts contradiction resolved in favour of the Revised Decision).
+
+---
+
+SESSION UPDATE (following the one above):
+Completed: Phase 4 Step 21 - Schedule UI. New /dashboard/schedule route:
+page.tsx (Server Component - auth check, plan gate, fetches students +
+existing schedules), ScheduleForm.tsx (create), ScheduleCard.tsx (one
+schedule's display, inline edit, pause/resume, delete), actions.ts (5
+Server Actions: create/update/pause/resume/delete). Gate is plan === 'pro'
+regardless of role - Permissions Summary lists "automated schedule" under
+both TUTOR and PARENT's paid plans and excludes it only for FREE, unlike
+the marking dashboard's tutor-only gate. Added DELIVERY_TIMEZONES (6 zones
+curated to the 3 supported countries) and DAY_OF_WEEK_LABELS to
+src/lib/constants.ts, alongside the existing SUBJECTS/CURRICULUM_LEVELS/
+DIFFICULTY_LEVELS.
+
+"Pause until [date]" (User Challenges) sets paused_until and leaves
+is_paused false, so the Automated Schedule Logic's own query
+(is_paused = false AND (paused_until IS NULL OR paused_until < NOW()))
+resumes it automatically once that date passes - no separate cron/job
+needed for that part, it falls out of the query Step 22 will already need
+to write. Leaving the pause date blank instead sets is_paused = true
+(indefinite, needs an explicit "Resume now"). topics (schedules.topics
+TEXT[]) is a plain comma-separated text input parsed server-side, not a
+dynamic array-builder widget - simplest thing that works for the schema's
+actual shape.
+
+Two real bugs found and fixed via live verification, not just tsc/eslint:
+1. After saving an edit, ScheduleCard never left edit mode - `editing` is
+   local useState, and nothing ever set it back to false on a successful
+   save, so the card would sit showing the edit form indefinitely (looking
+   broken, not just stale) after every single edit. Caught by a real
+   Puppeteer script that edited a schedule and then waited for the
+   read-only card to reappear - it never did. Fixed by adding a
+   `success?: boolean` flag to ScheduleActionResult (explicit true, not
+   just "no error", so useActionState's initial {} can't be mistaken for a
+   real success) and closing edit mode when it flips true.
+2. The first fix attempt used `useEffect(() => { if (updateState.success)
+   setEditing(false) }, [updateState])` - eslint's react-hooks/set-state-in-
+   effect rule correctly flagged this (setState synchronously inside an
+   effect body causes an extra cascading render, and React's own docs treat
+   this as an anti-pattern with a documented alternative). Fixed using
+   that alternative instead: compare updateState against a
+   useState-tracked "last seen" value during render itself and adjust
+   editing there, no effect at all. Worth remembering for any future
+   useActionState + local-UI-state combination in this project - the
+   effect version looks correct and even runs correctly, it's just the
+   wrong tool for it.
+
+Verified for real, end to end, with a live Puppeteer script (same pattern
+as the marking-dashboard and Tier1/2 verification scripts): created a
+confirmed parent-pro test account and a student via the admin API, logged
+in through the real browser, created a schedule through the real form,
+confirmed the card rendered with the correct day/time/topics, edited it
+(day changed, confirmed the card updated and left edit mode - this is what
+caught bug 1 above), paused it with a future date (confirmed "Paused
+until..." status), resumed it, deleted it (confirmed the empty state), and
+confirmed zero schedules remained in the database afterward. All test data
+cleaned up. tsc --noEmit and eslint clean across the whole project.
+
+Next: Phase 4 Step 22 - the Vercel Cron endpoint
+(/api/cron/generate-scheduled, CRON_SECRET-protected, per-schedule failure
+isolation with a retry after 10 minutes and an email to the owner on second
+failure, per the Automated Schedule Logic and Technical Challenge 7
+sections). This is the first real consumer of the schedules Step 21 just
+built a UI for, and the first place EMAIL 3 (weekly delivery, built in Step
+20 but not yet wired to any trigger) actually gets sent from. CRON_SECRET
+is empty in .env.local - can be generated locally (it's just a shared
+secret, not a third-party API key, so no external signup needed) rather
+than asked of the user.
+Decisions: none beyond the two bug fixes above, both corrections to
+already-in-scope Step 21 work.
