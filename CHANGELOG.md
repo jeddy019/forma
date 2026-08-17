@@ -1261,3 +1261,77 @@ report has no non-AI equivalent to fall back on for testing) - flag this
 when Step 24 is done, rather than assuming Step 25 can proceed the same
 way Step 23 just did.
 Decisions: none beyond confirming the Step 23 approach above.
+
+---
+
+SESSION UPDATE (following the one above):
+Completed: Phase 4 Step 24 - Monday parent summary automated job. New
+/api/cron/monday-summary, CRON_SECRET-protected (same auth pattern as
+Step 22), added to vercel.json's crons at "0 7 * * 1" (Monday 07:00 UTC) -
+a single fixed time for every owner, since no per-owner delivery-time
+preference exists anywhere in the schema (schedules.delivery_timezone is
+per-schedule, not per-owner) - documented as a deliberate simplification,
+not an oversight.
+
+Gated to role = 'parent' AND plan = 'pro' only - Permissions Summary lists
+"Monday summaries" exclusively under PARENT's paid plan, unlike Step 21's
+schedules feature which both roles get (confirmed by re-reading Permissions
+Summary carefully rather than assuming the same gate as last time). For
+each such owner's students, aggregates the past 7 days of *scored*
+submissions (score_percentage IS NOT NULL - same "only tutor-reviewed
+submissions have a score" constraint Step 23 ran into) into worksheets
+completed, average score, strongest topic, and area to improve, then sends
+EMAIL 4 (built in Step 20, unused until now) to the owner.
+
+Score/topic aggregation extracted to a pure function,
+src/lib/summary/weeklySummary.ts's computeWeeklySummary() - same
+"pure logic gets unit tests, extracted out of the route" discipline as
+Step 22's isDueNow. 4 tests at src/__tests__/weeklySummary.test.ts: empty
+week, a single submission (correctly both the strongest and weakest result
+of one data point), multiple submissions picking the real
+highest/lowest-scoring topics, and average-rounding (70.5 -> 71).
+
+dashboardUrl in the email links to /dashboard/students, not
+/dashboard/worksheets - Routing Structure documents a "/dashboard/worksheets
+History" route but it has never been built as its own step (not scheduled
+anywhere in Build Phases, same kind of gap /login and /signup used to be
+before Step 12's session built them ahead of schedule). Did not build it
+here either - out of scope for "the automated job," a real UI page deserves
+its own attention - and /dashboard/marking (the obvious alternative) is
+tutor-only and would dead-end a parent with an upsell message, so
+/dashboard/students was the closest existing, working, role-appropriate
+link.
+
+Verified for real, end to end, entirely without the Anthropic API: a
+throwaway script created a parent-pro owner with a student and inserted 3
+worksheets/submissions directly (bypassing generation entirely, same
+approach as Step 23's verification) with known scores across 3 topics, plus
+one deliberately stale submission from 3 weeks ago to confirm the 7-day
+window actually excludes it, plus a second, tutor-role owner with their own
+student to confirm the role gate actually excludes them. Hit the real cron
+endpoint with the real CRON_SECRET: auth gate returned 401 with no/wrong
+header, then 200 for the real run, correctly processing only the parent-pro
+owner (the tutor was never even fetched, confirmed by the query being
+scoped to role = 'parent' before anything else runs).
+
+This run surfaced a real, unrelated finding: the endpoint reported 2 owners
+processed, not the 1 this session's own script created - querying directly
+found a second genuine parent-pro leftover account
+(verify-schedule-...@example.com) that Step 21's own verification script
+had failed to fully clean up at the end of that session. Not a bug in this
+session's work, but a real gap in a prior session's cleanup - found and
+removed (student, worksheets, user, auth account) before finishing this
+session. Worth remembering: verification scripts across this project
+create real rows in the live production Supabase project, and a script
+that errors out before reaching its own cleanup step leaves them behind
+silently - periodically checking for stray verify-*@example.com accounts
+(e.g. via auth.admin.listUsers()) is worth doing, not just trusting each
+script's own happy-path cleanup ran.
+
+Next: Phase 4 Step 25 - tutor parent report AI draft and approve flow. This
+is the one that genuinely needs the Anthropic account back (an AI-drafted
+report has no meaningful non-AI equivalent to build or test against) -
+Phase 4 (Automation and Email) cannot fully finish without it. Everything
+else reachable without a live Claude call in this phase (Steps 20-24) is
+now done.
+Decisions: none beyond the gate/link choices documented above.
