@@ -1334,4 +1334,128 @@ report has no meaningful non-AI equivalent to build or test against) -
 Phase 4 (Automation and Email) cannot fully finish without it. Everything
 else reachable without a live Claude call in this phase (Steps 20-24) is
 now done.
+
+---
+
+SESSION UPDATE (following the one above):
+Started per the resume prompt, expecting to pick up Phase 4 Step 25.
+Instead found the working tree already held substantial uncommitted work:
+Phase 5 Steps 26, 27, and most of 29 (Flutterwave checkout, webhook
+handler, payment callback, settings page billing/cancel/delete-account,
+a flutterwave_subscription_id migration, and a resend.ts EMAIL_FROM
+change to onboarding@resend.dev), none of it recorded in CLAUDE.md's
+Current Build Status or anywhere in this file. This is exactly the
+"dropped session" scenario CLAUDE.md's Session Management section warns
+about (45-minute limit or ECONNRESET -> commit and update status before
+exiting) - a prior session evidently did that work, hit one of those
+conditions, and exited without the save/update/exit steps. Flagged this
+to the user rather than guessing; asked whether to finish and commit it,
+commit as-is, or discard it and resume Step 25 as documented. User chose
+to finish Phase 5 and commit.
+
+Completed: Phase 5 Steps 26-29 (Flutterwave payments), building on the
+inherited work above.
+
+Reviewed the inherited code first rather than assuming it was correct
+just because it was thorough: src/lib/payments/plans.ts (flat USD pricing
+by role, no per-region table - matches CLAUDE.md, doesn't invent one),
+flutterwave.ts (v3 REST API via fetch, no SDK - matches "no Flutterwave
+SDK in Tech Stack's install command"; getOrCreatePaymentPlanId lists then
+creates-if-missing so there's no manual dashboard setup step；
+verifyTransaction/initiateCheckout/cancelSubscription/
+findActiveSubscriptionId), txRef.ts (encode/decode a tx_ref as
+forma_{userId}_{planKey}_{timestamp}, '_' separator chosen because UUIDs
+contain hyphens), activateSubscription.ts (shared activation logic keyed
+by webhook_events.event_id = flw-tx-{transactionId} for idempotency -
+same table/pattern Step 27 already documents using), the checkout route
+(role-priced, rejects an already-pro account), the webhook route
+(verif-hash compared verbatim against FLUTTERWAVE_WEBHOOK_SECRET - a
+shared secret, not an HMAC signature, correctly documented as such since
+Flutterwave's model actually is that, unlike Stripe's - re-verifies
+server-side via verifyTransaction before trusting the payload, 200s on
+both success and duplicate per Technical Challenge 8), the payment
+callback route (the actual redirect_url passed to Flutterwave - not one
+of the two numbered Phase 5 steps but necessary for initiateCheckout to
+have somewhere to send the browser, and the only path that's been
+live-tested since the webhook's own dashboard URL is still a placeholder
+pending deployment), and the settings page/actions (cancel calls
+Flutterwave first and only downgrades locally if that succeeds; delete
+deletes in FK-dependency order, then the auth user).
+
+Found two real bugs while reviewing, both fixed this session:
+
+1. /api/generate called check_and_log_generation (the 3/month free-tier
+   gate) unconditionally for every request, with no check of the user's
+   plan at all. Phase 5 didn't exist yet when that route was written, so
+   this was harmless at the time - but with real paid plans now wired up,
+   an actual paying tutor or parent would still have been capped at 3
+   worksheets a month, which is exactly the enforcement Step 28 asks for
+   done correctly, not just present. Fixed by extracting a new pure
+   isActivePro(plan, planExpiresAt, now?) helper to
+   src/lib/payments/planStatus.ts (same "pure logic gets its own file and
+   tests" discipline as nextDifficulty.ts/isDueNow.ts) - checks plan ===
+   'pro' AND (no expiry OR expiry in the future), so a lapsed subscription
+   whose downgrade hasn't run yet doesn't get an unlimited free ride
+   either. The route now fetches plan/plan_expires_at once (reusing what
+   used to be a separate later paper_size-only query) and skips the RPC
+   call entirely when isActivePro is true. 5 unit tests at
+   src/__tests__/planStatus.test.ts: free plan, pro with no expiry, pro
+   with future expiry, pro with past expiry, null/undefined plan.
+2. flutterwave_subscription_id (the column added specifically so
+   cancelSubscriptionAction could cancel with Flutterwave directly) was
+   never actually written by anything - activateSubscriptionFromTransaction
+   only ever set plan and plan_expires_at. Every cancellation was silently
+   falling back to findActiveSubscriptionId's by-email lookup instead,
+   which happens to work but defeats the point of having the column.
+   Flutterwave's charge.completed payload has no subscription id field of
+   its own, so the fix calls the same findActiveSubscriptionId(email)
+   lookup at activation time and stores the result if found - best-effort,
+   wrapped in try/catch, since a lookup failure here must not block
+   activation itself (the by-email fallback still covers it if the column
+   stays empty).
+
+Verified: npx tsc --noEmit clean, npm run lint clean (one pre-existing
+unused-param warning in the checkout route fixed alongside - the request
+param was never read), npm run test - 48 tests passing across 7 files (43
+inherited + 5 new for planStatus). Started the dev server and confirmed it
+serves without startup errors. Did NOT re-run a live Flutterwave test-mode
+checkout end-to-end this session - the prior (dropped) session's own notes
+already recorded that verification against a real test-mode transaction
+for the callback+activation path; this session's changes to that path
+(the subscription-id lookup addition) are additive and covered by the
+same code path, but a fresh live re-run would still be worth doing before
+relying on this in production.
+
+Decisions: proceeded past the "never build outside the phase plan without
+asking" rule's letter (Phase 5 work exists without an explicit go-ahead
+recorded anywhere) by asking the user directly given the unusual
+circumstances (inherited, undocumented, uncommitted code) rather than
+either silently continuing or silently discarding it - user chose to
+finish and commit. Left the schedule cron (/api/cron/generate-scheduled)
+without any plan-based gating - schedules are a paid feature per
+Permissions Summary but Step 21 (Schedule UI, built pre-Phase-5) never
+gated schedule creation by plan either, and retrofitting that is a
+separate, undocumented decision of its own, not part of what Step 28
+(the /api/generate free-tier gate specifically) asked for. Flagging as an
+open risk rather than fixing silently.
+
+Next: Phase 4 Step 25 - tutor parent report AI draft, if the Anthropic
+account is back; otherwise Phase 6 (Advanced) has no Anthropic dependency
+and can proceed the same way Step 23 skipped ahead once before.
+Open risks: (1) schedule cron has no plan/pro gating at all, see Decisions
+above. (2) Flutterwave webhook route itself still unverified live (only
+the callback path has been), pending real deployment and dashboard URL.
+(3) A recurring/renewal charge on an existing subscription would arrive
+with a Flutterwave-generated tx_ref, not one of this project's own
+forma_{userId}_{planKey}_{timestamp} refs - decodeTxRef would reject it
+and activateSubscriptionFromTransaction would silently no-op it rather
+than extending plan_expires_at. Only the *first* charge on a subscription
+is actually handled correctly today. Needs a real design decision
+(e.g. a separate subscription.charge event handler keyed by
+flutterwave_subscription_id instead of tx_ref) before this is safe to
+rely on past a single 30-day period - not decided or built this session,
+flagging rather than guessing. (4) RESEND_API_KEY still empty; EMAIL_FROM
+was switched to onboarding@resend.dev by the inherited session as a
+stand-in until a custom domain is verified (per the user) - no live send
+confirmed either before or during this session.
 Decisions: none beyond the gate/link choices documented above.

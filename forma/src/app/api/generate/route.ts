@@ -7,6 +7,7 @@ import { buildUserPrompt } from '@/lib/ai/buildUserPrompt';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
+import { isActivePro } from '@/lib/payments/planStatus';
 import type { Country } from '@/lib/constants';
 
 const TOPIC_MAX_LENGTH = 1000;
@@ -58,15 +59,22 @@ export async function POST(request: NextRequest) {
   }
   const sanitizedTopic = stripHtmlTags(topicPrompt).trim();
 
-  const { data: allowed, error: rpcError } = await supabase.rpc('check_and_log_generation', {
-    p_user_id: user.id,
-  });
-  if (rpcError) {
-    console.error('check_and_log_generation failed', rpcError);
-    return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
-  }
-  if (!allowed) {
-    return NextResponse.json({ error: 'Free tier limit reached' }, { status: 403 });
+  const { data: ownerRow } = await supabase.from('users').select('plan, plan_expires_at, paper_size').eq('id', user.id).single();
+
+  // Phase 5 Step 28: check_and_log_generation enforces the 3/month free
+  // cap - it has no notion of plan at all, so an active paid plan must
+  // skip it entirely, not just tolerate hitting the cap.
+  if (!isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at)) {
+    const { data: allowed, error: rpcError } = await supabase.rpc('check_and_log_generation', {
+      p_user_id: user.id,
+    });
+    if (rpcError) {
+      console.error('check_and_log_generation failed', rpcError);
+      return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+    }
+    if (!allowed) {
+      return NextResponse.json({ error: 'Free tier limit reached' }, { status: 403 });
+    }
   }
 
   const { data: student, error: studentError } = await supabase
@@ -106,8 +114,6 @@ export async function POST(request: NextRequest) {
   }
 
   const { questionsJson, markSchemeJson } = splitMarkScheme(worksheet);
-
-  const { data: ownerRow } = await supabase.from('users').select('paper_size').eq('id', user.id).single();
 
   // digital_code is UNIQUE - a collision is rare (8 random bytes) but not
   // impossible, and without a retry it would burn the Claude API call and

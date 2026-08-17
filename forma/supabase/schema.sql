@@ -10,6 +10,10 @@ CREATE TABLE users (
   plan_expires_at TIMESTAMPTZ,
   region TEXT,
   paper_size TEXT DEFAULT 'a4' CHECK (paper_size IN ('a4', 'letter')),
+  -- Phase 5 (Payment): set once a Flutterwave payment-plan subscription is
+  -- created, on the first successful charge - needed to call Flutterwave's
+  -- own cancel-subscription API later. Null on the free plan.
+  flutterwave_subscription_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

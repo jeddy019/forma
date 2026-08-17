@@ -22,4 +22,11 @@ export function getResendClient(): Resend {
   return client;
 }
 
-export const EMAIL_FROM = 'Forma <worksheets@forma.app>';
+// worksheets@forma.app (per CLAUDE.md's Email Templates section) needs a
+// verified custom domain on Resend, which doesn't exist yet - using
+// Resend's own onboarding@resend.dev sender in the meantime (per the user).
+// Resend restricts an unverified account to sending only to the account's
+// own owner email regardless of the `to` address, until a domain is
+// verified - expected, not a bug, per the user. Swap back to
+// worksheets@forma.app once a custom domain is verified on Resend.
+export const EMAIL_FROM = 'Forma <onboarding@resend.dev>';

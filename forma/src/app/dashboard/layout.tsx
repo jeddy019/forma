@@ -49,6 +49,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
               Marking
             </Link>
           )}
+          <Link href="/dashboard/settings" className="text-sm text-[#5C5849]">
+            Settings
+          </Link>
           {user && <span className="text-sm text-[#9A9080]">{user.email}</span>}
           <form action={signOutAction}>
             <button type="submit" className="text-sm text-[#5C5849]">
