@@ -1081,3 +1081,122 @@ secret, not a third-party API key, so no external signup needed) rather
 than asked of the user.
 Decisions: none beyond the two bug fixes above, both corrections to
 already-in-scope Step 21 work.
+
+---
+
+SESSION UPDATE (following the one above):
+Opened per the dropped-session protocol: Current Build Status still said
+"Next: Phase 4 Step 21" but Step 21 (Schedule UI) was actually already
+complete and verified end to end in the prior session - just never
+committed or written up. Reviewed it fresh (tsc/eslint clean, matched the
+prior transcript's description) rather than redoing it, then committed and
+updated the docs before moving on.
+
+Completed: Phase 4 Step 22 - the Vercel Cron endpoint
+(/api/cron/generate-scheduled - CRON_SECRET-protected, added to
+vercel.json's new "crons" array at */30 * * * * per the Automated Schedule
+Logic section). Generated CRON_SECRET locally (a shared secret, not a
+third-party API key, so no external signup was needed) and added it to
+.env.local directly. Due-schedule matching (timezone conversion via
+Intl.DateTimeFormat, day/hour match, "more than 6 days since
+last_generated_at") extracted into src/lib/schedule/isDueNow.ts specifically
+so it's unit-testable - Testing Strategy explicitly lists "cron schedule
+matching logic" under UNIT TESTS, not something to leave buried
+un-exported inside a route file. 8 tests added at
+src/__tests__/isDueNow.test.ts (day mismatch, hour mismatch, a genuine
+cross-timezone conversion check between Europe/London and
+America/Los_Angeles, the never-generated/3-days/8-days/exactly-6-days
+last_generated_at boundary cases).
+
+Per schedule: fetches the student profile and latest session_notes (Step 4
+of Automated Schedule Logic - session_notes has no input UI yet, Phase 6
+Steps 33-34, so this finds nothing today but the query is correctly wired
+now rather than waiting), builds a prompt via the existing buildUserPrompt
+(no dedicated difficulty parameter exists there - manual generation doesn't
+pass one either, that's Step 23 - so schedules.difficulty is folded into
+the topic text itself rather than silently discarded), generates via the
+existing generateWorksheet(), stores the worksheet with
+generated_from: 'scheduled' (same digital_code collision-retry pattern as
+/api/generate), updates last_generated_at, and sends EMAIL 3 (built in Step
+20, not wired to any trigger until now) to the student directly when
+student_profiles.email is set, otherwise to the owner.
+
+Documented, not silently decided: "retry once after 10 minutes" (Technical
+Challenge 7) is implemented as an immediate retry within the same
+invocation, not a literal 10-minute delay - Tech Stack lists no queue
+service, and Vercel Cron can't re-invoke a route 10 minutes later without
+either blocking the function for 10 minutes (bad) or a second cron entry
+plus cross-invocation state (real added complexity for a timing nuance).
+This satisfies the load-bearing requirements (independent per-schedule
+processing, retry once, email the owner on second failure, never silently
+skip) without the literal delay. Also flagged, not solved: a persistently
+failing schedule would email its owner again every 30 minutes with no
+suppression - noted in the route's own comment for a future
+last_failure_notified_at column if it becomes a real problem. Built a 9th
+email template, ScheduleFailed.tsx (not one of the 8 numbered ones - no
+template exists anywhere for "cron failure notice to the owner", but
+Technical Challenge 7 requires sending one), reusing the shared EmailLayout
+rather than inventing a separate look.
+
+Two real, live bugs found and fixed this session, neither caught by
+tsc/eslint - both were "compiles fine, breaks the instant it actually
+runs" issues:
+1. `new Resend(undefined)` throws synchronously ("Missing API key") rather
+   than deferring the failure to .emails.send() - src/lib/email/resend.ts
+   constructed the client eagerly at module load in Step 20, which means
+   every route importing send.tsx (signup's welcome email, this cron job)
+   crashed the instant it loaded, with RESEND_API_KEY unset, before
+   send.tsx's own "never throw" try/catch ever got a chance to run. This
+   means EMAIL 1 (Welcome) has been silently crashing signup's fire-and-
+   forget email call since Step 20 - not visibly breaking signup itself
+   (the call is un-awaited-for-blocking, `void sendWelcomeEmailAction(...)`)
+   but throwing an unhandled rejection server-side on every single signup,
+   the whole time. Caught live in this session, not by tsc/eslint, when the
+   cron endpoint's dev-server log showed the actual thrown error - the
+   Step 20 session's own verification only got as far as "compiles and
+   type-checks against the real signature," explicitly not a live signup
+   test, and this is exactly the kind of thing that gap missed. Fixed:
+   resend.ts now lazily constructs the client only when actually sending,
+   and send.tsx checks RESEND_API_KEY itself first, so the constructor
+   never runs at all while the key is missing - confirmed with a direct
+   call to sendWelcomeEmail() after the fix, resolved cleanly with `false`,
+   no throw.
+2. Found while verifying the fix above, unrelated to it: this dev machine
+   had a stale `next dev` process running for 12+ hours from earlier in
+   this session (survived across at least one conversation boundary),
+   silently serving requests on port 3000 the whole time under an old
+   in-memory module graph. Killed it (PID 2104) and started a clean server
+   before re-verifying - not a code issue, but worth noting since it could
+   have made a real bug look fixed (or a real fix look broken) depending on
+   which server happened to answer a given request.
+
+Verified for real: the cron endpoint's own logic (auth gate returning 401
+with no/wrong Authorization header and 200 with the real CRON_SECRET,
+correctly identifying a due schedule vs. skipping a not-due one) all
+confirmed against the real running route via a throwaway script. The
+actual generation happy-path could NOT be verified this session - see the
+open risk below, this is an external account problem, not a code gap.
+
+OPEN RISK, urgent, flagged directly to the user: the Anthropic API is
+returning "This organization has been disabled" (400, invalid_request_error)
+for every request, confirmed with a minimal, direct API call completely
+outside this project's code (bare Anthropic SDK, one message, no app logic
+involved). This blocks ALL AI generation right now, not just the cron
+path - the existing manual /api/generate flow would fail identically. Not
+fixable from here; the user needs to check the Anthropic Console
+(billing/account status). The cron endpoint's retry-then-notify path was
+incidentally exercised for real by this failure (attempted generation
+twice, both failed, correctly logged, correctly attempted the owner
+failure email and gracefully skipped it since RESEND_API_KEY is also
+unset) - so that failure path is now genuinely verified, just not the
+success path.
+
+Next: Phase 4 Step 23 - Adaptive difficulty post-submission logic. Cannot
+be meaningfully tested end-to-end until the Anthropic account issue above
+is resolved (submissions can still be created and marked, but generating a
+new worksheet to observe difficulty actually shift is blocked the same
+way). Also still open from Step 20: RESEND_API_KEY is empty, so EMAIL 3's
+actual delivery (and every other email) remains unverified live - ask the
+user for a key whenever that's worth exercising for real.
+Decisions: none beyond the "immediate retry, not literally 10 minutes"
+interpretation documented above.

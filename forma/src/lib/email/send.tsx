@@ -1,4 +1,4 @@
-import { resend, EMAIL_FROM } from './resend';
+import { getResendClient, EMAIL_FROM } from './resend';
 import { unsubscribeHeaders } from '@/emails/components/EmailLayout';
 import WelcomeEmail, { type WelcomeEmailProps } from '@/emails/Welcome';
 import WorksheetReadyEmail, { type WorksheetReadyEmailProps } from '@/emails/WorksheetReady';
@@ -8,6 +8,7 @@ import TutorParentReportEmail, { type TutorParentReportEmailProps } from '@/emai
 import PaymentConfirmedEmail, { type PaymentConfirmedEmailProps } from '@/emails/PaymentConfirmed';
 import RenewalReminderEmail, { type RenewalReminderEmailProps } from '@/emails/RenewalReminder';
 import PaymentFailedEmail, { type PaymentFailedEmailProps } from '@/emails/PaymentFailed';
+import ScheduleFailedEmail, { type ScheduleFailedEmailProps } from '@/emails/ScheduleFailed';
 
 // Thin typed wrappers around resend.emails.send(), one per template in
 // src/emails/. Every function returns a boolean rather than throwing -
@@ -23,7 +24,15 @@ import PaymentFailedEmail, { type PaymentFailedEmailProps } from '@/emails/Payme
 // recurring/summary category that requirement is aimed at.
 
 async function send(args: { to: string; subject: string; react: React.ReactElement; headers?: Record<string, string> }): Promise<boolean> {
-  const { error } = await resend.emails.send({
+  // Checked before touching the Resend client at all - see resend.ts's own
+  // comment for why: constructing the SDK with no key throws synchronously,
+  // so this check has to happen first, not inside a try/catch around .send().
+  if (!process.env.RESEND_API_KEY) {
+    console.warn(`RESEND_API_KEY not configured - skipping email send (${args.subject})`);
+    return false;
+  }
+
+  const { error } = await getResendClient().emails.send({
     from: EMAIL_FROM,
     to: args.to,
     subject: args.subject,
@@ -86,4 +95,13 @@ export function sendRenewalReminderEmail(to: string, props: RenewalReminderEmail
 
 export function sendPaymentFailedEmail(to: string, props: PaymentFailedEmailProps): Promise<boolean> {
   return send({ to, subject: 'Payment could not be processed', react: <PaymentFailedEmail {...props} /> });
+}
+
+// Not one of the 8 numbered emails - see ScheduleFailed.tsx's own comment.
+export function sendScheduleFailedEmail(to: string, props: ScheduleFailedEmailProps): Promise<boolean> {
+  return send({
+    to,
+    subject: `A scheduled worksheet for ${props.studentName} did not generate`,
+    react: <ScheduleFailedEmail {...props} />,
+  });
 }
