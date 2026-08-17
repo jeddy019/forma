@@ -49,6 +49,11 @@ export default async function DashboardLayout({ children }: { children: ReactNod
               Marking
             </Link>
           )}
+          {role === 'tutor' && (
+            <Link href="/dashboard/templates" className="text-sm text-[#5C5849]">
+              Templates
+            </Link>
+          )}
           <Link href="/dashboard/settings" className="text-sm text-[#5C5849]">
             Settings
           </Link>

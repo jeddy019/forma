@@ -62,14 +62,22 @@ const TOPIC_STARTERS = [
   'is confident with the basics but needs a harder challenge on this topic',
 ];
 
+interface TemplateOption {
+  id: string;
+  name: string;
+  notes: string | null;
+}
+
 export default function GenerateForm({
   students,
   canDownloadMarkScheme,
   canUseGroupMode,
+  templates,
 }: {
   students: StudentOption[];
   canDownloadMarkScheme: boolean;
   canUseGroupMode: boolean;
+  templates: TemplateOption[];
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState(students[0]?.id ?? '');
   const [groupMode, setGroupMode] = useState(false);
@@ -278,6 +286,30 @@ export default function GenerateForm({
 
           {phase !== 'success' && (
             <>
+              {templates.length > 0 && (
+                <div>
+                  <label className={labelClass} htmlFor="template">
+                    Use a template
+                  </label>
+                  <select
+                    id="template"
+                    className={inputClass}
+                    value=""
+                    onChange={(event) => {
+                      const template = templates.find((t) => t.id === event.target.value);
+                      if (template?.notes) setTopicPrompt(template.notes);
+                    }}
+                  >
+                    <option value="">Choose a saved template...</option>
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className={labelClass} htmlFor="topic">
                   What do they need to practice?
