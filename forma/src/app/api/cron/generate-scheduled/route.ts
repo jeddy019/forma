@@ -67,9 +67,9 @@ async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Pr
   if (!student) throw new Error(`Student ${schedule.student_id} not found`);
 
   // Step 4 of Automated Schedule Logic: "fetch student profile and latest
-  // session_notes" - session_notes has no input UI yet (Phase 6 Steps
-  // 33-34), so this will find nothing today, but the query is correct and
-  // free to wire up now rather than waiting for that UI to exist.
+  // session_notes" - Phase 6 Steps 33-34 built the input UI and wired the
+  // same query into /api/generate; this route's own copy (written ahead
+  // of that UI existing) needed no change now that real rows exist.
   const { data: latestNote } = await admin
     .from('session_notes')
     .select('content')
