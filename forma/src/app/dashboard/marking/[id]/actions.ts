@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { nextDifficulty } from '@/lib/adaptive/nextDifficulty';
+import { DIFFICULTY_LEVELS, type DifficultyLevel } from '@/lib/constants';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FEEDBACK_MAX_LENGTH = 2000;
@@ -9,6 +11,9 @@ const FEEDBACK_MAX_LENGTH = 2000;
 export interface SaveMarkingResult {
   error?: string;
   success?: boolean;
+  // Adaptive Difficulty: "Show notice: 'Difficulty adjusted based on recent
+  // performance.'" - set only when current_difficulty actually moved.
+  difficultyNotice?: string;
 }
 
 interface Tier1PartResult {
@@ -26,6 +31,7 @@ interface QuestionsJsonQuestion {
 
 interface SubmissionRow {
   id: string;
+  student_id: string | null;
   answers_json: Record<string, string[]> | null;
   auto_marks_json: Record<string, (Tier1PartResult | null)[]> | null;
   worksheet: { questions_json: { questions: QuestionsJsonQuestion[] } } | null;
@@ -67,7 +73,7 @@ export async function saveMarkingAction(
   // tutor's own typed-in marks and feedback come from formData.
   const { data: submission } = await supabase
     .from('submissions')
-    .select('id, answers_json, auto_marks_json, worksheet:worksheets(questions_json)')
+    .select('id, student_id, answers_json, auto_marks_json, worksheet:worksheets(questions_json)')
     .eq('id', submissionId)
     .single<SubmissionRow>();
 
@@ -122,7 +128,40 @@ export async function saveMarkingAction(
     return { error: 'Could not save marking - please try again.' };
   }
 
+  // Adaptive Difficulty: only runs once a real score exists (totalAvailable
+  // could be 0 for a worksheet with no markable parts, in which case
+  // scorePercentage is null and there's nothing to adjust). A failure here
+  // must not undo the marking that was just successfully saved above - it's
+  // a best-effort follow-on, not part of the save's own success/failure.
+  let difficultyNotice: string | undefined;
+  if (scorePercentage !== null && submission.student_id) {
+    const { data: studentRow } = await supabase
+      .from('student_profiles')
+      .select('current_difficulty')
+      .eq('id', submission.student_id)
+      .single();
+
+    const rawCurrent = studentRow?.current_difficulty;
+    const current: DifficultyLevel = (DIFFICULTY_LEVELS as readonly string[]).includes(rawCurrent ?? '')
+      ? (rawCurrent as DifficultyLevel)
+      : 'standard';
+
+    const updated = nextDifficulty(current, scorePercentage);
+    if (updated) {
+      const { error: difficultyError } = await supabase
+        .from('student_profiles')
+        .update({ current_difficulty: updated })
+        .eq('id', submission.student_id);
+
+      if (difficultyError) {
+        console.error('Failed to update current_difficulty', difficultyError);
+      } else {
+        difficultyNotice = 'Difficulty adjusted based on recent performance.';
+      }
+    }
+  }
+
   revalidatePath(`/dashboard/marking/${submissionId}`);
   revalidatePath('/dashboard/marking');
-  return { success: true };
+  return { success: true, difficultyNotice };
 }

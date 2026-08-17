@@ -199,6 +199,7 @@ export default function MarkingForm({
 
       {state.error && <p className="text-sm text-[#C0392B]">{state.error}</p>}
       {state.success && <p className="text-sm text-[#1A3D2E]">Marking saved.</p>}
+      {state.difficultyNotice && <p className="text-sm text-[#C8A84B]">{state.difficultyNotice}</p>}
 
       <button type="submit" disabled={pending} className={`${primaryButtonClass} self-start`}>
         {pending ? 'Saving...' : 'Save marking'}

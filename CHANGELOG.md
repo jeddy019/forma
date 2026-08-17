@@ -1200,3 +1200,64 @@ actual delivery (and every other email) remains unverified live - ask the
 user for a key whenever that's worth exercising for real.
 Decisions: none beyond the "immediate retry, not literally 10 minutes"
 interpretation documented above.
+
+---
+
+SESSION UPDATE (following the one above):
+User checked the Anthropic Console: the organization is genuinely
+unavailable right now, confirmed not a transient blip, and asked to
+proceed without it - noted, and this session deliberately picked Step 23
+next specifically because it doesn't need a live Claude call at all
+(scoring and marking are already-stored data; adaptive difficulty only
+reacts to a score that already exists).
+
+Completed: Phase 4 Step 23 - adaptive difficulty post-submission logic.
+New src/lib/adaptive/nextDifficulty.ts: nextDifficulty(current,
+scorePercentage) is a pure function (Testing Strategy explicitly lists
+"adaptive difficulty thresholds" under UNIT TESTS) - strict boundaries per
+the spec text ("above 80" / "below 50", so exactly 80 and exactly 50 are
+both no-change), returns null both for the mid-band and for an
+already-at-the-cap request (e.g. 'higher' scoring 100% has nowhere higher
+to go). 8 unit tests at src/__tests__/nextDifficulty.test.ts cover both
+boundaries from both sides, both caps, and the mid-band.
+
+Wired into src/app/dashboard/marking/[id]/actions.ts's saveMarkingAction,
+the only place score_percentage is actually computed today (Steps 16/17's
+decision holds: it stays NULL until a tutor finishes reviewing every
+extended part, so this is the one real trigger point that exists, not
+"after every submission" literally - there is no earlier point with a real
+score to react to). Runs only when scorePercentage is non-null; reads
+student_profiles.current_difficulty (falling back to 'standard' if the
+stored value isn't one of the three known levels - the column has no CHECK
+constraint, so this is a real defensive case, not a hypothetical one), and
+updates it via nextDifficulty(). A failure updating current_difficulty is
+logged but does not roll back or fail the marking save that already
+succeeded - adaptive difficulty is a best-effort follow-on to a save, not
+part of its own success/failure. SaveMarkingResult gained
+difficultyNotice?: string, shown by MarkingForm.tsx as
+"Difficulty adjusted based on recent performance." (spec's literal text)
+only when a change actually happened.
+
+Verified for real, end to end, entirely without the Anthropic API:
+Tier 1 marking and this new logic are both pure/data-driven, so a
+throwaway script hand-built a valid 10-question worksheet object (bypassing
+generateWorksheet() entirely - no AI call anywhere in this path) and drove
+three real submissions through the real /api/submit and
+/dashboard/marking/[id] Save-marking flow via a live logged-in browser: a
+9/10 (90%) score correctly flipped current_difficulty standard -> higher
+with the notice shown; a subsequent 4/10 (40%) score correctly flipped
+higher -> standard with the notice shown again; a 6/10 (60%) score
+correctly left it unchanged at standard with no notice shown. All three
+outcomes confirmed directly against the database, not just the UI text.
+All test data cleaned up.
+
+Next: Phase 4 Step 24 - Monday parent summary automated job. This needs
+its own Vercel Cron entry (a weekly, not 30-minute, cadence) and will
+finally give EMAIL 4 (built in Step 20, unused since) a real trigger. Like
+Step 22, the actual email send still can't be verified live without a
+RESEND_API_KEY. Step 25 (tutor parent report AI draft) is the next thing
+after that which DOES need the Anthropic account back (an AI-drafted
+report has no non-AI equivalent to fall back on for testing) - flag this
+when Step 24 is done, rather than assuming Step 25 can proceed the same
+way Step 23 just did.
+Decisions: none beyond confirming the Step 23 approach above.
