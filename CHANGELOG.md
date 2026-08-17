@@ -1962,3 +1962,75 @@ Anthropic).
 Decisions: question_count/has_diagrams left unexposed on the create form
 rather than guessed at with fake wiring - the one non-mechanical judgment
 call this step needed, documented above rather than left implicit.
+
+---
+
+SESSION UPDATE (following the one above):
+User said "do step 35 next." Step 35's entire spec in CLAUDE.md is one
+line: "Curriculum tracker: percentage of syllabus covered per student" -
+nothing else defines what "the syllabus" actually is. Checked: no topic
+list, curriculum spec, or syllabus data exists anywhere in this codebase
+- worksheets.topic is freeform text the AI generates per request, not
+drawn from any fixed list. Flagged this before building anything (a
+percentage needs a denominator, and inventing a syllabus topic list for 8
+subjects across 3 countries is a real content claim - CLAUDE.md's own
+Product Philosophy makes curriculum accuracy the core value proposition,
+so a sloppy invented list could actively undermine it, not just be
+incomplete) - offered three options (small hand-authored approximate list
+/ no percentage, just topics covered / wait for the user's own topic
+lists). User picked "no percentage," then refined mid-turn: show distinct
+topics practiced per student with worksheet AND question counts per
+topic, no percentage framing at all, and label it "Topics practiced," not
+"Syllabus coverage" - explicitly deferred percentage tracking to
+post-launch once real, verified topic lists exist.
+
+Completed: Phase 6 Step 35 - "Topics practiced" on the student detail
+page.
+
+New src/lib/curriculum/topicsCovered.ts: computeTopicsCovered(worksheets)
+groups by subject+topic, summing worksheet count and question count per
+group, sorted alphabetically by subject then topic - same "pure logic
+gets its own file and tests" discipline as weeklySummary.ts. Question
+count comes from questions_json.questions.length per worksheet (the
+top-level Q1-Q10 array CLAUDE.md's own spec and UI refer to as
+"questions" - not a count of every (a)(b)(c) part within them, which
+would inflate the number relative to how the product describes itself
+everywhere else). 5 unit tests: empty input, grouping/summing across
+multiple worksheets on the same topic, the same topic name kept distinct
+across different subjects (e.g. "Graphs" in Mathematics vs Physics),
+alphabetical sort order, a zero-question worksheet not crashing anything.
+
+Wired into src/app/dashboard/students/[id]/page.tsx as a new section
+between the student header and the (tutor-pro-gated) session notes
+section - deliberately NOT gated behind isActivePro: Permissions Summary
+never lists a curriculum/topics feature as a paid entitlement anywhere,
+unlike session notes/marking/mark schemes/group mode/templates which all
+explicitly are, and this is only a read of data (worksheets) that already
+exists regardless of plan, not a paid capability. Queries worksheets
+capped at 500 rows per student (Performance Rule 3's spirit - this feeds
+an aggregated summary, not a browsable list, so it's not the paginated
+20/page History pattern, but still bounded rather than truly unbounded).
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 59
+tests (5 new for topicsCovered). Confirmed the student detail page still
+compiles and serves without a crash. Live-verified against the real
+Supabase project via a throwaway script (deleted after, cleaned up):
+created a real free-tier tutor and student, inserted 2 worksheets on
+"Fractions" (10 questions each, real questions_json shape - an array of
+10 question objects) and 1 on "Algebra" (8 questions), ran the exact
+query+mapping the page itself runs, confirmed Fractions correctly
+aggregated to worksheetCount 2 / questionCount 20 and Algebra to 1 / 8.
+
+Next: Phase 6 Step 36 (student portal login) is the last item in this
+phase; Step 25 (tutor parent report) remains blocked on Anthropic. No
+instruction yet on what comes after Step 36.
+Open risks: unchanged from prior entries (renewal-reminder/
+delete-inactive-accounts crons unverified against real data; group
+mode/templates/now topics-practiced's underlying worksheet data all
+ultimately depend on the still-blocked Anthropic account for anything
+new to actually accumulate, though topics-practiced itself works
+correctly against whatever data already exists).
+Decisions: no percentage/syllabus denominator (per the user, overriding
+CLAUDE.md's own one-line Step 35 description) - question count is
+top-level questions, not parts - both documented above rather than left
+implicit for a future session to rediscover.

@@ -3,10 +3,17 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { computeTopicsCovered } from '@/lib/curriculum/topicsCovered';
 import SessionNotesForm from './SessionNotesForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
+// Not the paginated "History" pattern - this feeds an aggregated summary
+// (Phase 6 Step 35), not a browsable list - but still capped rather than
+// truly unbounded, per Performance Rule 3's spirit. Same 500-worksheet
+// order of magnitude a single student could plausibly accumulate over
+// years, not expected to ever actually bind in practice.
+const WORKSHEET_HISTORY_LIMIT = 500;
 
 interface StudentRow {
   id: string;
@@ -20,6 +27,12 @@ interface SessionNoteRow {
   id: string;
   content: string;
   created_at: string;
+}
+
+interface WorksheetForTopicsRow {
+  subject: string | null;
+  topic: string | null;
+  questions_json: { questions?: unknown[] } | null;
 }
 
 function formatNoteDate(iso: string): string {
@@ -56,6 +69,24 @@ export default async function StudentDetailPage({
 
   if (!student) notFound();
 
+  // Phase 6 Step 35: "Topics practiced" - no fixed syllabus denominator
+  // (per the user - see CHANGELOG.md), just distinct topics with
+  // worksheet and question counts. Not tutor-pro gated: unlike session
+  // notes, this isn't listed anywhere in Permissions Summary as a paid
+  // entitlement, and it's only a read of data that already exists
+  // regardless of plan.
+  const { data: worksheetRows } = await supabase
+    .from('worksheets')
+    .select('subject, topic, questions_json')
+    .eq('student_id', studentId)
+    .limit(WORKSHEET_HISTORY_LIMIT)
+    .returns<WorksheetForTopicsRow[]>();
+  const topicsCovered = computeTopicsCovered(
+    (worksheetRows ?? [])
+      .filter((w): w is WorksheetForTopicsRow & { subject: string; topic: string } => Boolean(w.subject && w.topic))
+      .map((w) => ({ subject: w.subject, topic: w.topic, questionCount: w.questions_json?.questions?.length ?? 0 }))
+  );
+
   const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
   const canUseSessionNotes = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
 
@@ -83,6 +114,31 @@ export default async function StudentDetailPage({
         <p className="text-sm text-[#5C5849]">
           {student.curriculum_level} - {student.year_level}
         </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold text-[#1A1A18]">Topics practiced</h2>
+        {topicsCovered.length === 0 && <p className="text-sm text-[#9A9080] italic">No worksheets generated yet.</p>}
+        {topicsCovered.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {topicsCovered.map((topic) => (
+              <div
+                key={`${topic.subject}::${topic.topic}`}
+                className="bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-4 flex items-center justify-between gap-4"
+              >
+                <div>
+                  <p className="text-sm font-medium text-[#1A1A18]">{topic.topic}</p>
+                  <span className="text-xs bg-[#E8F2ED] text-[#1A3D2E] rounded-full px-2.5 py-1 inline-block mt-1">{topic.subject}</span>
+                </div>
+                <p className="text-xs text-[#9A9080] text-right">
+                  {topic.worksheetCount} worksheet{topic.worksheetCount === 1 ? '' : 's'}
+                  <br />
+                  {topic.questionCount} question{topic.questionCount === 1 ? '' : 's'}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {!canUseSessionNotes ? (
