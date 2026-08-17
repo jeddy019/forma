@@ -1459,3 +1459,154 @@ was switched to onboarding@resend.dev by the inherited session as a
 stand-in until a custom domain is verified (per the user) - no live send
 confirmed either before or during this session.
 Decisions: none beyond the gate/link choices documented above.
+
+---
+
+SESSION UPDATE (following the one above):
+User confirmed the Anthropic Console subscription is still not back, said
+to move forward without it, and asked for a full audit against CLAUDE.md
+first - now that they'd added real values for RESEND_API_KEY and the
+Flutterwave keys (RESEND_API_KEY was empty the entire time up to now, so
+no email had ever been sent live in this project before this session).
+
+Ran two parallel investigations: a static audit of src/ and supabase/
+against every Security/Performance/Legal Rule, Routing Structure, and
+Phases 1-5; and a live-verification pass using the newly-populated keys.
+Note on process, not a code finding: the first attempt at both came back
+garbled - each fork's reported result described the other fork's task
+(one claimed live-verification results while labelled as the static
+auditor, the other called itself "the orchestrator" and refused to
+report). Not user-reported, not a code bug - flagging in case it recurs:
+sending both a direct, task-reasserting follow-up message resolved the
+static audit; the live-verification agent stayed stuck making
+orchestrator-flavoured claims even after a follow-up, so that half was
+abandoned and done directly instead of through a fork.
+
+Completed, static audit findings and fixes:
+
+1. Plan-expiry gating was inconsistent and, worse, incomplete - the
+   previous session's isActivePro fix (see above) only landed in
+   /api/generate. Re-grepped the whole codebase for plan === 'pro'-style
+   checks after the audit fork surfaced 3 of them and found 5 more it had
+   missed: src/app/api/pdf/route.ts:98 (the actual server-side mark-scheme
+   PDF gate - the most consequential of the lot, since Security Rules 1's
+   entire point is that mark schemes must be properly access-controlled),
+   src/app/dashboard/marking/[id]/page.tsx:62 and actions.ts:57 (the
+   per-submission marking view/save, same category as the already-fixed
+   marking list page), src/app/dashboard/generate/page.tsx:27
+   (canDownloadMarkScheme, UI-level), and src/app/api/billing/checkout/
+   route.ts:25 - this last one is a distinct bug shape, not just a missed
+   copy-paste: it blocked checkout whenever plan === 'pro' regardless of
+   expiry, so a genuinely lapsed subscriber (plan still says 'pro',
+   plan_expires_at has passed) would be told "you are already on a paid
+   plan" and could never resubscribe through the UI at all. Fixed all
+   five the same way - select plan_expires_at alongside plan, gate on
+   isActivePro(plan, plan_expires_at) instead of plan === 'pro'.
+   Deliberately did NOT change src/app/dashboard/settings/actions.ts's
+   cancelSubscriptionAction (plan !== 'pro' check) - that one should stay
+   permissive on expiry, not get stricter: given the still-open renewal
+   tx_ref gap (below), a user could have an active, still-charging
+   Flutterwave subscription while our local plan_expires_at is stale from
+   a missed renewal webhook, and gating cancellation on isActivePro would
+   wrongly block them from reaching Flutterwave to cancel it. Also left
+   src/app/api/cron/monday-summary/route.ts's `.eq('plan', 'pro')` DB
+   filter alone - it is a value-add weekly email, not an access gate;
+   sending one extra summary to a recently-lapsed parent isn't a
+   correctness or security problem worth the query restructuring.
+2. Two Design System #FFFFFF-as-background violations: src/emails/
+   components/EmailLayout.tsx:107 (every one of the 8 email templates'
+   outer Container) and src/app/dashboard/generate/GenerateForm.tsx:245
+   (the topic-starter suggestion buttons - not a form input, so the
+   "#FFFFFF for inputs only" exception doesn't apply). Fixed the
+   Container to #F7F4EF rather than #F0EBE3 (the card token) specifically
+   because MondayParentSummary.tsx and PaymentConfirmed.tsx already nest
+   emailStyles.card (#F0EBE3) inside it - using the card token for the
+   Container too would have made those nested cards blend invisibly into
+   their own background. GenerateForm's buttons moved to #F0EBE3.
+3. EMAIL 2 (Email Templates: "Worksheet ready - manual generation, sent to
+   student") was built (sendWorksheetReadyEmail exists, fully wired into
+   the scheduled cron's EMAIL 3 equivalent) but never actually called from
+   /api/generate - manual generation sent no email at all. Wired it in,
+   mirroring generate-scheduled's own student.email ?? owner.email
+   fallback pattern exactly, fire-and-forget (wrapped in void ... .catch())
+   so a slow or failed send can't hold up the response the tutor/parent is
+   waiting on. Could not verify this specific path live end-to-end (needs
+   a real /api/generate call, which needs the still-down Anthropic
+   account) - verified by direct code review and by confirming
+   sendWorksheetReadyEmail's underlying send() path works live (below).
+
+Audit also surfaced two bigger gaps, deliberately NOT built this session -
+both are genuinely undesigned, not just unimplemented, matching this
+project's own established "flag, decide when actually building it" pattern
+rather than guessing:
+- EMAIL 7 (renewal reminder, "3 days before expiry") and EMAIL 8 (payment
+  failed) both have templates (Step 20) but no trigger anywhere - no cron
+  queries plan_expires_at proximity, and the webhook handler only reacts to
+  charge.completed, never a failure event. EMAIL 8 in particular is
+  entangled with the still-open renewal tx_ref gap below (Flutterwave's own
+  failure webhook for a recurring charge would carry the same
+  Flutterwave-generated tx_ref problem).
+- The 24-month inactive-account/student-data deletion the privacy policy
+  promises (Legal Requirements) has no job anywhere implementing it.
+  Genuinely undesigned (what counts as "inactive" - last login? last
+  worksheet generated? per-owner or per-student?) and destructive by
+  nature - not something to guess at without the user's input.
+
+Completed, live-verification findings (done directly, not via the stuck
+fork - see process note above):
+
+Wrote a throwaway script (deleted after, same convention as
+test-generate-logic.mts) calling sendWelcomeEmail and
+sendPaymentConfirmedEmail directly with the real, now-populated
+RESEND_API_KEY. First attempt sent to the email address on file for this
+user elsewhere in this environment and got a real, verbatim Resend 403:
+"You can only send testing emails to your own email address
+([founder-inbox])." - the actual Resend account is registered to
+[founder-inbox], a different address than assumed. Retried against the
+correct address and both sends succeeded (sendWelcomeEmail and
+sendPaymentConfirmedEmail both returned true - real delivery, not just "no
+exception"). Separately confirmed the existing resend.ts comment's
+"restricts to the account's own owner email" undersells the actual
+behaviour - it's not silent, Resend hard-rejects with 403 for the owner
+mismatch case and a distinct 422 ("Invalid `to` field... use our testing
+email address") for a plain external address like *@example.com. Worth
+knowing for this project going forward: real email delivery to actual
+tutors/parents/students cannot be tested at all until a custom domain is
+verified on Resend and EMAIL_FROM is swapped off onboarding@resend.dev -
+right now only [founder-inbox] can ever receive a Forma email.
+
+Also called getOrCreatePaymentPlanId('tutor') and ('parent') and
+initiateCheckout directly against the real Flutterwave test-mode API -
+both plan lookups/creates succeeded (real plan ids 240508 and 240509 -
+these are the actual plans the app will reuse going forward via
+getOrCreatePaymentPlanId's list-then-create-if-missing logic, left in
+place, not test artifacts to clean up), and initiateCheckout returned a
+real checkout-v2.dev-flutterwave.com link. verifyTransaction with a bogus
+transaction id and findActiveSubscriptionId with a nonexistent email both
+returned sensible not-found results without throwing. No Supabase rows
+were created by this verification (initiateCheckout doesn't touch
+Supabase), so no cleanup was needed there.
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 48
+tests passing (same suite, no new pure-logic extraction warranted this
+round - the fixes were gating/wiring changes, not new branchy logic).
+Confirmed the dev server serves without errors throughout.
+
+Next: Phase 4 Step 25 if the Anthropic account is back; otherwise Phase 6
+(Advanced), per the user's explicit "move forward without it" this
+session.
+Open risks, in addition to the still-open Flutterwave renewal tx_ref gap
+(prior session's entry above) and the schedule cron's lack of plan gating
+(also above): EMAIL 7/EMAIL 8 have no trigger, and the 24-month deletion
+job doesn't exist - both flagged above, not built. The settings page
+(SettingsPanel.tsx) still branches purely on plan === 'pro' for its
+Upgrade-vs-Cancel UI, so a lapsed-but-locally-stale-pro user would see
+"Cancel subscription" rather than a path back to Upgrade even though
+checkout/route.ts (fixed this session) would now actually let them
+resubscribe if they could reach it - minor UX gap, not a security one,
+left as-is rather than inventing a three-way UI state without the user
+asking for it.
+Decisions: none beyond the gating-direction calls documented above
+(isActivePro everywhere paid-feature access is actually gated; left as
+plain plan === 'pro' where being permissive-on-expiry is the safer
+default, per each case's own reasoning above).

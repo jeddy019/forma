@@ -242,7 +242,7 @@ export default function GenerateForm({
                       key={starter}
                       type="button"
                       onClick={() => setTopicPrompt(starter.charAt(0).toUpperCase() + starter.slice(1))}
-                      className="text-left text-xs text-[#5C5849] bg-white border border-[#E0D9D0] rounded-[10px] px-3 py-2 hover:border-[#1A3D2E]"
+                      className="text-left text-xs text-[#5C5849] bg-[#F0EBE3] border border-[#E0D9D0] rounded-[10px] px-3 py-2 hover:border-[#1A3D2E]"
                     >
                       {starter}
                     </button>

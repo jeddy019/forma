@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
+import { isActivePro } from '@/lib/payments/planStatus';
 import MarkingForm, { type MergedQuestion } from './MarkingForm';
 
 interface Tier1PartResult {
@@ -58,8 +59,8 @@ export default async function MarkingDetailPage({ params }: { params: Promise<{ 
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: ownerRow } = await supabase.from('users').select('role, plan').eq('id', user.id).single();
-  if (!ownerRow || ownerRow.role !== 'tutor' || ownerRow.plan !== 'pro') {
+  const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
+  if (!ownerRow || ownerRow.role !== 'tutor' || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return (
       <div className={`${cardClass} text-center`}>
         <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Marking dashboard</h1>

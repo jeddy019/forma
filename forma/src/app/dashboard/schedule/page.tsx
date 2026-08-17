@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cardClass, secondaryButtonClass } from '@/lib/ui/formStyles';
 import ScheduleForm from './ScheduleForm';
 import ScheduleCard, { type ScheduleRow } from './ScheduleCard';
+import { isActivePro } from '@/lib/payments/planStatus';
 
 export default async function SchedulePage() {
   const supabase = await createClient();
@@ -14,8 +15,8 @@ export default async function SchedulePage() {
 
   // FREE tier: "No automation" (Permissions Summary) - applies to both
   // tutor and parent roles, unlike the marking dashboard's tutor-only gate.
-  const { data: ownerRow } = await supabase.from('users').select('plan').eq('id', user.id).single();
-  if (!ownerRow || ownerRow.plan !== 'pro') {
+  const { data: ownerRow } = await supabase.from('users').select('plan, plan_expires_at').eq('id', user.id).single();
+  if (!ownerRow || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return (
       <div className={`${cardClass} text-center`}>
         <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Automated practice</h1>

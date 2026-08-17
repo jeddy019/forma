@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { SUBJECTS, DIFFICULTY_LEVELS, DELIVERY_TIMEZONES, type Subject, type DifficultyLevel, type DeliveryTimezone } from '@/lib/constants';
+import { isActivePro } from '@/lib/payments/planStatus';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOPIC_MAX_LENGTH = 200;
@@ -27,8 +28,8 @@ async function requirePro(): Promise<{ error?: string; userId?: string }> {
   // FREE tier: "No automation" (Permissions Summary) - applies to both
   // tutor and parent roles alike, unlike the marking dashboard's
   // tutor-only gate.
-  const { data: ownerRow } = await supabase.from('users').select('plan').eq('id', user.id).single();
-  if (!ownerRow || ownerRow.plan !== 'pro') {
+  const { data: ownerRow } = await supabase.from('users').select('plan, plan_expires_at').eq('id', user.id).single();
+  if (!ownerRow || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return { error: 'Automated schedules are available on a paid plan.' };
   }
   return { userId: user.id };

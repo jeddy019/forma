@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { generatePdf } from '@/lib/pdf/browser-pool';
 import { renderWorksheetHtml, type WorksheetQuestion } from '@/lib/pdf/worksheet-template';
 import { renderMarkSchemeHtml, type MarkSchemeQuestion } from '@/lib/pdf/mark-scheme-template';
+import { isActivePro } from '@/lib/payments/planStatus';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Performance Rule 10: "PDF: 25 seconds". vercel.json's maxDuration: 60 for
@@ -94,8 +95,8 @@ export async function POST(request: NextRequest) {
   if (document === 'mark_scheme') {
     // Permissions Summary: mark schemes are a tutor-pro entitlement only -
     // free tier and the parent plan explicitly exclude them.
-    const { data: ownerRow } = await supabase.from('users').select('role, plan').eq('id', user.id).single();
-    if (!ownerRow || ownerRow.role !== 'tutor' || ownerRow.plan !== 'pro') {
+    const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
+    if (!ownerRow || ownerRow.role !== 'tutor' || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
       return NextResponse.json({ error: 'Mark schemes are available on the Tutor plan.' }, { status: 403 });
     }
     if (!worksheet.mark_scheme_json) {

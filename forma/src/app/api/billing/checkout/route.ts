@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { initiateCheckout } from '@/lib/payments/flutterwave';
 import { isSubscribableRole } from '@/lib/payments/plans';
+import { isActivePro } from '@/lib/payments/planStatus';
 
 // Phase 5 Step 26: starts a Flutterwave Standard checkout. The plan (and
 // its price) is determined by the account's own role - Permissions
@@ -18,11 +19,15 @@ export async function POST() {
     return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
   }
 
-  const { data: ownerRow } = await supabase.from('users').select('role, plan').eq('id', user.id).single();
+  const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
   if (!ownerRow) {
     return NextResponse.json({ error: 'Account not found.' }, { status: 404 });
   }
-  if (ownerRow.plan === 'pro') {
+  // isActivePro, not plan === 'pro' alone - a lapsed subscription (plan
+  // still 'pro' in the DB but plan_expires_at has passed, e.g. a renewal
+  // charge never came through) must still be able to check out again, not
+  // get told it's "already on a paid plan" and blocked from resubscribing.
+  if (isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return NextResponse.json({ error: 'You are already on a paid plan.' }, { status: 400 });
   }
   if (!isSubscribableRole(ownerRow.role)) {

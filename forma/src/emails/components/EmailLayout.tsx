@@ -104,7 +104,12 @@ export default function EmailLayout({ previewText, children, showUnsubscribeFoot
       <Body style={{ backgroundColor: '#F7F4EF', margin: 0, padding: '32px 0' }}>
         <Container
           style={{
-            backgroundColor: '#FFFFFF',
+            // Page background token, not the card token - some templates
+            // (MondayParentSummary, PaymentConfirmed) nest emailStyles.card
+            // (#F0EBE3) inside this Container, and that only reads as a
+            // raised card if the Container itself is the page tone, not
+            // the same card tone.
+            backgroundColor: '#F7F4EF',
             maxWidth: '480px',
             borderRadius: '12px',
             border: '0.5px solid #E0D9D0',
