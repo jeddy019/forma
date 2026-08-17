@@ -2034,3 +2034,120 @@ Decisions: no percentage/syllabus denominator (per the user, overriding
 CLAUDE.md's own one-line Step 35 description) - question count is
 top-level questions, not parts - both documented above rather than left
 implicit for a future session to rediscover.
+
+---
+
+SESSION UPDATE (following the one above):
+User said "do step 36 next" - the last item in Phase 6.
+
+Completed: Phase 6 Step 36 - student portal login and historical
+worksheet access.
+
+Design decisions made before writing any code, since CLAUDE.md doesn't
+specify the mechanism beyond "optional student login... if the student
+has an email on file view their own worksheet history and scores over
+time" (Legal Requirements) and "no account required... optional portal
+login" (Permissions Summary):
+
+1. Magic-link (signInWithOtp), not password auth like tutor/parent
+   (src/app/login uses signInWithPassword). Every student on this
+   platform is a minor (Legal Requirements' own framing), and the spec
+   describes this as optional/lightweight throughout - a password to
+   remember doesn't fit that, and email-ownership verification is exactly
+   what this feature needs anyway (see point 2). One email field does
+   double duty as both "sign up" and "log in" (shouldCreateUser: true) -
+   no separate signup step, matching "optional, no friction."
+2. Authorization: NOT a new RLS policy. users.role's CHECK constraint
+   already includes 'student' as a possible value, which could read as an
+   invitation to build a real students-in-the-users-table model - but
+   student_profiles.owner_id is always the tutor/parent, never the
+   student, so a student's own auth.uid() can never satisfy
+   profiles_own/worksheets_own's `auth.uid() = owner_id` policies no
+   matter how the users table is modelled. Re-reading Security Rules 1's
+   own hard-learned lesson here mattered: "A public policy USING
+   (digital_code IS NOT NULL) was tried and removed" after it leaked a
+   different tutor's mark scheme to anyone holding the anon key - adding
+   a new RLS policy for this (e.g. "USING (email = auth.email())") risks
+   exactly that class of mistake again. Went with the same pattern
+   Security Rules 1 already established for /s/[code] and /api/submit
+   instead: service-role client, explicit safe-column selects, real
+   authorization logic in application code - matching the *verified*
+   Supabase Auth email (never anything client-supplied) against
+   student_profiles.email via .ilike() (case-insensitive - a student
+   typing their own email shouldn't have to match the exact casing a
+   tutor typed into their profile). No public.users row is created for
+   students at all - the portal only ever needs the verified auth email,
+   nothing else a users row would provide (role/plan/paper_size are all
+   owner-specific concepts that don't apply to a student).
+3. A student's email could plausibly be on file with more than one
+   tutor/parent (the same real student, tutored by two people, or two
+   siblings sharing one parent's email on their own separate profiles) -
+   the portal merges every matching student_profiles row's worksheets
+   into one combined history rather than forcing a single-profile
+   assumption, labelling which profile a row belongs to only when there's
+   more than one match.
+
+New files: src/app/auth/callback/route.ts (generic PKCE code-exchange
+route - tutor/parent auth never needs it, only this magic-link flow does,
+comment says so honestly rather than pretending broader current usage);
+src/app/student/login/page.tsx (email-only form, no password field,
+mirrors /login's visual style); src/app/student/page.tsx (the portal -
+deliberately no separate layout.tsx, since wrapping login too would
+double up on its own self-contained centered-card styling; the header +
+sign-out is just inlined into the one authenticated page that needs it).
+Portal page is its own primary auth gate (proxy.ts's middleware only
+protects /dashboard, not /student) - `if (!user?.email) redirect(...)` is
+load-bearing here, not a defensive backup like /dashboard pages' own
+checks are.
+
+Also added a portal link to EMAIL 2 (WorksheetReady) and EMAIL 3
+(WeeklyDelivery), shown only when sentToStudentDirectly is true - a login
+page nobody can find isn't a very useful feature, and this is the natural
+place a student would already be looking when they'd want it. Both
+templates gained an optional portalUrl prop; updated all three call
+sites (/api/generate, /api/generate/group, generate-scheduled cron) to
+pass `${appUrl}/student/login`.
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 59
+tests (unchanged - no new pure logic here; the email-matching/merging
+logic is a direct query+reduce, not complex branching worth its own
+tested module, same proportionality judgment as the group-mode
+comparison page's own submission reduction). Confirmed both new routes
+compile and respond correctly unauthenticated (/student/login -> 200,
+/student -> 307 to /student/login). Live-verified the full data layer
+against the real Supabase project via a throwaway script (deleted after,
+cleaned up): created three real tutor accounts, two of them with a
+student profile sharing the same fabricated "logging-in student" email
+(simulating one real student tutored by two people) and a third,
+unrelated tutor's student using a different email - confirmed the
+portal's exact query correctly merges the two matching profiles (case-
+insensitive: queried with the email upper-cased), correctly excludes the
+unrelated tutor's student entirely, correctly returns worksheets only for
+the matched profiles, confirmed mark_scheme_json is never selected
+(safe-column discipline, mirroring /s/[code]'s own), and confirmed a
+completely unrelated email matches nothing. Separately called
+signInWithOtp directly against the real Supabase Auth API (anon key, same
+tier the browser uses) with the real account owner's email - returned no
+error and the expected pending-confirmation shape ({user: null, session:
+null}), confirming the actual API call this project's code makes
+succeeds. Did NOT verify actual magic-link email delivery or the
+click-through/callback exchange live - that needs real inbox access and
+browser automation, and Supabase Auth's own email sending is separate
+infrastructure from RESEND_API_KEY (already verified working
+independently) that this session has no visibility into.
+
+Next: Phase 6 is fully complete (Steps 31-36). Step 25 (tutor parent
+report) remains the only unbuilt Phase 4/5/6 item, still blocked on
+Anthropic. No instruction yet on what to do next - likely Phase 7 (Kumon
+Mastery Model) if the user wants to keep building ahead of Anthropic
+being restored, since Phase 7's own Build Phases section is written to
+not need it for several of its steps (skill_map tracking, daily practice
+mode structure, prerequisite mapping); otherwise wait for Step 25.
+Open risks: magic-link delivery/click-through unverified live (see
+Verified section above) - worth a real end-to-end check once this is
+deployed or the user can click through with their own email. Everything
+else carried over from prior entries unchanged.
+Decisions: magic-link over password, service-role + application-layer
+auth over a new RLS policy, and merge-by-email across multiple owners -
+all three documented above with reasoning, none obvious from CLAUDE.md's
+one-line Step 36 description alone.
