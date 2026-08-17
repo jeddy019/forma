@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { markPart } from '@/lib/marking/tier1';
+import type { AnswerFormat } from '@/lib/ai/schema';
 
-// Minimal submission handler, built alongside Phase 2 Step 13 (the /s/[code]
-// page needs somewhere to submit to) rather than waiting for Phase 3 Step 15
-// ("Submission handler"). Deliberately narrow: stores answers_json only.
-// Tier 1/2/3 marking (auto-mark, AI-assisted, tutor review queue) stays
-// Phase 3 Steps 16-19, untouched - score_percentage, auto_marks_json,
-// ai_suggested_marks_json, and tutor_marks_json are all left NULL here.
+// Submission handler (Phase 2 Step 13 built the minimal version alongside
+// the /s/[code] page; Phase 3 Step 16 adds Tier 1 auto-marking here).
+// Still deliberately narrow: only the parts whose answer_format is
+// auto-markable (numerical, coordinates, true_false, multiple_choice) get a
+// result in auto_marks_json. "extended" parts get a null entry, meaning
+// "not yet marked" - Tier 2 (AI-assisted) and Tier 3 (tutor review) don't
+// exist yet, so score_percentage is deliberately left NULL rather than
+// computed from a partial (auto-markable-only) subset of the marks, which
+// would misrepresent the student's real score.
 const DIGITAL_CODE_PATTERN = /^[A-Za-z0-9_-]{6,32}$/;
 const ANSWER_MAX_LENGTH = 2000;
 const MAX_PARTS_PER_QUESTION = 20; // generous upper bound, just to reject abuse payloads
@@ -16,11 +21,22 @@ interface SubmitRequestBody {
   answers?: Record<string, unknown>;
 }
 
+interface WorksheetPart {
+  answer: string;
+  answer_format: AnswerFormat;
+  marks: number;
+}
+
+interface WorksheetQuestion {
+  id: string;
+  parts: WorksheetPart[];
+}
+
 interface WorksheetRow {
   id: string;
   student_id: string | null;
   expires_at: string | null;
-  questions_json: { questions: { id: string; parts: unknown[] }[] };
+  questions_json: { questions: WorksheetQuestion[] };
 }
 
 export async function POST(request: NextRequest) {
@@ -66,10 +82,20 @@ export async function POST(request: NextRequest) {
     sanitizedAnswers[questionId] = value;
   }
 
+  const autoMarksJson: Record<string, ReturnType<typeof markPart>[]> = {};
+  for (const question of worksheet.questions_json.questions) {
+    const studentParts = sanitizedAnswers[question.id];
+    if (!studentParts) continue;
+    autoMarksJson[question.id] = question.parts.map((part, i) =>
+      markPart(part.answer_format, part.answer, studentParts[i] ?? '', part.marks)
+    );
+  }
+
   const { error: insertError } = await admin.from('submissions').insert({
     worksheet_id: worksheet.id,
     student_id: worksheet.student_id,
     answers_json: sanitizedAnswers,
+    auto_marks_json: autoMarksJson,
   });
 
   if (insertError) {

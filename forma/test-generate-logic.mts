@@ -31,6 +31,7 @@ function makePart(label: string | null, text: string) {
     diagram_spec: null,
     working_lines: 4,
     answer: '3/4',
+    answer_format: 'extended' as const,
     mark_scheme: { M1: 'method', A1: 'accuracy', common_error: 'wrong denominator', allow: 'equivalent fractions' },
   };
 }

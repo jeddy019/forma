@@ -33,6 +33,18 @@ export interface MarkScheme {
   allow: string;
 }
 
+// Marking Logic (CLAUDE.md): Tier 1 auto-marks numerical, coordinates,
+// true/false, and multiple choice answers instantly on submission via exact
+// match with normalisation (Tier 1's own comparison logic, not this list,
+// decides case/whitespace/decimal-tolerance rules - see
+// src/lib/marking/tier1.ts). "extended" covers anything needing shown
+// working, an explanation, or a proof - those fall through to Tier 2
+// (AI-assisted) or Tier 3 (tutor review), neither built yet. Added in Phase
+// 3 Step 16 - the schema had no way to distinguish these before, so Tier 1
+// would have had nothing reliable to key off.
+export const ANSWER_FORMATS = ['numerical', 'coordinates', 'true_false', 'multiple_choice', 'extended'] as const;
+export type AnswerFormat = (typeof ANSWER_FORMATS)[number];
+
 export interface QuestionPart {
   part_label: string | null;
   text: string;
@@ -40,6 +52,7 @@ export interface QuestionPart {
   diagram_spec: DiagramSpec | null;
   working_lines: number;
   answer: string;
+  answer_format: AnswerFormat;
   mark_scheme: MarkScheme;
 }
 
@@ -128,6 +141,7 @@ export const WORKSHEET_JSON_SCHEMA = {
                 diagram_spec: DIAGRAM_SPEC_SCHEMA,
                 working_lines: { type: 'integer' },
                 answer: { type: 'string' },
+                answer_format: { type: 'string', enum: [...ANSWER_FORMATS] },
                 mark_scheme: {
                   type: 'object',
                   properties: {
@@ -140,7 +154,7 @@ export const WORKSHEET_JSON_SCHEMA = {
                   additionalProperties: false,
                 },
               },
-              required: ['part_label', 'text', 'marks', 'diagram_spec', 'working_lines', 'answer', 'mark_scheme'],
+              required: ['part_label', 'text', 'marks', 'diagram_spec', 'working_lines', 'answer', 'answer_format', 'mark_scheme'],
               additionalProperties: false,
             },
           },

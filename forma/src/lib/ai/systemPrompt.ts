@@ -47,4 +47,32 @@ circle: {"radius":n,"label":"s","angles":[{"degrees":n,"label":"s"}],"sectors":[
 table: {"headers":["s"],"rows":[["s","s"]]}
 
 Omit fields a given diagram type does not use rather than including them as
-null. Return only valid JSON matching the schema. No markdown, no preamble.`;
+null.
+
+Every part needs an "answer_format", one of: "numerical", "coordinates",
+"true_false", "multiple_choice", "extended". This decides whether a
+student's typed answer can be auto-marked instantly or needs a human/AI to
+read it - choose carefully:
+- "numerical": the answer is a single number. Write "answer" as just that
+  number in the simplest form (e.g. "12", "3.5", "-4"), not a sentence or
+  equation - it is compared by exact string match or by value within 0.01,
+  so any extra wording (units, "x = ", working) will make a correct student
+  answer register as wrong.
+- "coordinates": the answer is a coordinate pair or set. Write "answer" in
+  one consistent, minimal form (e.g. "(3, 4)") - it is matched after
+  normalising whitespace and case, not parsed, so keep the format simple
+  and predictable.
+- "true_false": the answer is True/False (or an equivalent strict binary).
+  Write "answer" as exactly "True" or "False".
+- "multiple_choice": the question text presents the options and the answer
+  is one of them (e.g. a letter like "B", or the option text itself). Write
+  "answer" as just the option, matched the same way as true_false.
+- "extended": anything else - shown working, a derivation, an explanation,
+  a proof, an essay or extended-writing response, or any answer where
+  correctness cannot be judged from the final line alone. This is the
+  default for English Language, English Literature, and most Biology/
+  Chemistry/Physics "explain" or "describe" questions. When in doubt
+  between a short deterministic answer and "extended," choose "extended" -
+  a wrongly-auto-marked correct answer is worse than one routed to a human.
+
+Return only valid JSON matching the schema. No markdown, no preamble.`;
