@@ -3,7 +3,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { verifyTransaction } from '@/lib/payments/flutterwave';
-import { activateSubscriptionFromTransaction } from '@/lib/payments/activateSubscription';
+import { activateSubscriptionFromTransaction, notifyPaymentFailedFromTransaction } from '@/lib/payments/activateSubscription';
 
 // Phase 5 Step 27. Flutterwave's webhook auth model is a plain shared
 // secret compared verbatim (the "secret hash" set in the Flutterwave
@@ -34,15 +34,30 @@ export async function POST(request: NextRequest) {
   const eventType = body.event ?? 'unknown';
   const data = body.data ?? {};
 
-  if (eventType === 'charge.completed' && data.status === 'successful' && data.id && data.tx_ref) {
+  if (eventType === 'charge.completed' && data.id && data.tx_ref) {
     try {
       // Technical Challenge 8 / Security Rules 6: never act on the
-      // payload's own "successful" claim alone - re-verify server-side
-      // against Flutterwave's own record first.
+      // payload's own status claim alone - re-verify server-side against
+      // Flutterwave's own record first, for both the success and failure
+      // branches below.
       const verified = await verifyTransaction(String(data.id));
+      const admin = createAdminClient();
+
       if (verified?.data?.status === 'successful') {
-        const admin = createAdminClient();
-        await activateSubscriptionFromTransaction(admin, String(data.id), data.tx_ref);
+        await activateSubscriptionFromTransaction(admin, String(data.id), data.tx_ref, verified.data.customer?.email);
+      } else if (verified?.data && verified.data.status !== 'successful') {
+        // EMAIL 8: covers both a failed first payment and a failed
+        // renewal attempt - notifyPaymentFailedFromTransaction shares
+        // activateSubscriptionFromTransaction's own identification
+        // fallback (tx_ref, then customer email) for the renewal case.
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+        await notifyPaymentFailedFromTransaction(
+          admin,
+          String(data.id),
+          data.tx_ref,
+          verified.data.customer?.email,
+          `${appUrl}/dashboard/settings`
+        );
       }
     } catch (error) {
       console.error('Failed to process Flutterwave webhook', error);

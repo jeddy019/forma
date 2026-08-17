@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const result = await activateSubscriptionFromTransaction(admin, transactionId, verified.data.tx_ref);
+    const result = await activateSubscriptionFromTransaction(admin, transactionId, verified.data.tx_ref, verified.data.customer?.email);
     if (!result.activated && result.reason !== 'already processed') {
       console.error('Payment callback: activation failed', result.reason);
       return NextResponse.redirect(`${appUrl}/dashboard/settings?payment=failed`);
