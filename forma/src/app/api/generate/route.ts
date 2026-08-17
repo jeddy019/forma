@@ -89,13 +89,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Student profile not found.' }, { status: 404 });
   }
 
+  // Phase 6 Step 34: same query the scheduled cron already used ahead of
+  // its own UI existing (generate-scheduled/route.ts) - session notes are
+  // a tutor-pro feature (Step 33's own gate), so a parent-owned or
+  // free-tier student simply has none and this naturally falls through to
+  // 'none' below, same as it always has.
+  const { data: latestNote } = await supabase
+    .from('session_notes')
+    .select('content')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const userPrompt = buildUserPrompt({
     studentName: student.name,
     country: student.country,
     curriculumLevel: student.curriculum_level,
     yearLevel: student.year_level,
     subjectHint: student.subjects ?? [],
-    sessionNotes: 'none', // Phase 6 wires in real session_notes context.
+    sessionNotes: latestNote?.content ?? 'none',
     topicPrompt: sanitizedTopic,
   });
 

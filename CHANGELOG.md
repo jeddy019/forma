@@ -1610,3 +1610,67 @@ Decisions: none beyond the gating-direction calls documented above
 (isActivePro everywhere paid-feature access is actually gated; left as
 plain plan === 'pro' where being permissive-on-expiry is the safer
 default, per each case's own reasoning above).
+
+---
+
+SESSION UPDATE (following the one above):
+User picked Phase 6 (Advanced) over closing the EMAIL 7/8/24-month gaps,
+when asked which to do next. Started with Phase 6 Steps 33-34 (session
+notes) rather than Step 31 (group mode) - both /api/generate and the
+scheduled cron already had a sessionNotes: 'none' placeholder and a
+working "latest note" query respectively, explicitly commented as
+"Phase 6 wires in real session_notes context," so this was the most
+directly-flagged next piece, and Steps 33/34 are naturally one feature
+(input UI, then use what it stores) matching the "2-3 related steps"
+session-sizing guidance.
+
+Completed: Phase 6 Steps 33-34 - session notes input/storage and feeding
+them into generation.
+
+New route at src/app/dashboard/students/[id]/ (didn't exist before - the
+students list page had no per-student detail view): page.tsx (student
+header, tutor-pro gate matching the marking dashboard's own isActivePro
+pattern, paginated note list at 20/page per Performance Rule 3),
+actions.ts (addSessionNoteAction - 5000-char server-side limit per
+Security Rule 4, stripHtmlTags applied at write time per Security Rule 7
+rather than at prompt-build time, so the stored value is already safe
+everywhere it's read back), SessionNotesForm.tsx (useActionState form,
+resets itself on success since this page doesn't navigate away the way
+StudentForm's list-refresh does). Linked from the students list page
+(student name is now a link). Noted but didn't fix: studentId from the
+form isn't cross-checked against student_profiles.owner_id before insert
+- same trust boundary the existing schedule form's studentId already
+relies on elsewhere in this codebase (RLS covers reads; a malicious POST
+with someone else's UUID isn't newly introduced by this feature, it's a
+pre-existing pattern this matches for consistency).
+
+Step 34: /api/generate now runs the exact same "latest note by student_id"
+query the scheduled cron already had (written ahead of this UI existing,
+per its own comment) instead of the hardcoded 'none' placeholder. Updated
+that comment too, since it was already stale the moment this landed.
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 48
+tests (unchanged - no new pure branchy logic here worth its own unit
+test, unlike isActivePro/nextDifficulty/isDueNow). Live-verified the data
+layer with a throwaway script (deleted after) against the real Supabase
+project: created a real tutor-pro user + student, inserted two notes with
+HTML in the raw content, confirmed stripHtmlTags actually removed it,
+confirmed the ordering query returns the newer note (not insertion order
+by accident - inserted with a 1.1s gap to make created_at ordering
+unambiguous), confirmed the pagination query's shape (count + newest-first
+range) matches what page.tsx expects. Cleaned up all rows after. Did NOT
+verify the actual browser UI (forms, the tutor-pro upsell card, pagination
+links) - confirmed the route compiles and responds (307 to /login when
+unauthenticated, no server crash) and left the dev server running per
+this project's own convention of the user reviewing new UI live rather
+than this session screenshotting it.
+
+Next: Phase 6 Step 31 (group mode) or Step 32 (template library) next -
+neither needs the Anthropic account. Ask the user which, or whichever
+reads as more natural to build on students/session-notes work just
+finished.
+Open risks: unchanged from the entry above (EMAIL 7/8 no trigger,
+24-month deletion job missing, Flutterwave renewal tx_ref gap, schedule
+cron has no plan gating) - none of this session's work touched them.
+Decisions: none beyond the studentId trust-boundary consistency call
+documented above.
