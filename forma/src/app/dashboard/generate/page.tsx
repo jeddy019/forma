@@ -10,6 +10,12 @@ interface StudentOption {
   name: string;
 }
 
+interface TemplateOption {
+  id: string;
+  name: string;
+  notes: string | null;
+}
+
 export default async function GeneratePage() {
   const supabase = await createClient();
   const {
@@ -25,12 +31,18 @@ export default async function GeneratePage() {
     supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single(),
   ]);
 
-  // Permissions Summary lists both "mark scheme PDF" and "group mode" as
-  // the same tutor-pro entitlement - one shared condition, two named props
-  // per call site for clarity at each usage.
+  // Permissions Summary lists "mark scheme PDF", "group mode", and
+  // "templates" as the same tutor-pro entitlement - one shared condition,
+  // named props per call site for clarity at each usage.
   const isTutorPro = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
   const canDownloadMarkScheme = isTutorPro;
   const canUseGroupMode = isTutorPro;
+
+  // Same capped-picker pattern as students above - only fetched for
+  // tutor-pro accounts, since templates are gated the same way.
+  const { data: templates } = isTutorPro
+    ? await supabase.from('templates').select('id, name, notes').order('name').limit(200)
+    : { data: [] };
 
   if (!students || students.length === 0) {
     return (
@@ -51,6 +63,7 @@ export default async function GeneratePage() {
       students={students as StudentOption[]}
       canDownloadMarkScheme={canDownloadMarkScheme}
       canUseGroupMode={canUseGroupMode}
+      templates={(templates ?? []) as TemplateOption[]}
     />
   );
 }

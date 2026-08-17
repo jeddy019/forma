@@ -1887,3 +1887,78 @@ prompt in group mode (not any one selected student's real name/notes) -
 a product judgment call, not specified in CLAUDE.md's Group mode line
 item beyond "one worksheet, multiple students," made and documented here
 rather than left ambiguous.
+
+---
+
+SESSION UPDATE (following the one above):
+Completed: Phase 6 Step 32 - template library.
+
+The templates table already existed in schema.sql (built ahead of its own
+UI, same pattern as session_notes was before Step 33) - name, subject,
+difficulty, question_count (DEFAULT 10), has_diagrams (DEFAULT TRUE),
+notes. New /dashboard/templates (tutor-pro gated, Permissions Summary
+lists templates as the same entitlement as marking/mark schemes/group
+mode/session notes): TemplateForm.tsx (create), a paginated list at
+20/page (Performance Rule 3), DeleteTemplateForm.tsx.
+
+Deliberately left question_count and has_diagrams off the create form
+entirely, rather than exposing fields that don't do anything yet:
+neither is wired into the generation pipeline anywhere - the AI system
+prompt's question structure (2 warm-up, 6 core, 2 challenge) is fixed and
+documented "use verbatim" in CLAUDE.md, not parameterised, and diagram
+inclusion is already an unconditional "at least 40 percent" target, not a
+toggle. Exposing a checkbox/number field that silently did nothing on
+generation would be actively misleading, not just incomplete - so the
+insert leaves both columns to their table defaults instead, reserving the
+shape for whenever the generation pipeline actually grows this capability
+(same "no consumer yet" pattern as skill_map). notes is stripped of HTML
+at write time (Security Rule 7), same reasoning as session notes - it
+becomes a topic prompt fed straight into the Claude API when applied.
+
+Wired into the generate page: a "Use a template" dropdown appears above
+the topic textbox (only when the tutor has saved templates) - selecting
+one fills the topic textarea with that template's notes and resets itself
+back to the placeholder, a one-shot apply rather than a persistent
+selection, same interaction shape as the existing topic-starter buttons
+just via a dropdown instead of individual buttons (there could be many
+templates, unlike the fixed 5 starters).
+
+Added a "Templates" link to the dashboard nav, tutor-only (role check
+only, not isActivePro - same convention as the existing Marking link,
+which lets a non-pro tutor reach the page and see its own upsell message
+rather than hiding the link entirely).
+
+Bug caught and fixed before it shipped, not after: the delete
+confirmation (window.confirm) can't live in page.tsx directly - that page
+is a Server Component, and an onSubmit handler referencing `window` isn't
+serialisable into one. Extracted DeleteTemplateForm.tsx as its own small
+'use client' component instead, same reason ScheduleCard.tsx exists as
+its own client component rather than being inlined into schedule/page.tsx.
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 54
+tests (unchanged; no new pure logic here). Confirmed /dashboard/templates
+compiles and serves without a crash (307 to /login when unauthenticated).
+Live-verified the full data layer against the real Supabase project via a
+throwaway script (deleted after, cleaned up): created a real tutor-pro
+owner, inserted a template with HTML in the raw notes and confirmed
+stripHtmlTags actually removed it, confirmed question_count/has_diagrams
+correctly took their table defaults (10, true) since the insert omits
+them entirely, ran the exact generate-page picker query and the exact
+templates-list-page query and confirmed both return the right shape,
+deleted a template scoped by id+tutor_id and confirmed zero rows remain,
+then confirmed a delete scoped to a *different* tutor_id does NOT remove
+a real row (cross-tutor isolation, mirroring the same check group mode's
+verification did for worksheets).
+
+Next: Phase 6 Steps 35-36 (curriculum tracker, student portal login)
+remain in this phase; Step 25 (tutor parent report) is still blocked on
+Anthropic whenever it's back. No explicit instruction from the user on
+what comes after Step 32 - ask, or use judgement based on what's most
+valuable next.
+Open risks: unchanged from the prior two entries (renewal-reminder/
+delete-inactive-accounts crons unverified against real data; group mode
+and now templates' actual generation path unverified live pending
+Anthropic).
+Decisions: question_count/has_diagrams left unexposed on the create form
+rather than guessed at with fake wiring - the one non-mechanical judgment
+call this step needed, documented above rather than left implicit.
