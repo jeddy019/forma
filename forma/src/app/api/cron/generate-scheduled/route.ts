@@ -154,6 +154,7 @@ async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Pr
       worksheetUrl: `${appUrl}/s/${inserted.digital_code}`,
       sentToStudentDirectly: Boolean(student.email),
       manageScheduleUrl: `${appUrl}/dashboard/schedule`,
+      portalUrl: `${appUrl}/student/login`,
     });
   }
 }

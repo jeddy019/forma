@@ -14,6 +14,10 @@ export interface WeeklyDeliveryEmailProps {
   worksheetUrl: string;
   sentToStudentDirectly: boolean;
   manageScheduleUrl: string;
+  // Phase 6 Step 36: the student portal login link - only meaningful (and
+  // only ever passed) when sentToStudentDirectly is true, same reasoning
+  // as WorksheetReadyEmail's own portalUrl.
+  portalUrl?: string;
 }
 
 export default function WeeklyDeliveryEmail({
@@ -23,6 +27,7 @@ export default function WeeklyDeliveryEmail({
   worksheetUrl,
   sentToStudentDirectly,
   manageScheduleUrl,
+  portalUrl,
 }: WeeklyDeliveryEmailProps) {
   return (
     <EmailLayout previewText={`This week's ${subject} practice for ${studentName} is ready.`} showUnsubscribeFooterLine>
@@ -36,6 +41,15 @@ export default function WeeklyDeliveryEmail({
           Open the worksheet
         </Button>
       </Section>
+      {sentToStudentDirectly && portalUrl && (
+        <Text style={emailStyles.muted}>
+          Want to see your past worksheets and scores?{' '}
+          <a href={portalUrl} style={{ color: '#1A3D2E' }}>
+            View your history
+          </a>
+          .
+        </Text>
+      )}
       <Text style={emailStyles.muted}>
         Want to change the day, time, or pause for a school holiday? <br />
         <a href={manageScheduleUrl} style={{ color: '#1A3D2E' }}>

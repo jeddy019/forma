@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
       topic: inserted.topic,
       worksheetUrl: `${appUrl}/s/${inserted.digital_code}`,
       sentToStudentDirectly: Boolean(student.email),
+      portalUrl: `${appUrl}/student/login`,
     }).catch((error) => console.error('Failed to send worksheet-ready email', error));
   }
 

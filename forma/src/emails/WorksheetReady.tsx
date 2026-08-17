@@ -12,6 +12,11 @@ export interface WorksheetReadyEmailProps {
   topic: string;
   worksheetUrl: string;
   sentToStudentDirectly: boolean;
+  // Phase 6 Step 36: the student portal login link - only meaningful (and
+  // only ever passed) when sentToStudentDirectly is true, since the
+  // portal itself is keyed off the recipient's own verified email, not
+  // the account owner's.
+  portalUrl?: string;
 }
 
 export default function WorksheetReadyEmail({
@@ -20,6 +25,7 @@ export default function WorksheetReadyEmail({
   topic,
   worksheetUrl,
   sentToStudentDirectly,
+  portalUrl,
 }: WorksheetReadyEmailProps) {
   return (
     <EmailLayout previewText={`${studentName}'s ${subject} worksheet is ready.`}>
@@ -34,6 +40,15 @@ export default function WorksheetReadyEmail({
         </Button>
       </Section>
       <Text style={emailStyles.muted}>This link stays open for 30 days.</Text>
+      {sentToStudentDirectly && portalUrl && (
+        <Text style={emailStyles.muted}>
+          Want to see your past worksheets and scores?{' '}
+          <a href={portalUrl} style={{ color: '#1A3D2E' }}>
+            View your history
+          </a>
+          .
+        </Text>
+      )}
     </EmailLayout>
   );
 }
