@@ -1674,3 +1674,122 @@ Open risks: unchanged from the entry above (EMAIL 7/8 no trigger,
 cron has no plan gating) - none of this session's work touched them.
 Decisions: none beyond the studentId trust-boundary consistency call
 documented above.
+
+---
+
+SESSION UPDATE (following the one above):
+User asked what was still open, said to fix what could be fixed, then
+begin Step 31 and move to Step 32. Gave explicit direction on the one
+genuinely undesigned item from the prior audit: 24-month inactive-account
+deletion is defined as no worksheet generated AND no login in 24 months,
+checked at the owner account level, not per student.
+
+Completed: closed every open payment/email item from the last two
+sessions.
+
+1. Flutterwave renewal tx_ref gap (the core fix everything else here
+   builds on): extracted identifyChargeOwner() in activateSubscription.ts -
+   tries decodeTxRef first (the first-payment path, unchanged), and when
+   that fails, falls back to looking up the user by the verified
+   transaction's own customer.email (already present in every
+   verifyTransaction response, FlutterwaveVerifyResult.data.customer.email
+   - no new Flutterwave API calls needed). planKey comes from the user's
+   stored role on the fallback path, not from the tx_ref, since role is
+   what actually determines pricing (plans.ts's PLAN_PRICING) - nothing
+   about which plan was purchased needs re-decoding, only who to credit.
+   activateSubscriptionFromTransaction gained a 4th customerEmail param;
+   both the webhook and callback routes now pass verified.data.customer?.email
+   through (they already had it in scope from their own verifyTransaction
+   call, no new fetch).
+2. EMAIL 8 (payment failed): new notifyPaymentFailedFromTransaction in the
+   same file, sharing identifyChargeOwner - covers both a failed first
+   payment and a failed renewal via the same fallback. Wired into the
+   webhook handler's charge.completed branch (previously only handled
+   status === 'successful'; now branches on success vs. any other
+   verified status). Own idempotency key (flw-tx-failed-{id}, distinct
+   from the success path's flw-tx-{id}) in the same webhook_events table.
+3. EMAIL 7 (renewal reminder, "3 days before expiry"): new daily cron at
+   /api/cron/renewal-reminder. Deliberately narrow query window
+   ([now+3d, now+4d)) so each subscriber is caught on exactly one daily
+   run, not re-notified on every subsequent run before their actual
+   expiry - no dedup beyond that window, same documented-simplification
+   pattern as generate-scheduled's own "no already-notified suppression"
+   gap.
+4. Schedule cron plan gating: schedule *creation* was already gated
+   (isActivePro, prior session), but a schedule created while pro outlives
+   its owner's subscription lapsing - nothing stopped generate-scheduled
+   from generating against it forever. Now batch-fetches owner plan status
+   once per run (not per schedule) and skips lapsed owners' due
+   schedules - skipped, not treated as a failure, since there's nothing to
+   retry or email the owner about.
+5. Settings page: SettingsPanel's Upgrade-vs-Cancel branch took a `plan:
+   string` prop and checked === 'pro' directly. Replaced with a
+   server-computed `isPro: boolean` (isActivePro) passed down instead, so
+   a lapsed-but-locally-stale-pro user now actually sees the Upgrade path
+   (which billing/checkout/route.ts, fixed last session, will actually let
+   them use) instead of being stuck on a stale "Cancel subscription" view.
+6. 24-month inactive-account deletion: new monthly cron at
+   /api/cron/delete-inactive-accounts, per the user's definition above.
+   Extracted the actual decision into a pure, unit-tested function
+   (isInactiveAccount, src/lib/account/inactivity.ts) rather than leaving
+   it as inline branching in the route - warranted more than usual given
+   this decision drives an irreversible deletion, not just a UI branch.
+   Also extracted the cascade-delete logic itself out of settings/
+   actions.ts's deleteAccountAction into a shared deleteUserAccount()
+   (src/lib/account/deleteAccount.ts) so the user-initiated "delete my
+   account" action and this new automated job can't drift apart on what
+   "delete an account" actually means - deleteAccountAction now calls the
+   same shared function instead of its own inline copy.
+   Pagination note: the cron pages through all users with a created_at
+   cursor, not offset/range - offset pagination breaks when the same loop
+   deletes rows mid-scan (deleting N rows from an earlier page shifts every
+   later page's positions by N, silently skipping whatever now sits at the
+   old boundary). A cursor is immune to that since it's not positional.
+   Auth lookups (last_sign_in_at, via admin.auth.admin.getUserById) are
+   only done for owners who already failed the batch-checked
+   recent-worksheet filter, to avoid one API call per user for the common
+   case. On any auth-lookup error, the account is skipped, never deleted -
+   a destructive job fails closed, not open.
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 54
+tests (6 new: 1 for monthsAgoIso, 5 for isInactiveAccount's boundary
+cases - null/undefined last-sign-in fallback, recent-worksheet override,
+before/after cutoff). Live-verified the three highest-risk pieces against
+the real Supabase project, each via a throwaway script scoped to
+fabricated test users only (never the real cron endpoints against live
+production data - deliberately avoided actually invoking
+delete-inactive-accounts or renewal-reminder for real, since the former
+is irreversible and the latter would email any real account that happened
+to match the window):
+- deleteUserAccount: seeded one fake user across all 8
+  tables/auth (submissions, worksheets, schedules, session_notes,
+  student_profiles, templates, usage_log, users, plus the auth user),
+  deleted, confirmed all 8 are empty afterward.
+- activateSubscriptionFromTransaction: confirmed the primary decodable-
+  tx_ref path still works, confirmed the renewal fallback correctly
+  identifies a user by email and extends plan_expires_at, confirmed
+  planKey comes from role not tx_ref, confirmed a duplicate call on the
+  same transaction id correctly no-ops ("already processed"), confirmed
+  an unidentifiable charge (bad tx_ref, no matching email) fails
+  gracefully with a clear reason rather than throwing.
+- renewal-reminder's query window: reproduced the exact gte/lt query
+  against three fabricated users (3.5 days out, 2 days out, 5 days out),
+  scoped with .in('id', testIds) so it could never match a real account -
+  confirmed only the 3.5-day case matched.
+All test rows and auth users cleaned up after each script.
+
+Next: Phase 6 Step 31 (group mode), then Step 32 (template library) -
+user's explicit instruction on order. Committing this payment/email batch
+separately before starting Step 31.
+Open risks: none remaining from the payments/email list - all six items
+above are closed. New, smaller ones: the renewal-reminder and
+delete-inactive-accounts crons have only been verified against fabricated
+test data, never a real invocation - worth a deliberately cautious first
+real run once this is actually deployed, not something to simulate
+further locally. EMAIL 8's retryUrl points at /dashboard/settings
+generically (not a dedicated payment-retry flow) since no such page
+exists - the existing Upgrade button there covers it, but a future
+session could build something more specific if it turns out to matter.
+Decisions: none beyond the design choices documented in each numbered
+item above (all mechanical, following the user's own explicit definition
+for the deletion policy).

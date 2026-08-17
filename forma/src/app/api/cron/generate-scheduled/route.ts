@@ -8,6 +8,7 @@ import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { sendWeeklyDeliveryEmail, sendScheduleFailedEmail } from '@/lib/email/send';
 import { isDueNow } from '@/lib/schedule/isDueNow';
+import { isActivePro } from '@/lib/payments/planStatus';
 import type { Country } from '@/lib/constants';
 
 // Automated Schedule Logic (CLAUDE.md): runs every 30 minutes (vercel.json's
@@ -178,7 +179,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to query schedules' }, { status: 500 });
   }
 
-  const dueSchedules = (schedules ?? []).filter((schedule) =>
+  const dueOnSchedule = (schedules ?? []).filter((schedule) =>
     isDueNow(
       {
         dayOfWeek: schedule.day_of_week,
@@ -189,7 +190,23 @@ export async function GET(request: NextRequest) {
       now
     )
   );
-  const results = { processed: dueSchedules.length, succeeded: 0, failed: 0 };
+
+  // Automation is a paid feature (Permissions Summary) and schedule
+  // creation is already gated on isActivePro (schedule/actions.ts), but a
+  // schedule created while pro outlives its owner's subscription lapsing -
+  // nothing else stops this cron from generating against it forever.
+  // Batch-fetched once per run rather than per schedule (N+1), and a
+  // lapsed owner is skipped, not treated as a failure - there's nothing
+  // wrong to retry or notify about, the schedule just isn't active.
+  const ownerIds = [...new Set(dueOnSchedule.map((s) => s.owner_id))];
+  const { data: owners } = ownerIds.length
+    ? await admin.from('users').select('id, plan, plan_expires_at').in('id', ownerIds)
+    : { data: [] };
+  const activeProOwnerIds = new Set((owners ?? []).filter((o) => isActivePro(o.plan, o.plan_expires_at)).map((o) => o.id));
+
+  const dueSchedules = dueOnSchedule.filter((schedule) => activeProOwnerIds.has(schedule.owner_id));
+  const skippedNotPro = dueOnSchedule.length - dueSchedules.length;
+  const results = { processed: dueSchedules.length, succeeded: 0, failed: 0, skippedNotPro };
 
   // Technical Challenge 7: one failing schedule must never stop the others -
   // each gets its own try/catch and runs sequentially (not Promise.all), so

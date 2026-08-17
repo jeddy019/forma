@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { cancelSubscription, findActiveSubscriptionId } from '@/lib/payments/flutterwave';
+import { deleteUserAccount } from '@/lib/account/deleteAccount';
 
 export interface ActionResult {
   error?: string;
@@ -67,29 +68,9 @@ export async function deleteAccountAction(): Promise<ActionResult> {
   }
 
   const admin = createAdminClient();
-
-  const { data: students } = await admin.from('student_profiles').select('id').eq('owner_id', user.id);
-  for (const student of students ?? []) {
-    await admin.from('submissions').delete().eq('student_id', student.id);
-    await admin.from('worksheets').delete().eq('student_id', student.id);
-    await admin.from('schedules').delete().eq('student_id', student.id);
-    await admin.from('session_notes').delete().eq('student_id', student.id);
-  }
-  await admin.from('student_profiles').delete().eq('owner_id', user.id);
-  await admin.from('session_notes').delete().eq('tutor_id', user.id);
-  await admin.from('templates').delete().eq('tutor_id', user.id);
-  await admin.from('usage_log').delete().eq('user_id', user.id);
-
-  const { error: deleteUserRowError } = await admin.from('users').delete().eq('id', user.id);
-  if (deleteUserRowError) {
-    console.error('Failed to delete user row', deleteUserRowError);
+  const result = await deleteUserAccount(admin, user.id);
+  if (!result.success) {
     return { error: 'Could not delete your account - please try again or contact support.' };
-  }
-
-  const { error: deleteAuthError } = await admin.auth.admin.deleteUser(user.id);
-  if (deleteAuthError) {
-    console.error('Failed to delete auth user', deleteAuthError);
-    return { error: 'Your data was deleted, but the account itself could not be fully removed - please contact support.' };
   }
 
   return { success: true };

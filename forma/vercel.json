@@ -4,7 +4,9 @@
     "src/app/api/generate/route.ts": { "maxDuration": 60 },
     "src/app/api/submit/route.ts": { "maxDuration": 30 },
     "src/app/api/cron/generate-scheduled/route.ts": { "maxDuration": 60 },
-    "src/app/api/cron/monday-summary/route.ts": { "maxDuration": 60 }
+    "src/app/api/cron/monday-summary/route.ts": { "maxDuration": 60 },
+    "src/app/api/cron/renewal-reminder/route.ts": { "maxDuration": 30 },
+    "src/app/api/cron/delete-inactive-accounts/route.ts": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -14,6 +16,14 @@
     {
       "path": "/api/cron/monday-summary",
       "schedule": "0 7 * * 1"
+    },
+    {
+      "path": "/api/cron/renewal-reminder",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/delete-inactive-accounts",
+      "schedule": "0 3 1 * *"
     }
   ]
 }

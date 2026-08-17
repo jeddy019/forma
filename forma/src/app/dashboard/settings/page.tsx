@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { isActivePro } from '@/lib/payments/planStatus';
 import SettingsPanel from './SettingsPanel';
 
 export default async function SettingsPage({
@@ -24,7 +25,7 @@ export default async function SettingsPage({
       </div>
       <SettingsPanel
         role={ownerRow?.role ?? null}
-        plan={ownerRow?.plan ?? 'free'}
+        isPro={isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at)}
         planExpiresAt={ownerRow?.plan_expires_at ?? null}
         paymentNotice={payment === 'success' ? 'success' : payment === 'failed' ? 'failed' : null}
       />

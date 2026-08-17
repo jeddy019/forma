@@ -13,12 +13,12 @@ const PLAN_LABELS: Record<string, { name: string; price: string }> = {
 
 export default function SettingsPanel({
   role,
-  plan,
+  isPro,
   planExpiresAt,
   paymentNotice,
 }: {
   role: string | null;
-  plan: string;
+  isPro: boolean;
   planExpiresAt: string | null;
   paymentNotice: 'success' | 'failed' | null;
 }) {
@@ -92,7 +92,7 @@ export default function SettingsPanel({
 
       <div className={cardClass}>
         <h2 className="text-lg font-semibold text-[#1A1A18] mb-3">Billing</h2>
-        {plan === 'pro' ? (
+        {isPro ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-[#5C5849]">
               You are on the {planInfo?.name ?? ''} plan ({planInfo?.price ?? ''}).
