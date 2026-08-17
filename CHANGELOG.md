@@ -1793,3 +1793,97 @@ session could build something more specific if it turns out to matter.
 Decisions: none beyond the design choices documented in each numbered
 item above (all mechanical, following the user's own explicit definition
 for the deletion policy).
+
+---
+
+SESSION UPDATE (following the one above):
+Completed: Phase 6 Step 31 - group mode ("one worksheet, multiple
+students, comparison view").
+
+Schema: worksheets.group_id UUID, nullable, no FK (there's no separate
+worksheet_groups table - a shared random UUID across N rows is the whole
+mechanism). Applied live via the same temporary-`pg`-dependency,
+install-then-uninstall pattern this project used once before for
+worksheets.expires_at (Phase 2 Step 13) - connected via SUPABASE_POOLER_URL,
+not SUPABASE_DIRECT_URL (an earlier session found the direct URL
+unreachable from this network, IPv6-only with no A record). Verified the
+column and index both exist afterward via information_schema/pg_indexes,
+then removed the script and uninstalled `pg` - confirmed via git status
+that package.json/package-lock.json show no net diff.
+
+New POST /api/generate/group: tutor-pro gated (Permissions Summary lists
+group mode only under TUTOR's paid plan - the free-tier 3/month cap is
+therefore never relevant here, unlike /api/generate, since only an active
+isActivePro tutor ever reaches this route). Takes studentIds (2-10,
+validated as UUIDs, deduplicated) and topicPrompt. Requires every selected
+student share the same country/curriculum_level/year_level - rejected
+with a clear error otherwise, since a shared worksheet's curriculum badges
+and alignment_note would be wrong for a mismatched student. One
+generateWorksheet() call (not one per student - the whole point is a
+single shared question set), then one worksheets row per student, all
+sharing group_id, each with their own digital_code/PDF/submission
+tracking. The AI prompt deliberately uses studentName: 'the student'
+(not any one selected student's real name) and sessionNotes: 'none' (not
+any one student's own notes) - a group worksheet personalised to one
+individual in the group would look wrong to everyone else in it; subject
+hint is the union of every selected student's own subjects instead.
+EMAIL 2 sent per student on success, same fallback pattern as the
+single-student route. A partial-group insert failure (one student's row
+fails after others already succeeded) keeps whatever succeeded rather
+than rolling back - there's no multi-row transaction here, and a partial
+group is still more useful than discarding good rows over one bad one.
+
+New comparison view at /dashboard/generate/group/[groupId]: same
+tutor-pro gate, fetches every worksheet for that group_id + owner_id
+(RLS's worksheets_own already scopes this - a different tutor's groupId
+simply returns no rows, covered by the existing notFound() rather than a
+separate ownership check), joined to each student's name, plus each
+worksheet's latest submission (batch-queried once, then reduced to
+latest-per-worksheet in JS - same "batch query, then reduce" shape as the
+Monday summary cron's own per-student aggregation, just simpler, so it
+didn't warrant its own pure-function file the way computeWeeklySummary
+did). Shows each student's name, their own /s/[code] link, and their
+score or "Not submitted yet."
+
+GenerateForm.tsx: added a "Group mode" checkbox (tutor-pro only, hidden
+otherwise) that swaps the single student <select> for a capped multi-select
+checkbox list, and branches handleGenerate between the two endpoints based
+on it. Success view branches too - group mode shows a student count and a
+link to the comparison page instead of the existing single-worksheet
+download/difficulty-feedback controls (those are worksheet-specific and
+already reachable per-student from the comparison view's own links,
+duplicating them into the group success card would be redundant).
+
+Verified: npx tsc --noEmit clean, npm run lint clean, npm run test - 54
+tests (unchanged - no new pure branchy logic here worth its own unit
+test; the "same curriculum level" and "latest submission per worksheet"
+checks are simple enough that code review covered them, matching the
+proportionality already applied to similar small reductions elsewhere
+this session). Live-verified the entire data layer against the real
+Supabase project via a throwaway script (deleted after, cleaned up):
+created a real tutor-pro owner and 3 real same-level students, inserted 3
+worksheets sharing one group_id (bypassing generateWorksheet() entirely -
+the Anthropic account is still down, same testing convention this project
+has used throughout for anything blocked on it), ran the exact
+comparison-page query and confirmed the student-name join resolved
+correctly for all 3, inserted a real submission for one student and
+confirmed the latest-submission reduction correctly showed 80% for the
+submitted student and undefined for the other two, confirmed a query with
+a different (wrong) owner_id returns zero rows. Confirmed both new routes
+(/dashboard/generate and /dashboard/generate/group/[groupId]) compile and
+serve without a crash (307 to /login when unauthenticated). Did NOT
+verify the actual live AI generation path through the real route, since
+that needs the Anthropic account back - same limitation as every other
+generation-touching feature since Step 22.
+
+Next: Phase 6 Step 32 (template library), per the user's explicit
+instruction to do this after Step 31.
+Open risks: group mode's actual generation path (the real
+POST /api/generate/group hitting a live Claude call) remains unverified,
+same as /api/generate itself and the scheduled cron - all three share
+this one blocker, not a group-mode-specific gap.
+Decisions: studentName: 'the student' and sessionNotes: 'none' for the AI
+prompt in group mode (not any one selected student's real name/notes) -
+a product judgment call, not specified in CLAUDE.md's Group mode line
+item beyond "one worksheet, multiple students," made and documented here
+rather than left ambiguous.

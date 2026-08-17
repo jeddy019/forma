@@ -59,7 +59,12 @@ CREATE TABLE worksheets (
   -- Enforces the 30-day digital link expiry promised in User Challenges -
   -- see supabase/add-worksheet-expiry.sql for the standalone fix, applied
   -- live in Phase 2 Step 13.
-  expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days')
+  expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
+  -- Phase 6 Step 31 (Group mode): shared across every worksheet row
+  -- generated together for a group ("one worksheet, multiple students") -
+  -- not a foreign key, just a random UUID common to that batch. Null
+  -- outside group mode. See supabase/add-worksheet-group-id.sql.
+  group_id UUID
 );
 
 CREATE TABLE submissions (
@@ -149,6 +154,7 @@ CREATE INDEX idx_worksheets_owner ON worksheets(owner_id);
 CREATE INDEX idx_worksheets_student ON worksheets(student_id);
 CREATE INDEX idx_worksheets_code ON worksheets(digital_code);
 CREATE INDEX idx_worksheets_expires_at ON worksheets(expires_at);
+CREATE INDEX idx_worksheets_group ON worksheets(group_id);
 CREATE INDEX idx_profiles_owner ON student_profiles(owner_id);
 CREATE INDEX idx_submissions_worksheet ON submissions(worksheet_id);
 CREATE INDEX idx_schedules_owner ON schedules(owner_id);

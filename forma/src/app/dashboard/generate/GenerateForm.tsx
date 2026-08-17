@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { inputClass, labelClass, primaryButtonClass, secondaryButtonClass, cardClass } from '@/lib/ui/formStyles';
 
@@ -18,6 +19,16 @@ interface GeneratedWorksheetSummary {
   difficulty: string;
   created_at: string;
 }
+
+interface GeneratedGroupSummary {
+  groupId: string;
+  subject: string;
+  topic: string;
+  studentCount: number;
+}
+
+const MIN_GROUP_SIZE = 2;
+const MAX_GROUP_SIZE = 10;
 
 type Phase = 'idle' | 'loading' | 'success' | 'error';
 type DifficultyFeedback = 'too_easy' | 'just_right' | 'too_hard';
@@ -54,15 +65,20 @@ const TOPIC_STARTERS = [
 export default function GenerateForm({
   students,
   canDownloadMarkScheme,
+  canUseGroupMode,
 }: {
   students: StudentOption[];
   canDownloadMarkScheme: boolean;
+  canUseGroupMode: boolean;
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState(students[0]?.id ?? '');
+  const [groupMode, setGroupMode] = useState(false);
+  const [selectedGroupStudentIds, setSelectedGroupStudentIds] = useState<string[]>([]);
   const [topicPrompt, setTopicPrompt] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [worksheet, setWorksheet] = useState<GeneratedWorksheetSummary | null>(null);
+  const [groupResult, setGroupResult] = useState<GeneratedGroupSummary | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [difficultyFeedback, setDifficultyFeedback] = useState<DifficultyFeedback | null>(null);
   const [difficultyLocked, setDifficultyLocked] = useState(false);
@@ -83,8 +99,14 @@ export default function GenerateForm({
   const showShortHint = trimmedTopic.length > 0 && trimmedTopic.length < 40;
   const showGoodLength = trimmedTopic.length >= 80;
 
+  function toggleGroupStudent(id: string) {
+    setSelectedGroupStudentIds((prev) => (prev.includes(id) ? prev.filter((existing) => existing !== id) : [...prev, id]));
+  }
+
+  const canSubmit = groupMode ? selectedGroupStudentIds.length >= MIN_GROUP_SIZE && trimmedTopic.length > 0 : Boolean(selectedStudentId) && trimmedTopic.length > 0;
+
   async function handleGenerate() {
-    if (!selectedStudentId || !trimmedTopic) return;
+    if (!canSubmit) return;
 
     setPhase('loading');
     setErrorMessage(null);
@@ -94,10 +116,14 @@ export default function GenerateForm({
     abortControllerRef.current = controller;
 
     try {
-      const res = await fetch('/api/generate', {
+      const res = await fetch(groupMode ? '/api/generate/group' : '/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: selectedStudentId, topicPrompt: trimmedTopic }),
+        body: JSON.stringify(
+          groupMode
+            ? { studentIds: selectedGroupStudentIds, topicPrompt: trimmedTopic }
+            : { studentId: selectedStudentId, topicPrompt: trimmedTopic }
+        ),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -108,8 +134,12 @@ export default function GenerateForm({
         return;
       }
 
-      setWorksheet(data.worksheet);
-      setDifficultyFeedback(null);
+      if (groupMode) {
+        setGroupResult(data);
+      } else {
+        setWorksheet(data.worksheet);
+        setDifficultyFeedback(null);
+      }
       setPhase('success');
     } catch {
       // Cancel returns cleanly to the input state - it isn't an error.
@@ -129,6 +159,7 @@ export default function GenerateForm({
   function handleReset() {
     setPhase('idle');
     setWorksheet(null);
+    setGroupResult(null);
     setTopicPrompt('');
     setDifficultyFeedback(null);
     setDownloadError(null);
@@ -192,24 +223,58 @@ export default function GenerateForm({
 
       {phase !== 'loading' && (
         <div className={`${cardClass} flex flex-col gap-4`}>
-          <div>
-            <label className={labelClass} htmlFor="student">
-              Student
+          {canUseGroupMode && phase !== 'success' && (
+            <label className="flex items-center gap-2 text-sm text-[#5C5849]">
+              <input
+                type="checkbox"
+                checked={groupMode}
+                onChange={(event) => setGroupMode(event.target.checked)}
+                className="accent-[#1A3D2E]"
+              />
+              Group mode - one worksheet for multiple students
             </label>
-            <select
-              id="student"
-              className={inputClass}
-              value={selectedStudentId}
-              onChange={(event) => setSelectedStudentId(event.target.value)}
-              disabled={phase === 'success'}
-            >
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          )}
+
+          {groupMode ? (
+            <div>
+              <span className={labelClass}>
+                Students ({selectedGroupStudentIds.length} selected, {MIN_GROUP_SIZE}-{MAX_GROUP_SIZE})
+              </span>
+              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                {students.map((student) => (
+                  <label key={student.id} className="flex items-center gap-2 text-sm text-[#1A1A18]">
+                    <input
+                      type="checkbox"
+                      checked={selectedGroupStudentIds.includes(student.id)}
+                      onChange={() => toggleGroupStudent(student.id)}
+                      disabled={phase === 'success' || (!selectedGroupStudentIds.includes(student.id) && selectedGroupStudentIds.length >= MAX_GROUP_SIZE)}
+                      className="accent-[#1A3D2E]"
+                    />
+                    {student.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className={labelClass} htmlFor="student">
+                Student
+              </label>
+              <select
+                id="student"
+                className={inputClass}
+                value={selectedStudentId}
+                onChange={(event) => setSelectedStudentId(event.target.value)}
+                disabled={phase === 'success'}
+              >
+                {students.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {phase !== 'success' && (
             <>
@@ -250,12 +315,7 @@ export default function GenerateForm({
                 </div>
               </details>
 
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={!selectedStudentId || !trimmedTopic}
-                className={`${primaryButtonClass} self-start`}
-              >
+              <button type="button" onClick={handleGenerate} disabled={!canSubmit} className={`${primaryButtonClass} self-start`}>
                 Generate worksheet
               </button>
             </>
@@ -283,6 +343,23 @@ export default function GenerateForm({
           <p className="text-sm text-[#C0392B]">{errorMessage}</p>
           <button type="button" onClick={handleGenerate} className={`${primaryButtonClass} self-start`}>
             Try again
+          </button>
+        </div>
+      )}
+
+      {phase === 'success' && groupResult && (
+        <div className={`${cardClass} flex flex-col gap-5`}>
+          <div>
+            <p className="text-sm font-medium text-[#1A1A18]">
+              {groupResult.subject} - {groupResult.topic}
+            </p>
+            <p className="text-xs text-[#9A9080] mt-1">Generated for {groupResult.studentCount} students.</p>
+          </div>
+          <Link href={`/dashboard/generate/group/${groupResult.groupId}`} className={`${primaryButtonClass} self-start`}>
+            View group results
+          </Link>
+          <button type="button" onClick={handleReset} className={`${secondaryButtonClass} self-start`}>
+            Generate another
           </button>
         </div>
       )}

@@ -25,7 +25,12 @@ export default async function GeneratePage() {
     supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single(),
   ]);
 
-  const canDownloadMarkScheme = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
+  // Permissions Summary lists both "mark scheme PDF" and "group mode" as
+  // the same tutor-pro entitlement - one shared condition, two named props
+  // per call site for clarity at each usage.
+  const isTutorPro = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
+  const canDownloadMarkScheme = isTutorPro;
+  const canUseGroupMode = isTutorPro;
 
   if (!students || students.length === 0) {
     return (
@@ -42,6 +47,10 @@ export default async function GeneratePage() {
   }
 
   return (
-    <GenerateForm students={students as StudentOption[]} canDownloadMarkScheme={canDownloadMarkScheme} />
+    <GenerateForm
+      students={students as StudentOption[]}
+      canDownloadMarkScheme={canDownloadMarkScheme}
+      canUseGroupMode={canUseGroupMode}
+    />
   );
 }
