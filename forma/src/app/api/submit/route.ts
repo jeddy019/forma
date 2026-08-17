@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { markPart } from '@/lib/marking/tier1';
+import { markExtendedPart, type Tier2Result } from '@/lib/marking/tier2';
 import type { AnswerFormat } from '@/lib/ai/schema';
 
 // Submission handler (Phase 2 Step 13 built the minimal version alongside
-// the /s/[code] page; Phase 3 Step 16 adds Tier 1 auto-marking here).
-// Still deliberately narrow: only the parts whose answer_format is
-// auto-markable (numerical, coordinates, true_false, multiple_choice) get a
-// result in auto_marks_json. "extended" parts get a null entry, meaning
-// "not yet marked" - Tier 2 (AI-assisted) and Tier 3 (tutor review) don't
-// exist yet, so score_percentage is deliberately left NULL rather than
-// computed from a partial (auto-markable-only) subset of the marks, which
-// would misrepresent the student's real score.
+// the /s/[code] page; Phase 3 Step 16 added Tier 1 auto-marking; Step 17
+// adds Tier 2 AI-assisted marking here). auto_marks_json covers the
+// auto-markable formats (numerical, coordinates, true_false,
+// multiple_choice); ai_suggested_marks_json covers "extended" parts the
+// student actually answered, via Tier 2 (claude-sonnet-4-6). Tier 2 is
+// best-effort and never blocks the submission itself - a failed or timed-
+// out call just leaves that part's entry null, same as an unanswered
+// extended part, meaning "needs Tier 3 (tutor) review" once that queue
+// exists. score_percentage stays NULL regardless - see Step 16's note below,
+// still true now that Tier 2 exists: a low-confidence AI suggestion must
+// never be auto-applied (Marking Logic section), so no aggregate score can
+// be computed until Tier 3 (tutor review) can resolve those.
 const DIGITAL_CODE_PATTERN = /^[A-Za-z0-9_-]{6,32}$/;
 const ANSWER_MAX_LENGTH = 2000;
 const MAX_PARTS_PER_QUESTION = 20; // generous upper bound, just to reject abuse payloads
+const TIER2_TIMEOUT_MS = 15_000; // Performance Rule 10: Marking AI, 15 seconds maximum
 
 interface SubmitRequestBody {
   digitalCode?: string;
@@ -22,9 +28,16 @@ interface SubmitRequestBody {
 }
 
 interface WorksheetPart {
+  text: string;
   answer: string;
   answer_format: AnswerFormat;
   marks: number;
+  mark_scheme: {
+    M1: string;
+    A1: string;
+    common_error: string;
+    allow: string;
+  };
 }
 
 interface WorksheetQuestion {
@@ -83,19 +96,54 @@ export async function POST(request: NextRequest) {
   }
 
   const autoMarksJson: Record<string, ReturnType<typeof markPart>[]> = {};
+  const aiSuggestedMarksJson: Record<string, (Tier2Result | null)[]> = {};
+  const tier2Jobs: { questionId: string; partIndex: number; promise: Promise<Tier2Result> }[] = [];
+  const tier2Controller = new AbortController();
+  const tier2Timeout = setTimeout(() => tier2Controller.abort(), TIER2_TIMEOUT_MS);
+
   for (const question of worksheet.questions_json.questions) {
     const studentParts = sanitizedAnswers[question.id];
     if (!studentParts) continue;
+
     autoMarksJson[question.id] = question.parts.map((part, i) =>
       markPart(part.answer_format, part.answer, studentParts[i] ?? '', part.marks)
     );
+
+    aiSuggestedMarksJson[question.id] = question.parts.map(() => null);
+    question.parts.forEach((part, i) => {
+      if (part.answer_format !== 'extended') return;
+      const studentAnswer = studentParts[i];
+      if (!studentAnswer || studentAnswer.trim() === '') return; // nothing to mark
+      tier2Jobs.push({
+        questionId: question.id,
+        partIndex: i,
+        promise: markExtendedPart(
+          { questionText: part.text, marks: part.marks, markScheme: part.mark_scheme, studentAnswer },
+          tier2Controller.signal
+        ),
+      });
+    });
   }
+
+  if (tier2Jobs.length > 0) {
+    const results = await Promise.allSettled(tier2Jobs.map((job) => job.promise));
+    results.forEach((result, i) => {
+      const job = tier2Jobs[i];
+      if (result.status === 'fulfilled') {
+        aiSuggestedMarksJson[job.questionId][job.partIndex] = result.value;
+      } else {
+        console.error('Tier 2 marking failed', job.questionId, job.partIndex, result.reason);
+      }
+    });
+  }
+  clearTimeout(tier2Timeout);
 
   const { error: insertError } = await admin.from('submissions').insert({
     worksheet_id: worksheet.id,
     student_id: worksheet.student_id,
     answers_json: sanitizedAnswers,
     auto_marks_json: autoMarksJson,
+    ai_suggested_marks_json: aiSuggestedMarksJson,
   });
 
   if (insertError) {

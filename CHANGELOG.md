@@ -690,3 +690,63 @@ accuracy-testing/unit-economics concerns raised in a prior conversation are
 noted as the user's own responsibility going forward (they'll validate via
 their own students and teacher contacts) and are out of scope to keep
 raising during the build.
+
+---
+
+SESSION UPDATE (following the one above):
+Completed: Phase 3 Step 17 - Tier 2 AI-assisted marking. New
+src/lib/marking/tier2.ts exports markExtendedPart(input, signal), calling
+claude-sonnet-4-6 (Tech Stack: "claude-sonnet-4-6 for AI-assisted marking
+only") with Structured Outputs to return {marks_awarded, reasoning,
+confidence}. System prompt asks the model to apply M1/A1 the way a human
+examiner would (method mark for correct approach even if the final answer
+is wrong, accuracy mark only for a correct or Allow-listed final answer),
+and to set confidence "low" - never auto-applied, always needs a tutor,
+per the Marking Logic section - whenever the answer is blank, off-topic,
+illegible, or genuinely ambiguous. marks_awarded is clamped to [0, marks]
+defensively in code rather than trusted verbatim from the model.
+
+Wired into src/app/api/submit/route.ts: for every "extended" part the
+student actually answered (blank extended parts are skipped - nothing to
+mark), a Tier 2 call runs. All of a submission's Tier 2 calls run in
+parallel under one shared AbortController with a 15-second timeout
+(Performance Rule 10: "Marking AI: 15 seconds maximum"), via
+Promise.allSettled so one slow or failed call can't take down the others
+or the submission itself - a rejected or timed-out call just leaves that
+part's entry null in the new ai_suggested_marks_json column data, same
+"needs Tier 3 review" meaning as an unanswered part. score_percentage
+stays NULL still: Step 16's reasoning holds unchanged now that Tier 2
+exists, since a low-confidence suggestion must never be auto-applied, so
+no aggregate score can be correct until Tier 3 (tutor review) can resolve
+those - that's Phase 3 Step 19, not this one.
+
+6 unit tests added at src/__tests__/tier2.test.ts, mocking the Anthropic
+SDK (vi.mock with vi.hoisted, constructor mock needs a real function/class
+expression, not an arrow function - vitest logs a warning and the `new`
+call fails otherwise): confirms needs_review is true only for "low"
+confidence, and confirms the [0, marks] clamp on both ends. tsc --noEmit
+and eslint clean across the whole project. Also ran two live calls against
+the real Anthropic API (not just the mock) via a throwaway script: a
+correct chemistry-explanation answer returned marks_awarded 3, confidence
+"high"; a nonsense answer ("idk maybe science stuff") returned
+marks_awarded 0, confidence "high" (not "low" - confirms the model reads
+"low confidence" as genuine ambiguity, not just "clearly wrong", which is
+the intended calibration). The first live attempt at the nonsense-answer
+case hit a 15-second AbortController timeout that a retry with a longer
+timeout did not reproduce (the retry completed in under 3 seconds) - same
+category as this dev machine's previously-documented intermittent
+TLS/fetch flakiness, not a code bug, and not something a production Vercel
+environment shares.
+
+Next: Phase 3 Step 18, the tutor marking dashboard
+(/dashboard/marking per the Routing Structure section - the route doesn't
+exist yet). Needs to read submissions and display answers_json alongside
+auto_marks_json and ai_suggested_marks_json per part, let a tutor see which
+parts are needs_review: true, and let them award/override a final mark
+(tutor_marks_json) - which is also the first point where score_percentage
+can finally be computed correctly, once a tutor has resolved every
+extended part between Tier 2's suggestion and their own judgement. Step 19
+(the review queue itself, with a comment field) is closely related and may
+end up being built alongside Step 18 rather than strictly after it -
+flagging now rather than assuming a hard boundary between them.
+Decisions: none beyond completing Step 17 as scoped.
