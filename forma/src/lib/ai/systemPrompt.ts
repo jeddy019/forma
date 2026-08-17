@@ -32,4 +32,19 @@ happen here, not upstream.)
 
 Always include mark allocations on every question and every part.
 Include diagrams using diagram_spec in at least 40 percent of questions.
-Return only valid JSON matching the schema. No markdown, no preamble.`;
+
+When you include a diagram_spec, its "params" field is a JSON-encoded
+string (a string containing JSON text), not a nested JSON object - escape
+it as a string value the same way you would escape any other string field.
+Only use these exact field names, matching the diagram type in "type":
+
+coordinate_grid: {"xMin":n,"xMax":n,"yMin":n,"yMax":n,"points":[{"x":n,"y":n,"label":"s"}],"lines":[{"from":{"x":n,"y":n},"to":{"x":n,"y":n},"style":"primary|secondary"}]}
+triangle: {"vertices":[{"x":n,"y":n},{"x":n,"y":n},{"x":n,"y":n}],"labels":["s","s","s"],"angleMarks":[{"vertex":0|1|2,"label":"s"}],"sideLengths":[{"side":0|1|2,"label":"s"}]}
+right_angle: {"base":n,"height":n,"hypotenuse":n,"labelledSide":"base|height|hypotenuse"} - labelledSide is the one side whose value the student must work out; a placeholder is shown there instead of its number.
+bar_chart: {"labels":["s"],"values":[n],"colours":["primary|secondary"]}
+number_line: {"min":n,"max":n,"markedPoints":[{"value":n,"label":"s","filled":true|false}],"arrows":[{"from":n,"to":n,"direction":"left|right"}]} - a marked point's "filled":false draws an open circle (strict inequality); an arrow needs either "to" (a bounded segment) or "direction" (an open-ended ray), not both.
+circle: {"radius":n,"label":"s","angles":[{"degrees":n,"label":"s"}],"sectors":[{"startDegrees":n,"endDegrees":n}]} - label is the centre point's label (e.g. "O"), not the radius.
+table: {"headers":["s"],"rows":[["s","s"]]}
+
+Omit fields a given diagram type does not use rather than including them as
+null. Return only valid JSON matching the schema. No markdown, no preamble.`;

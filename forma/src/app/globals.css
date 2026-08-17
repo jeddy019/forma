@@ -64,3 +64,16 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-playfair), serif;
 }
+
+/* Generation loading state's progress bar (Design System > LOADING STATE) -
+   duration is unknown ahead of time (the AI call has no measurable
+   progress), so this is an indeterminate sliding segment rather than a
+   determinate 0-100% fill. */
+@keyframes forma-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}

@@ -20,7 +20,10 @@ export type DiagramType = (typeof DIAGRAM_TYPES)[number];
 
 export interface DiagramSpec {
   type: DiagramType;
-  params: Record<string, unknown>;
+  // A JSON-encoded string, not a nested object - see the comment above
+  // DIAGRAM_SPEC_SCHEMA for why. Parsed defensively at render time in
+  // worksheet-template.ts's renderDiagramSvg.
+  params: string;
 }
 
 export interface MarkScheme {
@@ -58,6 +61,42 @@ export interface GeneratedWorksheet {
   questions: Question[];
 }
 
+// Structured Outputs requires every object-level schema node to explicitly
+// set additionalProperties: false (confirmed live: the API rejected the
+// once-bare `params: { type: 'object' }` with "For 'object' type,
+// 'additionalProperties' must be explicitly set to false"). The natural fix -
+// a 7-way anyOf branch per DIAGRAM_TYPES member, each with its own params
+// shape - was tried next and rejected too: repeated inside every question
+// part across 10 questions, it compiled to a grammar the API refused as too
+// large ("Simplify your tool schemas or reduce the number of strict tools").
+// A single flat params object covering every diagram type's fields (all
+// nullable, so any one diagram only fills in the fields it needs) was tried
+// third and rejected for a different reason: the API caps a schema at 16
+// total union/nullable-typed parameters ("Reduce the number of nullable or
+// union-typed parameters"), and that object alone needed ~25.
+//
+// params is therefore a plain JSON-encoded string, opaque to the schema
+// (just `{ type: 'string' }`, no union, no nested object) - the model writes
+// an actual JSON object as text into it, following the per-type field list
+// documented in WORKSHEET_SYSTEM_PROMPT (systemPrompt.ts) rather than an
+// enforced schema. worksheet-template.ts's renderDiagramSvg JSON.parses it
+// inside its existing try/catch, so a malformed string degrades to "no
+// diagram" the same way a malformed object already did.
+const DIAGRAM_SPEC_SCHEMA = {
+  anyOf: [
+    { type: 'null' },
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: [...DIAGRAM_TYPES] },
+        params: { type: 'string' },
+      },
+      required: ['type', 'params'],
+      additionalProperties: false,
+    },
+  ],
+};
+
 // JSON Schema for output_config.format - see the Structured Outputs
 // limitations in the Claude API docs: no minItems/maxItems or numeric
 // constraints are supported, so exact question count/order is checked
@@ -86,20 +125,7 @@ export const WORKSHEET_JSON_SCHEMA = {
                 part_label: { anyOf: [{ type: 'string' }, { type: 'null' }] },
                 text: { type: 'string' },
                 marks: { type: 'integer' },
-                diagram_spec: {
-                  anyOf: [
-                    { type: 'null' },
-                    {
-                      type: 'object',
-                      properties: {
-                        type: { type: 'string', enum: [...DIAGRAM_TYPES] },
-                        params: { type: 'object' },
-                      },
-                      required: ['type', 'params'],
-                      additionalProperties: false,
-                    },
-                  ],
-                },
+                diagram_spec: DIAGRAM_SPEC_SCHEMA,
                 working_lines: { type: 'integer' },
                 answer: { type: 'string' },
                 mark_scheme: {

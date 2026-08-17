@@ -101,7 +101,13 @@ function str(params: Record<string, unknown>, key: string, fallback: string): st
 
 function renderDiagramSvg(spec: DiagramSpec): string {
   try {
-    const p = spec.params ?? {};
+    // spec.params is a JSON-encoded string, not a nested object - see the
+    // comment above DIAGRAM_SPEC_SCHEMA in src/lib/ai/schema.ts for why. A
+    // malformed or non-object string (JSON.parse throwing, or parsing to a
+    // non-object) falls through to the outer catch below exactly like a
+    // malformed object always did - render as a gap, not a crash.
+    const parsed: unknown = JSON.parse(spec.params);
+    const p = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
     switch (spec.type as DiagramType | 'pie_chart') {
       case 'coordinate_grid':
         return drawCoordinateGrid(

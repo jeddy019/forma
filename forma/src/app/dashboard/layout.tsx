@@ -35,6 +35,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           <Link href="/dashboard/students" className="text-sm text-[#5C5849]">
             Students
           </Link>
+          <Link href="/dashboard/generate" className="text-sm text-[#5C5849]">
+            Generate
+          </Link>
           {user && <span className="text-sm text-[#9A9080]">{user.email}</span>}
           <form action={signOutAction}>
             <button type="submit" className="text-sm text-[#5C5849]">
