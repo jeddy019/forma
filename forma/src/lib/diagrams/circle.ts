@@ -1,4 +1,5 @@
 import { DIAGRAM_COLORS, SHADED_REGION_OPACITY } from './colors';
+import { escapeSvgText } from './escapeSvgText';
 
 export interface CircleAngleMark {
   degrees: number;
@@ -40,7 +41,7 @@ export function drawCircle(
     const line = `<line x1="${center.x}" y1="${center.y}" x2="${end.x}" y2="${end.y}" stroke="${DIAGRAM_COLORS.axis}" stroke-width="1" stroke-dasharray="3 2" />`;
     if (!angle.label) return [line];
     const labelPos = polarToCartesian(center.x, center.y, DRAWN_RADIUS * 0.35, angle.degrees);
-    const text = `<text x="${labelPos.x}" y="${labelPos.y}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.axis}" text-anchor="middle" dominant-baseline="middle">${angle.label}</text>`;
+    const text = `<text x="${labelPos.x}" y="${labelPos.y}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.axis}" text-anchor="middle" dominant-baseline="middle">${escapeSvgText(angle.label)}</text>`;
     return [line, text];
   });
 
@@ -49,7 +50,7 @@ export function drawCircle(
 <text x="${(center.x + radiusEnd.x) / 2}" y="${center.y - 8}" font-family="Inter, sans-serif" font-size="11" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${radius}</text>`;
 
   const centerLabel = label
-    ? `<text x="${center.x}" y="${center.y - 12}" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${label}</text>`
+    ? `<text x="${center.x}" y="${center.y - 12}" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${escapeSvgText(label)}</text>`
     : '';
   const centerDot = `<circle cx="${center.x}" cy="${center.y}" r="2.5" fill="${DIAGRAM_COLORS.shapeStroke}" />`;
 

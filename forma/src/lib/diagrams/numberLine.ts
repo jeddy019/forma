@@ -1,4 +1,5 @@
 import { DIAGRAM_COLORS } from './colors';
+import { escapeSvgText } from './escapeSvgText';
 
 export interface NumberLineMarkedPoint {
   value: number;
@@ -59,7 +60,7 @@ ${arrowHead}`;
         ? `<circle cx="${x}" cy="${LINE_Y}" r="5" fill="#FFFFFF" stroke="${DIAGRAM_COLORS.numberLineHighlight}" stroke-width="2" />`
         : `<circle cx="${x}" cy="${LINE_Y}" r="5" fill="${DIAGRAM_COLORS.numberLineHighlight}" />`;
     if (!point.label) return [dot];
-    const label = `<text x="${x}" y="${LINE_Y - 12}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${point.label}</text>`;
+    const label = `<text x="${x}" y="${LINE_Y - 12}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${escapeSvgText(point.label)}</text>`;
     return [dot, label];
   });
 

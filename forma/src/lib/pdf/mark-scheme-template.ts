@@ -6,6 +6,7 @@ import {
   buildFooterTemplate,
   type WorksheetHeaderData,
 } from './worksheet-template';
+import { sectionDividerLabel } from '../worksheet/sectionDividerLabel';
 
 export type MarkSchemeHeaderData = Omit<WorksheetHeaderData, 'digitalCode'>;
 
@@ -33,26 +34,6 @@ export interface MarkSchemeTemplateData {
 export interface MarkSchemePdfInput {
   html: string;
   footerTemplate: string;
-}
-
-// ---------------------------------------------------------------------------
-// Section dividers - same rule as worksheet-template.ts's sectionDividerLabel
-// (Warm-up appears once before the first warm-up question, Challenge once
-// before the first challenge question, core questions get none), duplicated
-// here rather than imported because the two documents' Question types no
-// longer share a compatible `parts` shape (mark scheme parts have no
-// diagram_spec/working_lines). This logic is intentionally small.
-// ---------------------------------------------------------------------------
-
-function sectionDividerLabel(
-  question: MarkSchemeQuestion,
-  index: number,
-  questions: MarkSchemeQuestion[]
-): 'Warm-up' | 'Challenge' | null {
-  const prevType = index > 0 ? questions[index - 1].type : null;
-  if (question.type === 'warm-up' && prevType === null) return 'Warm-up';
-  if (question.type === 'challenge' && prevType !== 'challenge') return 'Challenge';
-  return null;
 }
 
 // ---------------------------------------------------------------------------

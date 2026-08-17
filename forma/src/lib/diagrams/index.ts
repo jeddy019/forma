@@ -8,6 +8,7 @@ export { drawCircle } from './circle';
 export { drawTable } from './table';
 
 export { DIAGRAM_COLORS, SHADED_REGION_OPACITY } from './colors';
+export { escapeSvgText } from './escapeSvgText';
 export type { Point, GridPoint, GridLine } from './types';
 export type { TriangleAngleMark, TriangleSideLength } from './triangle';
 export type { RightTriangleSide } from './rightAngleTriangle';

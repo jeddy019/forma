@@ -1,4 +1,5 @@
 import { DIAGRAM_COLORS } from './colors';
+import { escapeSvgText } from './escapeSvgText';
 import type { Point } from './types';
 
 export interface TriangleAngleMark {
@@ -52,7 +53,7 @@ export function drawTriangle(
     const len = Math.hypot(dx, dy) || 1;
     const lx = v.x + (dx / len) * 14;
     const ly = v.y + (dy / len) * 14;
-    return `<text x="${lx}" y="${ly}" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="${DIAGRAM_COLORS.text}" text-anchor="middle" dominant-baseline="middle">${label}</text>`;
+    return `<text x="${lx}" y="${ly}" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="${DIAGRAM_COLORS.text}" text-anchor="middle" dominant-baseline="middle">${escapeSvgText(label)}</text>`;
   });
 
   const angleLabels = angleMarks.map((mark) => {
@@ -63,7 +64,7 @@ export function drawTriangle(
     const len = Math.hypot(dx, dy) || 1;
     const lx = v.x + (dx / len) * 20;
     const ly = v.y + (dy / len) * 20;
-    return `<text x="${lx}" y="${ly}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.axis}" text-anchor="middle" dominant-baseline="middle">${mark.label}</text>`;
+    return `<text x="${lx}" y="${ly}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.axis}" text-anchor="middle" dominant-baseline="middle">${escapeSvgText(mark.label)}</text>`;
   });
 
   const sideLabels = sideLengths.map((side) => {
@@ -76,7 +77,7 @@ export function drawTriangle(
     const len = Math.hypot(dx, dy) || 1;
     const lx = m.x + (dx / len) * 14;
     const ly = m.y + (dy / len) * 14;
-    return `<text x="${lx}" y="${ly}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.textMuted}" text-anchor="middle" dominant-baseline="middle">${side.label}</text>`;
+    return `<text x="${lx}" y="${ly}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.textMuted}" text-anchor="middle" dominant-baseline="middle">${escapeSvgText(side.label)}</text>`;
   });
 
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">

@@ -1,4 +1,5 @@
 import { DIAGRAM_COLORS } from './colors';
+import { escapeSvgText } from './escapeSvgText';
 
 const RADIUS = 90;
 const CENTER = RADIUS + 10;
@@ -35,7 +36,7 @@ export function drawPieChart(labels: string[], values: number[]): string {
     const legendY = 10 + i * LEGEND_ROW_HEIGHT;
     legend.push(
       `<rect x="${CENTER * 2 + 16}" y="${legendY}" width="10" height="10" fill="${color}" />
-<text x="${CENTER * 2 + 32}" y="${legendY + 9}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.text}">${labels[i]}</text>`
+<text x="${CENTER * 2 + 32}" y="${legendY + 9}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.text}">${escapeSvgText(labels[i])}</text>`
     );
 
     startAngle = endAngle;

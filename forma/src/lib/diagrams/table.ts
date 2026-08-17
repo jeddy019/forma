@@ -1,4 +1,5 @@
 import { DIAGRAM_COLORS } from './colors';
+import { escapeSvgText } from './escapeSvgText';
 
 const ROW_HEIGHT = 28;
 const MIN_COL_WIDTH = 70;
@@ -19,7 +20,7 @@ export function drawTable(headers: string[], rows: string[][]): string {
   const headerCells = headers.map(
     (header, i) =>
       `<rect x="${colX[i]}" y="0" width="${colWidths[i]}" height="${ROW_HEIGHT}" fill="${DIAGRAM_COLORS.tableHeaderBg}" stroke="${DIAGRAM_COLORS.tableBorder}" stroke-width="0.5" />
-<text x="${colX[i] + colWidths[i] / 2}" y="${ROW_HEIGHT / 2 + 4}" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="${DIAGRAM_COLORS.tableHeaderText}" text-anchor="middle">${header}</text>`
+<text x="${colX[i] + colWidths[i] / 2}" y="${ROW_HEIGHT / 2 + 4}" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="${DIAGRAM_COLORS.tableHeaderText}" text-anchor="middle">${escapeSvgText(header)}</text>`
   );
 
   const bodyCells = rows.flatMap((row, rowIndex) => {
@@ -27,7 +28,7 @@ export function drawTable(headers: string[], rows: string[][]): string {
     return row.map(
       (cell, colIndex) =>
         `<rect x="${colX[colIndex]}" y="${y}" width="${colWidths[colIndex]}" height="${ROW_HEIGHT}" fill="#FFFFFF" stroke="${DIAGRAM_COLORS.tableBorder}" stroke-width="0.5" />
-<text x="${colX[colIndex] + colWidths[colIndex] / 2}" y="${y + ROW_HEIGHT / 2 + 4}" font-family="Inter, sans-serif" font-size="11" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${cell}</text>`
+<text x="${colX[colIndex] + colWidths[colIndex] / 2}" y="${y + ROW_HEIGHT / 2 + 4}" font-family="Inter, sans-serif" font-size="11" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${escapeSvgText(cell)}</text>`
     );
   });
 

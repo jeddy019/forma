@@ -1,4 +1,5 @@
 import { DIAGRAM_COLORS } from './colors';
+import { escapeSvgText } from './escapeSvgText';
 
 const CHART_HEIGHT = 180;
 const BAR_WIDTH = 44;
@@ -25,7 +26,7 @@ export function drawBarChart(
 
     return `<rect x="${x}" y="${y}" width="${BAR_WIDTH}" height="${barHeight}" fill="${color}" />
 <text x="${x + BAR_WIDTH / 2}" y="${y - 6}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.text}" text-anchor="middle">${value}</text>
-<text x="${x + BAR_WIDTH / 2}" y="${baselineY + 16}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.textMuted}" text-anchor="middle">${labels[i]}</text>`;
+<text x="${x + BAR_WIDTH / 2}" y="${baselineY + 16}" font-family="Inter, sans-serif" font-size="10" fill="${DIAGRAM_COLORS.textMuted}" text-anchor="middle">${escapeSvgText(labels[i])}</text>`;
   });
 
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">

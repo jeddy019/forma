@@ -1,4 +1,5 @@
 import { DIAGRAM_COLORS } from './colors';
+import { escapeSvgText } from './escapeSvgText';
 import type { GridLine, GridPoint } from './types';
 
 const CELL_SIZE = 30;
@@ -70,7 +71,7 @@ export function drawCoordinateGrid(
     const sy = toSvgY(point.y);
     const dot = `<circle cx="${sx}" cy="${sy}" r="4" fill="${DIAGRAM_COLORS.keyPoint}" />`;
     if (!point.label) return [dot];
-    const label = `<text x="${sx + 8}" y="${sy - 8}" font-family="Inter, sans-serif" font-size="11" fill="${DIAGRAM_COLORS.text}">${point.label}</text>`;
+    const label = `<text x="${sx + 8}" y="${sy - 8}" font-family="Inter, sans-serif" font-size="11" fill="${DIAGRAM_COLORS.text}">${escapeSvgText(point.label)}</text>`;
     return [dot, label];
   });
 

@@ -44,7 +44,11 @@ CREATE TABLE worksheets (
   paper_size TEXT DEFAULT 'a4',
   difficulty_feedback TEXT CHECK (difficulty_feedback IN ('too_easy','just_right','too_hard',NULL)),
   generated_from TEXT DEFAULT 'manual' CHECK (generated_from IN ('manual','scheduled')),
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  -- Enforces the 30-day digital link expiry promised in User Challenges -
+  -- see supabase/add-worksheet-expiry.sql for the standalone fix, applied
+  -- live in Phase 2 Step 13.
+  expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days')
 );
 
 CREATE TABLE submissions (
@@ -116,6 +120,7 @@ CREATE TABLE webhook_events (
 CREATE INDEX idx_worksheets_owner ON worksheets(owner_id);
 CREATE INDEX idx_worksheets_student ON worksheets(student_id);
 CREATE INDEX idx_worksheets_code ON worksheets(digital_code);
+CREATE INDEX idx_worksheets_expires_at ON worksheets(expires_at);
 CREATE INDEX idx_profiles_owner ON student_profiles(owner_id);
 CREATE INDEX idx_submissions_worksheet ON submissions(worksheet_id);
 CREATE INDEX idx_schedules_owner ON schedules(owner_id);
