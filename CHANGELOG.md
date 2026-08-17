@@ -750,3 +750,108 @@ extended part between Tier 2's suggestion and their own judgement. Step 19
 end up being built alongside Step 18 rather than strictly after it -
 flagging now rather than assuming a hard boundary between them.
 Decisions: none beyond completing Step 17 as scoped.
+
+---
+
+SESSION UPDATE (following the one above):
+Opened by finding a real, live bug before writing any dashboard code: split
+MarkScheme.ts (src/lib/ai/splitMarkScheme.ts) predates Phase 3 Step 16's
+answer_format addition to the schema and was never updated to carry it -
+questions_json never had it (by design, students must never see it) but
+mark_scheme_json didn't either (an oversight), so answer_format ended up
+undefined in both stored JSON blobs. Concretely, that meant Tier 1's switch
+on answer_format matched no case on every real submission (auto_marks_json
+was silently all null, not because parts were correctly identified as
+unmarkable but because the field determining that was simply missing), and
+Tier 2's `=== 'extended'` check was always false, so it never ran at all.
+Both Step 16 and Step 17's sessions verified with unit tests that fed
+markPart()/markExtendedPart() clean hand-crafted input directly and never
+caught this, because the bug was entirely in how route.ts wired real
+worksheet data into those functions, not in the functions themselves - a
+gap unit tests can't see and a live end-to-end check would have. Fixed by
+adding answer_format to the parts markSchemeJson keeps (the correct home
+for it: only /api/submit's service-role code reads it, mark_scheme_json is
+already the "never reaches a student" bucket, per Security Rules 1), and by
+changing /api/submit/route.ts to select mark_scheme_json alongside
+questions_json and merge them by question/part index (same order and count,
+both derived from the same generation call) - questions_json still supplies
+part text, mark_scheme_json now supplies answer/answer_format/mark_scheme.
+Confirmed the fix with a real generated worksheet posted through the real
+/api/submit route (not the mock-based unit tests): auto_marks_json came
+back with real matched:true/marks_awarded results across all 10 questions,
+and a Tier 2 call fired and returned a real AI suggestion for the one
+extended part - neither had ever actually happened on a real submission
+before this fix.
+
+Completed: Phase 3 Step 18 - the tutor marking dashboard, and effectively
+Step 19 alongside it (see the Decision below). New routes:
+/dashboard/marking (list, paginated at 20 per Performance Rule 3) and
+/dashboard/marking/[id] (detail). Both gated the same way as mark scheme
+PDFs (role === 'tutor' && plan === 'pro', Permissions Summary) - an upsell
+message instead of the dashboard for anyone else. The list shows student,
+subject/topic, submitted date, and a Reviewed/Needs review badge (reviewed
+= tutor_marks_json is not null) with the score once reviewed. The detail
+page (src/app/dashboard/marking/[id]/page.tsx) merges questions_json and
+mark_scheme_json by index server-side into one MergedQuestion[] shape and
+hands it to a client MarkingForm: Tier 1 parts render read-only (student
+answer, correct answer, matched/marks - nothing for a tutor to decide, it's
+an exact match); extended parts render the mark scheme (M1/A1/Allow/Common
+error - safe to show a tutor, unlike a student, per Security Rules 1) plus
+the Tier 2 AI suggestion (confidence-coloured badge + reasoning) as a
+starting point, in an editable marks input the tutor can accept as-is or
+override.
+
+Decision (flagged in the previous session's Next note, not re-confirmed
+mid-session since it was already surfaced in advance): built Step 19 (the
+tutor review queue with a comment field) together with Step 18 rather than
+after it. A marking dashboard a tutor can only look at, with no way to
+actually award a mark, isn't a real feature per Principle 1 - the natural
+unit of work is "see a submission and finish marking it," which is what
+the single save action does: src/app/dashboard/marking/[id]/actions.ts's
+saveMarkingAction re-fetches the submission fresh from the DB (never trusts
+anything about auto_marks_json/mark scheme echoed back from the client),
+takes Tier 1's marks_awarded verbatim for auto-marked parts, takes the
+tutor's number for every extended part (0 for one the student left blank,
+clamped to [0, marks] otherwise), sums both against the worksheet's total
+available marks, and writes tutor_marks_json + tutor_feedback (optional,
+2000 char limit) + score_percentage in one update. This is also the first
+point score_percentage is ever computed and stored - Steps 16 and 17 both
+left it NULL by design, exactly until a human could resolve every extended
+part, which is now possible.
+
+Verified for real, end to end, not just unit tests or a mock: a throwaway
+Puppeteer script (browser-pool.ts's local-Chrome fallback pattern, not the
+mock from tier2.test.ts) created a real confirmed tutor-pro test account
+via the admin API (sidestepping this project's email-confirmation
+requirement), generated a real worksheet via the Claude API, force-set one
+part to answer_format "extended" (so the run deterministically exercises
+the Tier 2/tutor-review path rather than depending on the AI happening to
+choose "extended" for something), submitted real answers through the real
+/api/submit route, then drove an actual logged-in browser session through
+/login -> /dashboard/marking (confirmed student name, subject, "Needs
+review") -> the detail page (confirmed Q1, the student's submitted answer
+text, the mark scheme's M1 line, the Tier 1 "Correct" indicator, and the
+Tier 2 "AI:" suggestion badge all render) -> clicked "Save marking" ->
+confirmed the "Marking saved." message and the list page's badge flipping
+to "Reviewed" with a score. Read the database row directly afterward and
+confirmed tutor_marks_json and score_percentage (100%, correct for the
+all-correct answers submitted) matched what the UI showed. All test data
+(auth user, student, worksheet, submission) deleted afterward.
+
+Two real snags hit and fixed while writing that verification script, both
+about Puppeteer/Next.js interaction rather than app bugs, worth recording
+so a future session doesn't re-diagnose them: (1) LoginForm.tsx and
+MarkingForm's save button both resolve via a client-side transition
+(router.push+refresh, and a Server Action respectively), not a full
+document navigation, so page.waitForNavigation() hangs indefinitely on
+both - fixed by polling window.location.pathname / the DOM text instead;
+(2) the dashboard header's "Sign out" button is also button[type=submit]
+and comes first in DOM order, so a plain button[type=submit] selector
+clicked "Sign out" instead of "Save marking" and silently logged the test
+session out - fixed by selecting on visible text instead of tag/type alone.
+
+Next: Phase 3 Steps 15-19 are now all done - Phase 3 (Marking) is complete.
+Next real work is Phase 4 (Automation and Email), starting with Step 20:
+Resend integration and the 8 React Email templates in src/emails/, with
+unsubscribe headers on emails 3/4/5 per the Legal Requirements section.
+Decisions: covered above (Step 19 folded into Step 18).

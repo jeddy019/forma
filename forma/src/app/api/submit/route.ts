@@ -27,29 +27,42 @@ interface SubmitRequestBody {
   answers?: Record<string, unknown>;
 }
 
-interface WorksheetPart {
+// questions_json (student-safe, per Security Rules 1) only carries
+// part_label/text/marks/diagram_spec/working_lines - answer, answer_format,
+// and mark_scheme all live in mark_scheme_json instead (see splitMarkScheme.ts).
+// Marking needs fields from both, merged by question/part index below - both
+// arrays come from the same generation call in the same order, so index
+// alignment is safe.
+interface QuestionsJsonPart {
   text: string;
-  answer: string;
-  answer_format: AnswerFormat;
   marks: number;
-  mark_scheme: {
-    M1: string;
-    A1: string;
-    common_error: string;
-    allow: string;
-  };
 }
 
-interface WorksheetQuestion {
+interface QuestionsJsonQuestion {
   id: string;
-  parts: WorksheetPart[];
+  parts: QuestionsJsonPart[];
+}
+
+interface MarkSchemeJsonPart {
+  answer: string;
+  answer_format: AnswerFormat;
+  M1: string;
+  A1: string;
+  common_error: string;
+  allow: string;
+}
+
+interface MarkSchemeJsonQuestion {
+  id: string;
+  parts: MarkSchemeJsonPart[];
 }
 
 interface WorksheetRow {
   id: string;
   student_id: string | null;
   expires_at: string | null;
-  questions_json: { questions: WorksheetQuestion[] };
+  questions_json: { questions: QuestionsJsonQuestion[] };
+  mark_scheme_json: { questions: MarkSchemeJsonQuestion[] } | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -69,9 +82,13 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  // mark_scheme_json is only ever read here server-side with the service-role
+  // client, and only used to build markPart()/markExtendedPart() input below -
+  // it is never included in this route's response, so this does not violate
+  // Security Rules 1 (that rule is about what a student's browser can read).
   const { data: worksheet } = await admin
     .from('worksheets')
-    .select('id, student_id, expires_at, questions_json')
+    .select('id, student_id, expires_at, questions_json, mark_scheme_json')
     .eq('digital_code', digitalCode)
     .single<WorksheetRow>();
 
@@ -95,6 +112,10 @@ export async function POST(request: NextRequest) {
     sanitizedAnswers[questionId] = value;
   }
 
+  const markSchemeByQuestionId = new Map(
+    (worksheet.mark_scheme_json?.questions ?? []).map((q) => [q.id, q.parts] as const)
+  );
+
   const autoMarksJson: Record<string, ReturnType<typeof markPart>[]> = {};
   const aiSuggestedMarksJson: Record<string, (Tier2Result | null)[]> = {};
   const tier2Jobs: { questionId: string; partIndex: number; promise: Promise<Tier2Result> }[] = [];
@@ -105,20 +126,36 @@ export async function POST(request: NextRequest) {
     const studentParts = sanitizedAnswers[question.id];
     if (!studentParts) continue;
 
-    autoMarksJson[question.id] = question.parts.map((part, i) =>
-      markPart(part.answer_format, part.answer, studentParts[i] ?? '', part.marks)
-    );
+    const markSchemeParts = markSchemeByQuestionId.get(question.id);
+    if (!markSchemeParts) continue; // worksheet has no mark scheme - nothing to mark against
+
+    autoMarksJson[question.id] = question.parts.map((part, i) => {
+      const markSchemePart = markSchemeParts[i];
+      if (!markSchemePart) return null;
+      return markPart(markSchemePart.answer_format, markSchemePart.answer, studentParts[i] ?? '', part.marks);
+    });
 
     aiSuggestedMarksJson[question.id] = question.parts.map(() => null);
     question.parts.forEach((part, i) => {
-      if (part.answer_format !== 'extended') return;
+      const markSchemePart = markSchemeParts[i];
+      if (!markSchemePart || markSchemePart.answer_format !== 'extended') return;
       const studentAnswer = studentParts[i];
       if (!studentAnswer || studentAnswer.trim() === '') return; // nothing to mark
       tier2Jobs.push({
         questionId: question.id,
         partIndex: i,
         promise: markExtendedPart(
-          { questionText: part.text, marks: part.marks, markScheme: part.mark_scheme, studentAnswer },
+          {
+            questionText: part.text,
+            marks: part.marks,
+            markScheme: {
+              M1: markSchemePart.M1,
+              A1: markSchemePart.A1,
+              common_error: markSchemePart.common_error,
+              allow: markSchemePart.allow,
+            },
+            studentAnswer,
+          },
           tier2Controller.signal
         ),
       });

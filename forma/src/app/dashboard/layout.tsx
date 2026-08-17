@@ -21,8 +21,11 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   // so `user` should be set here. This first-visit-after-auth check creates
   // the users row if it doesn't exist yet - see ensureUserProfile.ts for why
   // that can't always happen at signup time.
+  let role: string | null = null;
   if (user) {
     await ensureUserProfile(supabase, user.id);
+    const { data: ownerRow } = await supabase.from('users').select('role').eq('id', user.id).single();
+    role = ownerRow?.role ?? null;
   }
 
   return (
@@ -38,6 +41,11 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           <Link href="/dashboard/generate" className="text-sm text-[#5C5849]">
             Generate
           </Link>
+          {role === 'tutor' && (
+            <Link href="/dashboard/marking" className="text-sm text-[#5C5849]">
+              Marking
+            </Link>
+          )}
           {user && <span className="text-sm text-[#9A9080]">{user.email}</span>}
           <form action={signOutAction}>
             <button type="submit" className="text-sm text-[#5C5849]">
