@@ -5,7 +5,7 @@ import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { computeTopicsCovered } from '@/lib/curriculum/topicsCovered';
 import { EmptyState } from '@/lib/ui/EmptyState';
-import { BookOpen, StickyNote } from 'lucide-react';
+import { BookOpen, StickyNote, ChevronLeft } from 'lucide-react';
 import SessionNotesForm from './SessionNotesForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
@@ -109,7 +109,11 @@ export default async function StudentDetailPage({
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <Link href="/dashboard/students" className="text-sm text-[#5C5849]">
+        <Link
+          href="/dashboard/students"
+          className="inline-flex items-center gap-1 text-sm text-[#5C5849] hover:text-[#1A1A18] transition-colors duration-micro ease-premium"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
           Students
         </Link>
         <h1 className="text-xl font-semibold text-[#1A1A18] mb-1 mt-1">{student.name}</h1>

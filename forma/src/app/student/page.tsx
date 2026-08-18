@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
 import { EmptyState } from '@/lib/ui/EmptyState';
-import { FileText } from 'lucide-react';
+import { FileText, LogOut } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -195,12 +195,16 @@ export default async function StudentPortalPage({
 
 function PortalHeader() {
   return (
-    <header className="flex items-center justify-between px-6 py-4 border-b border-[#E0D9D0]">
+    <header className="flex items-center justify-between px-6 py-3 border-b border-[#E0D9D0] bg-[#F7F4EF]/95 backdrop-blur-sm sticky top-0 z-10">
       <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
         Forma
       </span>
       <form action={signOutAction}>
-        <button type="submit" className="text-sm text-[#5C5849]">
+        <button
+          type="submit"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-sm text-[#5C5849] hover:bg-[#F0EBE3] hover:text-[#1A1A18] transition-colors duration-micro ease-premium"
+        >
+          <LogOut className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
           Sign out
         </button>
       </form>

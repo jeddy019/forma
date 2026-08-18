@@ -113,6 +113,15 @@ export default function GenerateForm({
 
   const canSubmit = groupMode ? selectedGroupStudentIds.length >= MIN_GROUP_SIZE && trimmedTopic.length > 0 : Boolean(selectedStudentId) && trimmedTopic.length > 0;
 
+  function initials(name: string) {
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('');
+  }
+
   async function handleGenerate() {
     if (!canSubmit) return;
 
@@ -232,13 +241,17 @@ export default function GenerateForm({
       {phase !== 'loading' && (
         <div className={`${cardClass} flex flex-col gap-4`}>
           {canUseGroupMode && phase !== 'success' && (
-            <label className="flex items-center gap-2 text-sm text-[#5C5849]">
-              <input
-                type="checkbox"
-                checked={groupMode}
-                onChange={(event) => setGroupMode(event.target.checked)}
-                className="accent-[#1A3D2E]"
-              />
+            <label className="flex items-center gap-3 text-sm text-[#5C5849] cursor-pointer w-fit">
+              <span className="relative inline-flex h-5 w-9 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={groupMode}
+                  onChange={(event) => setGroupMode(event.target.checked)}
+                  className="peer sr-only"
+                />
+                <span className="absolute inset-0 rounded-full bg-[#E0D9D0] peer-checked:bg-[#1A3D2E] transition-colors duration-micro ease-premium" />
+                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-micro ease-premium peer-checked:translate-x-4" />
+              </span>
               Group mode - one worksheet for multiple students
             </label>
           )}
@@ -248,39 +261,65 @@ export default function GenerateForm({
               <span className={labelClass}>
                 Students ({selectedGroupStudentIds.length} selected, {MIN_GROUP_SIZE}-{MAX_GROUP_SIZE})
               </span>
-              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                {students.map((student) => (
-                  <label key={student.id} className="flex items-center gap-2 text-sm text-[#1A1A18]">
-                    <input
-                      type="checkbox"
-                      checked={selectedGroupStudentIds.includes(student.id)}
-                      onChange={() => toggleGroupStudent(student.id)}
-                      disabled={phase === 'success' || (!selectedGroupStudentIds.includes(student.id) && selectedGroupStudentIds.length >= MAX_GROUP_SIZE)}
-                      className="accent-[#1A3D2E]"
-                    />
-                    {student.name}
-                  </label>
-                ))}
+              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto py-0.5">
+                {students.map((student) => {
+                  const selected = selectedGroupStudentIds.includes(student.id);
+                  const capped = !selected && selectedGroupStudentIds.length >= MAX_GROUP_SIZE;
+                  return (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => toggleGroupStudent(student.id)}
+                      disabled={phase === 'success' || capped}
+                      className={`flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full border text-sm transition-all duration-micro ease-premium disabled:opacity-50 disabled:cursor-not-allowed ${
+                        selected
+                          ? 'bg-[#E8F2ED] border-[#1A3D2E] text-[#1A3D2E] font-medium'
+                          : 'bg-white border-[#E0D9D0] text-[#5C5849] hover:border-[#C4B9AC]'
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-full text-[10px] font-medium flex items-center justify-center ${
+                          selected ? 'bg-[#1A3D2E] text-white' : 'bg-[#F0EBE3] text-[#5C5849]'
+                        }`}
+                      >
+                        {initials(student.name)}
+                      </span>
+                      {student.name}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : (
             <div>
-              <label className={labelClass} htmlFor="student">
-                Student
-              </label>
-              <select
-                id="student"
-                className={inputClass}
-                value={selectedStudentId}
-                onChange={(event) => setSelectedStudentId(event.target.value)}
-                disabled={phase === 'success'}
-              >
-                {students.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {student.name}
-                  </option>
-                ))}
-              </select>
+              <span className={labelClass}>Student</span>
+              <div className="flex flex-wrap gap-2">
+                {students.map((student) => {
+                  const selected = selectedStudentId === student.id;
+                  return (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => setSelectedStudentId(student.id)}
+                      disabled={phase === 'success'}
+                      className={`flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full border text-sm transition-all duration-micro ease-premium disabled:opacity-50 disabled:cursor-not-allowed ${
+                        selected
+                          ? 'bg-[#E8F2ED] border-[#1A3D2E] text-[#1A3D2E] font-medium'
+                          : 'bg-white border-[#E0D9D0] text-[#5C5849] hover:border-[#C4B9AC]'
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-full text-[10px] font-medium flex items-center justify-center ${
+                          selected ? 'bg-[#1A3D2E] text-white' : 'bg-[#F0EBE3] text-[#5C5849]'
+                        }`}
+                      >
+                        {initials(student.name)}
+                      </span>
+                      {student.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -357,7 +396,9 @@ export default function GenerateForm({
 
       {phase === 'loading' && (
         <div className={`${cardClass} flex flex-col items-center gap-4 py-10`}>
-          <p className="text-sm text-[#5C5849]">{LOADING_MESSAGES[loadingMessageIndex]}</p>
+          <p key={loadingMessageIndex} className="text-sm text-[#5C5849] animate-fade-up">
+            {LOADING_MESSAGES[loadingMessageIndex]}
+          </p>
           <div className="relative h-1 w-full max-w-xs overflow-hidden rounded-full bg-[#E0D9D0]">
             <div
               className="absolute inset-y-0 w-1/3 rounded-full bg-[#C8A84B]"
@@ -371,7 +412,7 @@ export default function GenerateForm({
       )}
 
       {phase === 'error' && (
-        <div className={`${cardClass} flex flex-col gap-3`}>
+        <div className={`${cardClass} flex flex-col gap-3 animate-fade-up`}>
           <p className="text-sm text-[#C0392B]">{errorMessage}</p>
           <button type="button" onClick={handleGenerate} className={`${primaryButtonClass} self-start`}>
             Try again
@@ -380,7 +421,7 @@ export default function GenerateForm({
       )}
 
       {phase === 'success' && groupResult && (
-        <div className={`${cardClass} flex flex-col gap-5`}>
+        <div className={`${cardClass} flex flex-col gap-5 animate-fade-up`}>
           <div>
             <p className="text-sm font-medium text-[#1A1A18]">
               {groupResult.subject} - {groupResult.topic}
@@ -397,7 +438,7 @@ export default function GenerateForm({
       )}
 
       {phase === 'success' && worksheet && (
-        <div className={`${cardClass} flex flex-col gap-5`}>
+        <div className={`${cardClass} flex flex-col gap-5 animate-fade-up`}>
           <div>
             <p className="text-sm font-medium text-[#1A1A18]">
               {worksheet.subject} - {worksheet.topic}
