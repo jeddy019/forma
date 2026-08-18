@@ -2443,3 +2443,66 @@ student/login, landing page). No pre-Phase-8 baseline build exists to
 diff against numerically, and no Lighthouse/Web Vitals run was performed -
 both explicitly logged as open in CLAUDE.md's Step 48 entry rather than
 implied to be covered by this lighter check.
+
+SESSION UPDATE (following the one above, same day): the user asked
+directly whether the four competitor sites named in the original brief
+(Dr Frost Maths, Corbettmaths, 1st Class Maths, Maths Genie) had actually
+been read, or just assumed from general design knowledge - correctly
+called out; they had not been. This session fetched all four via
+WebFetch and read the actual results rather than continuing on assumption.
+
+Findings, cross-checked (mathsgenie.co.uk fetched twice with different
+prompts to rule out model hallucination - results matched): Corbettmaths
+and 1st Class Maths are both link-tile-grid / reverse-chronological-feed
+content libraries with no real hero or value proposition - functional,
+dated, "content dump" territory. Dr Frost (redirects to drfrost.org) and
+Maths Genie are both genuinely polished, contemporary product sites - and
+critically, both lead with audience-segmented entry points rather than
+one generic CTA (Maths Genie: "I'm a parent" / "I'm an educator" next to
+"Get Started for Free"; Dr Frost: "For Teachers" / "For Schools" / "For
+Students" in the primary nav). Maths Genie also pairs its headline with
+an immediate concrete proof point ("1m+ students... +1.5 average GCSE
+grade improvement").
+
+Applied: the landing page's hero already had the right shape (hero + CTA
++ proof + footer, matching the strong tier's structure) but was missing
+audience segmentation entirely - added a real "I'm a: Tutor / Parent /
+Student" row under the hero CTAs. Made this actually functional, not just
+a label: /signup?role=tutor and /signup?role=parent pre-select
+SignupForm's "I am a" dropdown server-side. This required splitting
+signup/page.tsx (previously a single 'use client' file) into a thin
+Suspense-wrapped page.tsx + a new SignupForm.tsx client component, since
+useSearchParams needs a Suspense boundary to avoid deopting the route
+from static generation - exactly the pattern /login already used for the
+same reason, now made consistent across both. Student login was also
+promoted from a footer-only link into the header nav (matching how
+prominently the bar-setting sites treat their non-primary user type), and
+the hero's redundant second "Log in" button became an anchor to the
+"how it works" section instead (#how-it-works, with scroll-mt-20 so the
+sticky-feeling anchor lands below the header).
+
+Deliberately not copied: Maths Genie's stats bar ("1m+ students"). Forma
+has zero real users pre-launch - fabricating a number would be exactly
+the kind of slop the user explicitly said to avoid. The curriculum-
+coverage strip already on the page (three real countries/curricula, true
+today) does the same "prove scope immediately" job honestly, so it was
+left as the substitute rather than inventing a replacement metric.
+
+Verification: npx tsc --noEmit clean, npm run lint clean, npm run test -
+72/72 passing. Live-verified against the running dev server (not just
+type-checked): curl'd /signup?role=parent and grepped the server-rendered
+HTML for `value="parent" selected` - confirmed it actually appears,
+proving the pre-select works server-side on first paint rather than only
+after client hydration.
+
+Next: nothing else queued from this angle - the competitor-research gap
+that prompted this pass is closed. Normal Phase 8/Anthropic-blocked
+status from the entry above still applies.
+Open risks: none new. Same visual/browser-check caveat as every entry in
+this session - the user has not yet looked at any of this in a browser.
+Decisions: chose not to fabricate a social-proof stats line even though
+it's a real pattern both bar-setting competitors use, since Forma cannot
+do so honestly yet - flagged explicitly rather than silently omitted, in
+case the user wants a different honest proof point added later (e.g. once
+real users exist, or using a different true-today claim than curriculum
+coverage).
