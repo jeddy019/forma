@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { EmptyState } from '@/lib/ui/EmptyState';
+import { interactiveCardClass } from '@/lib/ui/formStyles';
 import { Users } from 'lucide-react';
 import StudentForm from './StudentForm';
 
@@ -55,16 +56,17 @@ export default async function StudentsPage({
           <EmptyState icon={Users} message="No students yet - add your first one above." />
         )}
         {students?.map((student) => (
-          <div
+          <Link
             key={student.id}
-            className="bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-4 flex items-center justify-between gap-4"
+            href={`/dashboard/students/${student.id}`}
+            className={`${interactiveCardClass} p-4 flex items-center justify-between gap-4`}
           >
-            <Link href={`/dashboard/students/${student.id}`}>
-              <p className="text-sm font-medium text-[#1A1A18] hover:underline">{student.name}</p>
+            <div>
+              <p className="text-sm font-medium text-[#1A1A18]">{student.name}</p>
               <p className="text-xs text-[#9A9080]">
                 {student.curriculum_level} - {student.year_level}
               </p>
-            </Link>
+            </div>
             <div className="flex gap-1.5 flex-wrap justify-end max-w-[50%]">
               {(student.subjects ?? []).map((subject) => (
                 <span key={subject} className="text-xs bg-[#E8F2ED] text-[#1A3D2E] rounded-full px-2.5 py-1">
@@ -72,7 +74,7 @@ export default async function StudentsPage({
                 </span>
               ))}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 

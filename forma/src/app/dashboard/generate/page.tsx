@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
+import { UserPlus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import GenerateForm from './GenerateForm';
-import { cardClass, secondaryButtonClass } from '@/lib/ui/formStyles';
+import { EmptyState } from '@/lib/ui/EmptyState';
 import { isActivePro } from '@/lib/payments/planStatus';
 
 interface StudentOption {
@@ -46,14 +46,17 @@ export default async function GeneratePage() {
 
   if (!students || students.length === 0) {
     return (
-      <div className={`${cardClass} text-center flex flex-col items-center gap-4`}>
+      <div className="flex flex-col gap-6 max-w-xl">
         <div>
           <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Generate a worksheet</h1>
-          <p className="text-sm text-[#5C5849]">Add a student first, then come back here to generate practice for them.</p>
+          <p className="text-sm text-[#5C5849]">Describe the struggle. Forma builds the practice.</p>
         </div>
-        <Link href="/dashboard/students" className={secondaryButtonClass}>
-          Add a student
-        </Link>
+        <EmptyState
+          icon={UserPlus}
+          message="Add a student first, then come back here to generate practice for them."
+          actionLabel="Add a student"
+          actionHref="/dashboard/students"
+        />
       </div>
     );
   }

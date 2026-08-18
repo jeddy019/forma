@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { cardClass } from '@/lib/ui/formStyles';
+import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import { ClipboardCheck } from 'lucide-react';
@@ -94,7 +94,7 @@ export default async function MarkingPage({
             <Link
               key={submission.id}
               href={`/dashboard/marking/${submission.id}`}
-              className={`${cardClass} flex items-center justify-between gap-4 hover:border-[#C4B9AC] transition-colors duration-200`}
+              className={`${interactiveCardClass} p-4 flex items-center justify-between gap-4`}
             >
               <div>
                 <p className="text-sm font-medium text-[#1A1A18]">

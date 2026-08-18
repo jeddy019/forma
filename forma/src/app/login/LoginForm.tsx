@@ -36,8 +36,10 @@ export default function LoginForm() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F7F4EF' }}>
-      <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-semibold mb-1 text-center text-[#1A3D2E]">Forma</h1>
+      <div className="w-full max-w-sm animate-fade-up">
+        <Link href="/" className="block text-2xl font-semibold mb-1 text-center text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+          Forma
+        </Link>
         <p className="text-sm text-center mb-8 text-[#5C5849]">Practice built for your student.</p>
 
         <form onSubmit={handleSubmit} className={`${cardClass} flex flex-col gap-4`}>
@@ -82,6 +84,12 @@ export default function LoginForm() {
           New to Forma?{' '}
           <Link href="/signup" className="text-[#1A3D2E] font-medium">
             Create an account
+          </Link>
+        </p>
+        <p className="text-xs text-center mt-3 text-[#9A9080]">
+          Are you a student?{' '}
+          <Link href="/student/login" className="text-[#5C5849] font-medium underline">
+            Log in here
           </Link>
         </p>
       </div>

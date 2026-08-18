@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { Mail } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
 
@@ -39,12 +41,15 @@ export default function StudentLoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F7F4EF' }}>
-      <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-semibold mb-1 text-center text-[#1A3D2E]">Forma</h1>
+      <div className="w-full max-w-sm animate-fade-up">
+        <Link href="/" className="block text-2xl font-semibold mb-1 text-center text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+          Forma
+        </Link>
         <p className="text-sm text-center mb-8 text-[#5C5849]">View your worksheet history.</p>
 
         {sent ? (
-          <div className={`${cardClass} text-center`}>
+          <div className={`${cardClass} text-center animate-fade-up`}>
+            <Mail className="w-6 h-6 text-[#1A3D2E] mx-auto mb-2" strokeWidth={1.5} aria-hidden="true" />
             <p className="text-sm text-[#1A3D2E]">Check your email for a link to view your worksheets.</p>
           </div>
         ) : (
@@ -72,6 +77,12 @@ export default function StudentLoginPage() {
             </button>
           </form>
         )}
+        <p className="text-xs text-center mt-4 text-[#9A9080]">
+          Are you a tutor or parent?{' '}
+          <Link href="/login" className="text-[#5C5849] font-medium underline">
+            Log in here
+          </Link>
+        </p>
       </div>
     </div>
   );
