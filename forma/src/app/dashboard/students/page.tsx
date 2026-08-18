@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { EmptyState } from '@/lib/ui/EmptyState';
+import { Users } from 'lucide-react';
 import StudentForm from './StudentForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
@@ -50,7 +52,7 @@ export default async function StudentsPage({
       <div className="flex flex-col gap-3">
         {error && <p className="text-sm text-[#C0392B]">Could not load students - please refresh.</p>}
         {!error && students?.length === 0 && (
-          <p className="text-sm text-[#9A9080] italic">No students yet - add your first one above.</p>
+          <EmptyState icon={Users} message="No students yet - add your first one above." />
         )}
         {students?.map((student) => (
           <div

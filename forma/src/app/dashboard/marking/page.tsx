@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { EmptyState } from '@/lib/ui/EmptyState';
+import { ClipboardCheck } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -83,7 +85,7 @@ export default async function MarkingPage({
       <div className="flex flex-col gap-3">
         {error && <p className="text-sm text-[#C0392B]">Could not load submissions - please refresh.</p>}
         {!error && submissions?.length === 0 && (
-          <p className="text-sm text-[#9A9080] italic">No submissions yet.</p>
+          <EmptyState icon={ClipboardCheck} message="No submissions yet." />
         )}
         {submissions?.map((submission) => {
           const reviewed = submission.tutor_marks_json !== null;

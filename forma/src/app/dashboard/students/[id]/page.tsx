@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { computeTopicsCovered } from '@/lib/curriculum/topicsCovered';
+import { EmptyState } from '@/lib/ui/EmptyState';
+import { BookOpen, StickyNote } from 'lucide-react';
 import SessionNotesForm from './SessionNotesForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
@@ -118,7 +120,7 @@ export default async function StudentDetailPage({
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold text-[#1A1A18]">Topics practiced</h2>
-        {topicsCovered.length === 0 && <p className="text-sm text-[#9A9080] italic">No worksheets generated yet.</p>}
+        {topicsCovered.length === 0 && <EmptyState icon={BookOpen} message="No worksheets generated yet." />}
         {topicsCovered.length > 0 && (
           <div className="flex flex-col gap-2">
             {topicsCovered.map((topic) => (
@@ -152,7 +154,7 @@ export default async function StudentDetailPage({
 
           <div className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold text-[#1A1A18]">Past notes</h2>
-            {notes.length === 0 && <p className="text-sm text-[#9A9080] italic">No session notes yet.</p>}
+            {notes.length === 0 && <EmptyState icon={StickyNote} message="No session notes yet." />}
             {notes.map((note) => (
               <div key={note.id} className="bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-4">
                 <p className="text-xs text-[#9A9080] mb-1.5">{formatNoteDate(note.created_at)}</p>
