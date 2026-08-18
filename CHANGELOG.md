@@ -2415,18 +2415,31 @@ unrelated to anything this session changed) - build alone took ~5
 minutes wall-clock; noted here so a future session isn't surprised by it
 timing out at a shorter budget.
 
-Next: Phase 8 Step 48 (performance pass - not yet done, see CLAUDE.md's
-Step 48 entry for exactly what's been checked already vs what's still
-open: bundle-size diffing, Web Vitals, lucide-react tree-shaking
-confirmation). Once that's done, Phase 8 is complete and everything
-remaining is Anthropic-blocked.
-Open risks: unchanged from the entry above, plus: no bundle-size
-comparison exists between pre-Phase-8 and now, so there's no numeric
-evidence (only the qualitative route-table check above) that this
-session's additions (lucide-react icons across ~10 files, the new motion/
-animation classes) didn't measurably regress first-load JS - Step 48 is
-exactly this.
+Next: nothing left in Phase 8 worth doing without a specific reason - see
+below for what Step 48 covered. Everything after this is Anthropic-
+blocked (Step 25, Step 37, downstream).
+Open risks: unchanged from the entry above, plus: Step 48's performance
+check was grep/build-output-based, not a real Lighthouse/Web Vitals run -
+reasonable evidence, not proof, that Phase 8's additions didn't regress
+first-load performance.
 Decisions: narrowed Step 46's scope on inspection rather than applying
 interactiveCardClass indiscriminately (see above) - the one substantive
 judgment call this session made beyond straightforward execution of the
 plan already written into CLAUDE.md by the prior session.
+
+Immediately following, same session, Step 48 (performance pass):
+inspected the production build's own output rather than adding new
+tooling (no bundle analyzer was installed - out of scope for a single
+pass). Confirmed / /login /signup /student/login stayed statically
+prerendered (○) in the build's route table - i.e. nothing in Phase 8's
+changes accidentally pulled a server-only data dependency into a page
+that used to prerender. Checked .next/static/chunks total size (~1.1MB,
+unremarkable) and grepped those chunks for lucide-related code:
+found across five small chunks (12-20KB each, ~84KB combined) rather than
+one large bundle, which is what tree-shaking working correctly looks like
+for roughly 15 distinct icons imported across the app (DashboardNav,
+EmptyState call sites, GenerateForm, StudentWorksheetForm, PortalHeader,
+student/login, landing page). No pre-Phase-8 baseline build exists to
+diff against numerically, and no Lighthouse/Web Vitals run was performed -
+both explicitly logged as open in CLAUDE.md's Step 48 entry rather than
+implied to be covered by this lighter check.
