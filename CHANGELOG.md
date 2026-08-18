@@ -2506,3 +2506,105 @@ do so honestly yet - flagged explicitly rather than silently omitted, in
 case the user wants a different honest proof point added later (e.g. once
 real users exist, or using a different true-today claim than curriculum
 coverage).
+
+SESSION UPDATE (following the one above, same day): the user asked to
+open localhost:3000 and check the landing page - done via the
+claude-in-chrome browser tools (actual screenshots, not curl), which
+confirmed the landing page and the /signup?role=parent pre-select both
+looked and worked correctly. The user then asked to check the dashboard
+and generate page too, adding "but i still feel its flat" - despite all
+of Phase 8's motion/hover/elevation work already landing.
+
+This was the actually important part of the session: logged into the
+live dev server as the demo tutor account (demo-tutor@forma.app) and
+screenshotted /dashboard/students and /dashboard/generate for real,
+rather than continuing to reason about the code. The screenshots showed
+it immediately - the card background (#F0EBE3) and page background
+(#F7F4EF) are only a few percent apart in lightness, and the original
+shadow-card was a single 5%-opacity blur. Cards were nearly
+indistinguishable from the page at rest. Every prior Phase 8 pass had
+added hover/motion polish (interactiveCardClass's hover lift, button
+active:scale, animate-fade-up) without ever checking whether the RESTING
+state - what a card looks like before any interaction, i.e. what the user
+actually sees on page load - had a real problem. It did. No amount of
+hover polish fixes something that's only visible on interaction, when the
+complaint is about how it looks on arrival.
+
+Fixed at the token level, not by adding more per-component polish:
+- globals.css: shadow-card/raised/modal changed from a single flat blur
+  to a layered shadow (tight contact shadow + soft ambient shadow, tinted
+  the text-primary brown-black rather than pure grey) - the same
+  technique Stripe/Linear use for shadows that read as intentional rather
+  than generic. Deliberately stayed within CLAUDE.md's SLOP TO AVOID "no
+  heavy shadows" rule - opacity is still low (the ambient layer tops out
+  around 16% even at the modal tier), this is about definition at rest,
+  not added visual weight.
+- formStyles.ts: cardClass/interactiveCardClass border width 0.5px -> 1px.
+  This is not purely a taste call - a sub-pixel CSS border can round to 0
+  or render inconsistently depending on display DPI, and was confirmed
+  live to be effectively invisible on the browser used for this session's
+  screenshots.
+- globals.css: added a global `input[type=checkbox] { accent-color:
+  #1A3D2E }` rule - most checkboxes across the app (subjects picker,
+  group mode multi-select before this session's chip-selector rewrite,
+  etc.) were unstyled browser/OS defaults, not on-brand at all.
+- New accentCardClass (formStyles.ts): a 3px gold left border rail,
+  applied to exactly one card per page - the primary "do the thing" form
+  (StudentForm, GenerateForm's main panel, SessionNotesForm, TemplateForm,
+  ScheduleForm). Deliberately not applied to data-display rows (list
+  items, static info panels) - the reasoning matches Step 46's earlier
+  "don't imply a row is special when it isn't" decision from the prior
+  session: using an accent signal everywhere dilutes it back into noise.
+- New PageHeader.tsx: every dashboard page opened with a bare text h1+p
+  and nothing visually anchoring it - the same underlying "insufficient
+  visual weight" problem as the card contrast issue, just for headers
+  instead of cards. A small icon badge (reusing the exact visual language
+  of the landing page's three how-it-works steps, so it reads as the same
+  design system rather than a new one) now precedes every page title.
+  Applied to students, generate (both its normal and its own no-students-
+  yet empty-state branch in page.tsx), marking, templates, and settings.
+  schedule/page.tsx got extra attention: it had three separate header
+  occurrences (paid-gate message, no-students-yet state, normal view) with
+  copy-pasted h1/p blocks - the no-students-yet branch was also rebuilt to
+  match the same PageHeader+EmptyState combination already established on
+  generate/page.tsx's equivalent branch, rather than leaving it as a
+  differently-shaped ad-hoc centred card. The paid-gate upsell message (a
+  different UI context - a locked-feature notice, not a page header) was
+  deliberately left alone in its original centred-card form on both
+  marking and schedule.
+
+Verification: npx tsc --noEmit clean, npm run lint clean, npm run test -
+72/72 passing. Then, critically, re-verified live rather than trusting
+the diff: re-logged into the dev server via claude-in-chrome and
+re-screenshotted /dashboard/students and /dashboard/generate post-fix.
+Both showed clearly visible card depth (real shadow + border separation
+from the page background) and the new icon-badge headers and gold accent
+rails, matching what the code changes were supposed to produce. One
+screenshot mid-session showed a large unexplained blank area on the
+students page after a scroll action - investigated with get_page_text
+rather than assumed to be a real bug, confirmed the DOM content was
+complete and correctly ordered, and a subsequent clean screenshot showed
+no such gap - concluded it was a stale-frame/scroll-timing artifact in
+the screenshot tool itself, not a layout defect. The browser screenshot
+tool (CDP Page.captureScreenshot) also hit several timeouts mid-session on
+one tab - worked around by closing that tab and opening a fresh one
+rather than retrying indefinitely, consistent with the claude-in-chrome
+skill's own "don't loop on tool failures" guidance.
+
+Next: marking, schedule, templates, and settings all received the same
+PageHeader/accentCardClass changes as students/generate but were not
+individually re-screenshotted this session (high confidence via shared-
+component reasoning, not visually confirmed one by one) - worth a look if
+anything there still reads oddly. Auth pages (login/signup/student login)
+and generate's loading/success states also share the same underlying
+card/shadow tokens and should have inherited the fix, but weren't
+specifically re-screenshotted either.
+Open risks: none new beyond the "not every page individually
+screenshotted" note above. The accent-color checkbox styling only changes
+the CHECKED-state colour - unchecked checkboxes still render as plain OS
+squares, which is normal/expected, not a remaining gap.
+Decisions: chose to fix this at the design-token level (shadow, border,
+a new shared accentCardClass/PageHeader) rather than patching individual
+pages, since the same underlying contrast problem existed identically
+across every dashboard page - a token fix propagates everywhere at once
+and can't drift out of sync the way six separate per-page fixes would.
