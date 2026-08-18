@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import GenerateForm from './GenerateForm';
 import { EmptyState } from '@/lib/ui/EmptyState';
+import { PageHeader } from '@/lib/ui/PageHeader';
 import { isActivePro } from '@/lib/payments/planStatus';
 
 interface StudentOption {
@@ -47,10 +48,7 @@ export default async function GeneratePage() {
   if (!students || students.length === 0) {
     return (
       <div className="flex flex-col gap-6 max-w-xl">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Generate a worksheet</h1>
-          <p className="text-sm text-[#5C5849]">Describe the struggle. Forma builds the practice.</p>
-        </div>
+        <PageHeader icon={Sparkles} title="Generate a worksheet" subtitle="Describe the struggle. Forma builds the practice." />
         <EmptyState
           icon={UserPlus}
           message="Add a student first, then come back here to generate practice for them."

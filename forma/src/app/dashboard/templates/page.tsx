@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { EmptyState } from '@/lib/ui/EmptyState';
+import { PageHeader } from '@/lib/ui/PageHeader';
 import { LayoutTemplate } from 'lucide-react';
 import TemplateForm from './TemplateForm';
 import DeleteTemplateForm from './DeleteTemplateForm';
@@ -61,10 +62,7 @@ export default async function TemplatesPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Templates</h1>
-        <p className="text-sm text-[#5C5849]">Save a topic prompt once, reuse it from the generate page.</p>
-      </div>
+      <PageHeader icon={LayoutTemplate} title="Templates" subtitle="Save a topic prompt once, reuse it from the generate page." />
 
       <TemplateForm />
 

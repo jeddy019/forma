@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { EmptyState } from '@/lib/ui/EmptyState';
+import { PageHeader } from '@/lib/ui/PageHeader';
 import { interactiveCardClass } from '@/lib/ui/formStyles';
 import { Users } from 'lucide-react';
 import StudentForm from './StudentForm';
@@ -43,10 +44,7 @@ export default async function StudentsPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Students</h1>
-        <p className="text-sm text-[#5C5849]">Add a student, then generate practice built for them.</p>
-      </div>
+      <PageHeader icon={Users} title="Students" subtitle="Add a student, then generate practice built for them." />
 
       <StudentForm />
 
