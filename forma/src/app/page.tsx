@@ -15,7 +15,13 @@ export default function Home() {
         <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
           Forma
         </span>
-        <nav className="flex items-center gap-3">
+        <nav className="flex items-center gap-1 sm:gap-3">
+          <Link
+            href="/student/login"
+            className="hidden sm:inline text-sm text-[#5C5849] px-3 py-2 hover:text-[#1A1A18] transition-colors duration-micro ease-premium"
+          >
+            Student login
+          </Link>
           <Link href="/login" className="text-sm text-[#5C5849] px-3 py-2 hover:text-[#1A1A18] transition-colors duration-micro ease-premium">
             Log in
           </Link>
@@ -43,11 +49,32 @@ export default function Home() {
               <Link href="/signup" className={primaryButtonClass}>
                 Get started free
               </Link>
-              <Link href="/login" className={secondaryButtonClass}>
-                Log in
-              </Link>
+              <a href="#how-it-works" className={secondaryButtonClass}>
+                See how it works
+              </a>
             </div>
             <p className="text-xs text-[#9A9080]">3 free worksheets every month. No card required.</p>
+
+            {/* Tutors, parents, and students land here for different reasons -
+                naming all three up front (rather than one generic CTA) is
+                the one concrete pattern shared by every strong competitor
+                site reviewed for this section (Maths Genie's "I'm a parent"/
+                "I'm an educator" split, Dr Frost's "For Teachers"/"For
+                Students" nav): a visitor should not have to guess whether
+                this product is for them. role= pre-selects SignupForm's own
+                "I am a" field rather than being a cosmetic label only. */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[#5C5849] pt-1">
+              <span className="text-[#9A9080]">I&apos;m a:</span>
+              <Link href="/signup?role=tutor" className="font-medium text-[#1A3D2E] hover:underline">
+                Tutor
+              </Link>
+              <Link href="/signup?role=parent" className="font-medium text-[#1A3D2E] hover:underline">
+                Parent
+              </Link>
+              <Link href="/student/login" className="font-medium text-[#1A3D2E] hover:underline">
+                Student
+              </Link>
+            </div>
           </div>
 
           <div className="flex justify-center md:justify-end">
@@ -56,7 +83,7 @@ export default function Home() {
         </section>
 
         {/* How it works */}
-        <section className="max-w-6xl mx-auto py-12 md:py-16 border-t border-[#E0D9D0]">
+        <section id="how-it-works" className="max-w-6xl mx-auto py-12 md:py-16 border-t border-[#E0D9D0] scroll-mt-20">
           <h2
             className="text-xl md:text-2xl font-semibold text-[#1A1A18] mb-10 text-center"
             style={{ fontFamily: 'var(--font-playfair)' }}
