@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { createTemplateAction, type TemplateActionResult } from './actions';
 import { SUBJECTS, DIFFICULTY_LEVELS } from '@/lib/constants';
-import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
+import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
 
 const initialState: TemplateActionResult = {};
 
@@ -11,7 +11,7 @@ export default function TemplateForm() {
   const [state, formAction, pending] = useActionState(createTemplateAction, initialState);
 
   return (
-    <form action={formAction} className={`${cardClass} flex flex-col gap-4`}>
+    <form action={formAction} className={`${accentCardClass} flex flex-col gap-4`}>
       <h2 className="text-lg font-semibold text-[#1A1A18]">New template</h2>
 
       <div>

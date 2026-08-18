@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { inputClass, labelClass, primaryButtonClass, secondaryButtonClass, cardClass } from '@/lib/ui/formStyles';
+import { inputClass, labelClass, primaryButtonClass, secondaryButtonClass, cardClass, accentCardClass } from '@/lib/ui/formStyles';
+import { PageHeader } from '@/lib/ui/PageHeader';
 
 interface StudentOption {
   id: string;
@@ -233,13 +235,10 @@ export default function GenerateForm({
 
   return (
     <div className="flex flex-col gap-6 max-w-xl">
-      <div>
-        <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Generate a worksheet</h1>
-        <p className="text-sm text-[#5C5849]">Describe the struggle. Forma builds the practice.</p>
-      </div>
+      <PageHeader icon={Sparkles} title="Generate a worksheet" subtitle="Describe the struggle. Forma builds the practice." />
 
       {phase !== 'loading' && (
-        <div className={`${cardClass} flex flex-col gap-4`}>
+        <div className={`${accentCardClass} flex flex-col gap-4`}>
           {canUseGroupMode && phase !== 'success' && (
             <label className="flex items-center gap-3 text-sm text-[#5C5849] cursor-pointer w-fit">
               <span className="relative inline-flex h-5 w-9 shrink-0">

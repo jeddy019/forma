@@ -49,10 +49,22 @@
   --radius-md: 12px;
   --radius-full: 20px;
 
-  /* Shadows - Elevation System (Design System v2) */
-  --shadow-card: 0 2px 8px rgba(0,0,0,0.05);
-  --shadow-raised: 0 4px 16px rgba(0,0,0,0.08);
-  --shadow-modal: 0 8px 32px rgba(0,0,0,0.12);
+  /* Shadows - Elevation System (Design System v2, revised). The original
+     single soft 5%-opacity shadow was nearly invisible against the cream
+     page background (#F7F4EF card-on-page contrast is only a few percent
+     of lightness) - confirmed live in a browser, not just in code: cards
+     read as plain beige rectangles indistinguishable from the page, which
+     is the actual mechanism behind the "still feels flat" feedback, not a
+     missing hover effect. Each tier is now a layered shadow (a tight
+     contact shadow + a soft ambient one, the same technique Stripe/Linear
+     use) tinted with the text-primary brown-black rather than pure black,
+     so it reads as "warm depth" consistent with the cream palette instead
+     of a generic grey drop-shadow. Still well inside SLOP TO AVOID's
+     "heavy shadows" ban - opacity stays low, this is about definition,
+     not weight. */
+  --shadow-card: 0 1px 2px rgba(26,26,24,0.05), 0 3px 10px rgba(26,26,24,0.07);
+  --shadow-raised: 0 2px 4px rgba(26,26,24,0.06), 0 10px 24px rgba(26,26,24,0.11);
+  --shadow-modal: 0 4px 8px rgba(26,26,24,0.07), 0 20px 48px rgba(26,26,24,0.16);
 
   /* Motion (Design System v2) - one shared easing curve and duration
      scale, so every transition in the app moves the same way. */
@@ -82,6 +94,15 @@ body {
   font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 400;
   line-height: 1.5;
+}
+
+/* Every checkbox in the app was rendering as the browser's default OS
+   widget (grey/blue depending on platform) - the one place that had
+   already set accent-color proved it, everywhere else was unstyled. A
+   global rule beats hunting down every checkbox usage individually and
+   guarantees new ones don't regress. */
+input[type='checkbox'] {
+  accent-color: #1A3D2E;
 }
 
 h1, h2, h3, h4, h5, h6 {

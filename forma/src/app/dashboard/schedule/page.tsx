@@ -1,12 +1,12 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { cardClass, secondaryButtonClass } from '@/lib/ui/formStyles';
+import { cardClass } from '@/lib/ui/formStyles';
 import ScheduleForm from './ScheduleForm';
 import ScheduleCard, { type ScheduleRow } from './ScheduleCard';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { EmptyState } from '@/lib/ui/EmptyState';
-import { Calendar } from 'lucide-react';
+import { PageHeader } from '@/lib/ui/PageHeader';
+import { Calendar, UserPlus } from 'lucide-react';
 
 export default async function SchedulePage() {
   const supabase = await createClient();
@@ -43,24 +43,21 @@ export default async function SchedulePage() {
 
   if (!students || students.length === 0) {
     return (
-      <div className={`${cardClass} text-center flex flex-col items-center gap-4`}>
-        <div>
-          <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Automated practice</h1>
-          <p className="text-sm text-[#5C5849]">Add a student first, then set up a recurring schedule for them.</p>
-        </div>
-        <Link href="/dashboard/students" className={secondaryButtonClass}>
-          Add a student
-        </Link>
+      <div className="flex flex-col gap-6 max-w-xl">
+        <PageHeader icon={Calendar} title="Automated practice" subtitle="Deliver a worksheet automatically, every week." />
+        <EmptyState
+          icon={UserPlus}
+          message="Add a student first, then set up a recurring schedule for them."
+          actionLabel="Add a student"
+          actionHref="/dashboard/students"
+        />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Automated practice</h1>
-        <p className="text-sm text-[#5C5849]">Deliver a worksheet automatically, every week.</p>
-      </div>
+      <PageHeader icon={Calendar} title="Automated practice" subtitle="Deliver a worksheet automatically, every week." />
 
       <ScheduleForm students={students} />
 

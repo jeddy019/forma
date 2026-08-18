@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { EmptyState } from '@/lib/ui/EmptyState';
+import { PageHeader } from '@/lib/ui/PageHeader';
 import { ClipboardCheck } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
@@ -77,10 +78,7 @@ export default async function MarkingPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Marking</h1>
-        <p className="text-sm text-[#5C5849]">Submissions from your students, newest first.</p>
-      </div>
+      <PageHeader icon={ClipboardCheck} title="Marking" subtitle="Submissions from your students, newest first." />
 
       <div className="flex flex-col gap-3">
         {error && <p className="text-sm text-[#C0392B]">Could not load submissions - please refresh.</p>}

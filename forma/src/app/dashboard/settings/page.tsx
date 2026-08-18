@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
+import { Settings } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { PageHeader } from '@/lib/ui/PageHeader';
 import SettingsPanel from './SettingsPanel';
 
 export default async function SettingsPage({
@@ -19,10 +21,7 @@ export default async function SettingsPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Settings</h1>
-        <p className="text-sm text-[#5C5849]">Billing, plan, and account.</p>
-      </div>
+      <PageHeader icon={Settings} title="Settings" subtitle="Billing, plan, and account." />
       <SettingsPanel
         role={ownerRow?.role ?? null}
         isPro={isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at)}

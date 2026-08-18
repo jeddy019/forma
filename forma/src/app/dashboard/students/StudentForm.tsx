@@ -3,7 +3,7 @@
 import { useActionState, useState } from 'react';
 import { createStudentAction, type CreateStudentResult } from './actions';
 import { SUBJECTS } from '@/lib/constants';
-import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
+import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
 
 // student_profiles.curriculum_level is unconstrained TEXT (no DB CHECK), so
 // this can follow the Country and Curriculum Catalogue's labels directly
@@ -23,7 +23,7 @@ export default function StudentForm() {
   const [country, setCountry] = useState('england');
 
   return (
-    <form action={formAction} className={`${cardClass} flex flex-col gap-4`}>
+    <form action={formAction} className={`${accentCardClass} flex flex-col gap-4`}>
       <h2 className="text-lg font-semibold text-[#1A1A18]">Add a student</h2>
 
       <div>

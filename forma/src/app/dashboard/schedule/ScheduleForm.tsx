@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { createScheduleAction, type ScheduleActionResult } from './actions';
 import { SUBJECTS, DIFFICULTY_LEVELS, DELIVERY_TIMEZONES, DAY_OF_WEEK_LABELS } from '@/lib/constants';
-import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
+import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
 
 interface StudentOption {
   id: string;
@@ -22,7 +22,7 @@ export default function ScheduleForm({ students }: { students: StudentOption[] }
   const [state, formAction, pending] = useActionState(createScheduleAction, initialState);
 
   return (
-    <form action={formAction} className={`${cardClass} flex flex-col gap-4`}>
+    <form action={formAction} className={`${accentCardClass} flex flex-col gap-4`}>
       <h2 className="text-lg font-semibold text-[#1A1A18]">Create a schedule</h2>
 
       <div>

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef } from 'react';
 import { addSessionNoteAction, type AddSessionNoteResult } from './actions';
-import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
+import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
 
 const CONTENT_MAX_LENGTH = 5000;
 const initialState: AddSessionNoteResult = {};
@@ -21,7 +21,7 @@ export default function SessionNotesForm({ studentId }: { studentId: string }) {
   }, [state.success]);
 
   return (
-    <form ref={formRef} action={formAction} className={`${cardClass} flex flex-col gap-3`}>
+    <form ref={formRef} action={formAction} className={`${accentCardClass} flex flex-col gap-3`}>
       <input type="hidden" name="studentId" value={studentId} />
       <label className={labelClass} htmlFor="content">
         Add a session note
