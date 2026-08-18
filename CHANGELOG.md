@@ -2293,3 +2293,73 @@ CORRECT_THRESHOLD chosen as reasonable starting defaults rather than
 asked about, since (unlike the 24-month deletion policy) these are
 retunable constants, not a data-model-defining decision - low cost either
 way if they're slightly off.
+
+SESSION UPDATE (following the one above):
+
+An intervening session was dropped mid-work: it left four modified files
+(package.json/package-lock.json with lucide-react added, globals.css with
+motion/elevation tokens, formStyles.ts with interactiveCardClass) and six
+untracked loading.tsx files plus EmptyState.tsx/Skeleton.tsx, all
+uncommitted, with no CLAUDE.md or CHANGELOG.md update - the user's own
+description was "all i saw was 'api error' and 'connection error'." This
+session started by auditing that leftover work rather than discarding it:
+it was well-reasoned (each file's own comments referenced a "Design System
+v2 section" in CLAUDE.md that did not actually exist yet - the plan had
+been drafted in-session and lost along with the connection), so it was
+finished and committed rather than redone.
+
+Completed: Phase 8 Step 43 (Design System v2 - see CLAUDE.md's new
+section for the full token/component list). Beyond finishing the
+inherited work: filled the four missing loading.tsx routes (dashboard
+settings, templates, marking/[id] - dashboard's own root page is a bare
+redirect with no fetch, deliberately skipped), swapped EmptyState.tsx
+into all 7 real list-empty-state spots found via grep (students,
+students/[id] x2, templates, schedule, marking, admin/question-bank - an
+8th match in generate/group/[groupId] was a per-row "Not submitted yet"
+status, not a list-empty-state, correctly left alone), built
+DashboardNav.tsx (client component, active-link state via usePathname,
+lucide icons, role-gated tutor-only links unchanged from the original)
+and wired it into dashboard/layout.tsx, and rebuilt "/" from a bare
+centred h1+tagline into a real landing page (header with log in/get
+started, hero with a worksheet-mock built from this file's own PDF header/
+question spec rather than a stock image, three-step "how it works",
+curriculum strip, footer linking to /privacy, /login, and /student/login -
+the last of which had no link anywhere before this).
+
+This session's trigger was direct user feedback after using the live app:
+design read as "flat" next to Dr Frost/Corbettmaths/1stclassmaths/Maths
+Genie, the student-facing dashboard specifically called out as substandard,
+page-to-page navigation felt slow, and two standing questions (does parent
+login exist? does student login exist?) that were both already answered
+by existing, working features with no discoverable link to them from the
+new landing page - the last part of that is what this session's footer
+fix actually addresses, not new auth logic.
+
+Verification performed: npx tsc --noEmit clean, npm run lint clean, npm
+run test - 72 tests passing (no new tests added this session - this was a
+presentation-layer pass, no new business logic). Live-verified against a
+freshly started npm run dev: curl 200 on "/" and "/login" and
+"/student/login", curl 307 (unauthenticated redirect, expected) on
+"/dashboard/students". Not verified: no browser/visual check was
+performed by this session (no screenshot tool used) - the user is expected
+to review the running dev server themselves per CLAUDE.md's standing
+instruction, and the CLAUDE.md Current Build Status flags this explicitly
+as an open risk rather than a hidden gap.
+
+Next: Phase 8 Steps 44-48 (auth pages, generate page, remaining dashboard
+list page bodies, /s/[code] and /student portal header, then a performance
+pass) - see CLAUDE.md's Build Phases for the full breakdown. All fully
+buildable without Anthropic, unlike Phase 5 Step 25 and the rest of
+Phase 7, which stay blocked.
+Open risks: unchanged from prior entries, plus: this session's design
+work has not been visually verified in a browser (see above) - functional
+correctness (types/lint/tests/route status codes) was confirmed, visual
+quality was not. The Kumon-paid-addon pricing decision documented in
+CLAUDE.md this session has no implementation yet (documentation only,
+same as the rest of Phase 7's open items).
+Decisions: continued and committed the previous dropped session's
+unfinished work rather than reverting it, since it was sound and matched
+what this session's own direction needed anyway (see above). Left
+NAVIGATION.md and seed-demo-account.mts uncommitted, same as the session
+that created them documented (personal/local-only files, not meant for
+git).
