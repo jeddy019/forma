@@ -5,6 +5,8 @@ import { isAdminEmail } from '@/lib/admin/isAdminEmail';
 import { cardClass } from '@/lib/ui/formStyles';
 import QuestionForm from './QuestionForm';
 import QuestionRowActions from './QuestionRowActions';
+import { EmptyState } from '@/lib/ui/EmptyState';
+import { HelpCircle } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -81,7 +83,7 @@ export default async function QuestionBankPage({
 
         <div className="flex flex-col gap-3">
           {error && <p className="text-sm text-[#C0392B]">Could not load questions - please refresh.</p>}
-          {!error && questions?.length === 0 && <p className="text-sm text-[#9A9080] italic">No questions submitted yet.</p>}
+          {!error && questions?.length === 0 && <EmptyState icon={HelpCircle} message="No questions submitted yet." />}
           {questions?.map((q) => (
             <div key={q.id} className="bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-4 flex items-start justify-between gap-4">
               <div>

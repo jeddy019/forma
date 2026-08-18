@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { EmptyState } from '@/lib/ui/EmptyState';
+import { LayoutTemplate } from 'lucide-react';
 import TemplateForm from './TemplateForm';
 import DeleteTemplateForm from './DeleteTemplateForm';
 
@@ -69,7 +71,7 @@ export default async function TemplatesPage({
       <div className="flex flex-col gap-3">
         {error && <p className="text-sm text-[#C0392B]">Could not load templates - please refresh.</p>}
         {!error && templates?.length === 0 && (
-          <p className="text-sm text-[#9A9080] italic">No templates yet - save your first one above.</p>
+          <EmptyState icon={LayoutTemplate} message="No templates yet - save your first one above." />
         )}
         {templates?.map((template) => (
           <div key={template.id} className="bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-4 flex items-start justify-between gap-4">

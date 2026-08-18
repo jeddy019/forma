@@ -5,6 +5,8 @@ import { cardClass, secondaryButtonClass } from '@/lib/ui/formStyles';
 import ScheduleForm from './ScheduleForm';
 import ScheduleCard, { type ScheduleRow } from './ScheduleCard';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { EmptyState } from '@/lib/ui/EmptyState';
+import { Calendar } from 'lucide-react';
 
 export default async function SchedulePage() {
   const supabase = await createClient();
@@ -64,7 +66,7 @@ export default async function SchedulePage() {
 
       <div className="flex flex-col gap-3">
         {(!schedules || schedules.length === 0) && (
-          <p className="text-sm text-[#9A9080] italic">No schedules yet - create one above.</p>
+          <EmptyState icon={Calendar} message="No schedules yet - create one above." />
         )}
         {schedules?.map((schedule) => (
           <ScheduleCard key={schedule.id} schedule={schedule} students={students} />

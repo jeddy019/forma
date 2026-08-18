@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { cardClass } from '@/lib/ui/formStyles';
+import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
+import { EmptyState } from '@/lib/ui/EmptyState';
+import { FileText } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -138,7 +140,7 @@ export default async function StudentPortalPage({
         <div className="flex flex-col gap-3">
           {worksheetsError && <p className="text-sm text-[#C0392B]">Could not load your worksheets - please refresh.</p>}
           {!worksheetsError && (worksheets ?? []).length === 0 && (
-            <p className="text-sm text-[#9A9080] italic">No worksheets yet.</p>
+            <EmptyState icon={FileText} message="No worksheets yet - ask your tutor or parent to generate one." />
           )}
           {(worksheets ?? []).map((worksheet) => {
             const submission = latestSubmissionByWorksheet.get(worksheet.id);
@@ -146,7 +148,7 @@ export default async function StudentPortalPage({
               <a
                 key={worksheet.id}
                 href={`${appUrl}/s/${worksheet.digital_code}`}
-                className="bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-4 flex items-center justify-between gap-4"
+                className={`${interactiveCardClass} p-4 flex items-center justify-between gap-4`}
               >
                 <div>
                   <p className="text-sm font-medium text-[#1A1A18]">
