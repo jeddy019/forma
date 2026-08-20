@@ -61,6 +61,15 @@ export type QuestionType = 'warm-up' | 'core' | 'challenge';
 export interface Question {
   id: string;
   type: QuestionType;
+  // Phase 7 Step 37 (Zero to Mastery): which component sub-skill of the
+  // topic this question targets (e.g. "elimination method" within
+  // simultaneous equations) - see systemPrompt.ts's decomposition
+  // instruction. Required, not nullable: unlike diagram_spec, there is no
+  // legitimate "no sub-skill" case - every question is deliberately
+  // decomposed by design. A plain string leaf, same cost as `topic`/`id`
+  // against the schema's documented nullable/union-node cap (see
+  // DIAGRAM_SPEC_SCHEMA's comment below) - adds zero.
+  sub_skill: string;
   parts: QuestionPart[];
 }
 
@@ -130,6 +139,7 @@ export const WORKSHEET_JSON_SCHEMA = {
         properties: {
           id: { type: 'string' },
           type: { type: 'string', enum: ['warm-up', 'core', 'challenge'] },
+          sub_skill: { type: 'string' },
           parts: {
             type: 'array',
             items: {
@@ -159,7 +169,7 @@ export const WORKSHEET_JSON_SCHEMA = {
             },
           },
         },
-        required: ['id', 'type', 'parts'],
+        required: ['id', 'type', 'sub_skill', 'parts'],
         additionalProperties: false,
       },
     },
@@ -168,7 +178,11 @@ export const WORKSHEET_JSON_SCHEMA = {
   additionalProperties: false,
 };
 
-const EXPECTED_TYPE_ORDER: QuestionType[] = [
+// Exported so generateWorksheet.ts can pass it through as validateWorksheet's
+// default (see below) and so it's usable as an explicit reference value -
+// not just for internal use anymore now that DAILY_TYPE_ORDER exists
+// alongside it.
+export const EXPECTED_TYPE_ORDER: QuestionType[] = [
   'warm-up',
   'warm-up',
   'core',
@@ -181,25 +195,43 @@ const EXPECTED_TYPE_ORDER: QuestionType[] = [
   'challenge',
 ];
 
+// Phase 7 Step 40 (Daily practice mode): 5 questions, all "core" - no
+// warm-up/challenge tiering. CLAUDE.md's own daily-mode principle ("5
+// questions on a single sub-skill... short, focused") never mentions
+// tiering the way the main worksheet's structure explicitly does, so this
+// doesn't invent a proportional split it wasn't asked for.
+export const DAILY_TYPE_ORDER: QuestionType[] = ['core', 'core', 'core', 'core', 'core'];
+
 // Structured outputs already guarantees the shape above; this checks the
 // business rules a JSON Schema can't express (exact question count and the
 // warm-up/core/challenge order the PDF section dividers depend on).
-export function validateWorksheet(data: unknown): GeneratedWorksheet {
+// expectedTypeOrder defaults to the standard 10-question worksheet shape;
+// callers building a daily practice worksheet (Step 40) pass
+// DAILY_TYPE_ORDER instead - one validator, parameterized, rather than a
+// forked duplicate.
+export function validateWorksheet(data: unknown, expectedTypeOrder: QuestionType[] = EXPECTED_TYPE_ORDER): GeneratedWorksheet {
   if (typeof data !== 'object' || data === null) {
     throw new Error('AI response was not a JSON object.');
   }
   const worksheet = data as GeneratedWorksheet;
 
-  if (!Array.isArray(worksheet.questions) || worksheet.questions.length !== 10) {
-    throw new Error(`Expected exactly 10 questions, got ${Array.isArray(worksheet.questions) ? worksheet.questions.length : 'none'}.`);
+  if (!Array.isArray(worksheet.questions) || worksheet.questions.length !== expectedTypeOrder.length) {
+    throw new Error(
+      `Expected exactly ${expectedTypeOrder.length} questions, got ${Array.isArray(worksheet.questions) ? worksheet.questions.length : 'none'}.`
+    );
   }
 
   worksheet.questions.forEach((question, i) => {
-    if (question.type !== EXPECTED_TYPE_ORDER[i]) {
-      throw new Error(`Question ${i + 1} should be "${EXPECTED_TYPE_ORDER[i]}", got "${question.type}".`);
+    if (question.type !== expectedTypeOrder[i]) {
+      throw new Error(`Question ${i + 1} should be "${expectedTypeOrder[i]}", got "${question.type}".`);
     }
     if (!Array.isArray(question.parts) || question.parts.length === 0) {
       throw new Error(`Question ${i + 1} has no parts.`);
+    }
+    // Structured Outputs guarantees sub_skill is a string, not that it's
+    // meaningful - same defensive non-empty check as alignment_note below.
+    if (!question.sub_skill || question.sub_skill.trim().length === 0) {
+      throw new Error(`Question ${i + 1} has an empty sub_skill.`);
     }
   });
 

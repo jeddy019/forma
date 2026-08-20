@@ -9,6 +9,13 @@ import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { sendWorksheetReadyEmail } from '@/lib/email/send';
+import { selectFundamentalsTarget } from '@/lib/mastery/selectFundamentalsTarget';
+import { clearFundamentalsFlag } from '@/lib/mastery/clearFundamentalsFlag';
+import { EXPECTED_TYPE_ORDER, DAILY_TYPE_ORDER } from '@/lib/ai/schema';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { pullVerifiedQuestions } from '@/lib/questionBank/pullVerifiedQuestions';
+import { blendWithBank } from '@/lib/questionBank/blendWithBank';
+import type { SkillMap } from '@/lib/mastery/types';
 import type { Country } from '@/lib/constants';
 
 const TOPIC_MAX_LENGTH = 1000;
@@ -30,6 +37,7 @@ interface StudentProfileRow {
   curriculum_level: string;
   year_level: string;
   subjects: string[] | null;
+  skill_map: SkillMap | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -81,7 +89,7 @@ export async function POST(request: NextRequest) {
 
   const { data: student, error: studentError } = await supabase
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects')
+    .select('id, name, email, country, curriculum_level, year_level, subjects, skill_map')
     .eq('id', studentId)
     .single<StudentProfileRow>();
 
@@ -102,6 +110,29 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .maybeSingle();
 
+  // Phase 7 Step 41 (Return to fundamentals): AI-inferred on demand, no
+  // curated prerequisite table - the model names the prerequisite itself
+  // using its own curriculum knowledge, folded into the one generation call
+  // that was happening anyway. Not personalized to group mode (excluded -
+  // not one student) or the scheduled cron (deferred, same-shape follow-up).
+  //
+  // Routed through the same 5-question, single-sub-skill shape as Step 40's
+  // daily mode rather than the standard 10-question worksheet - found live
+  // during verification, not assumed: forcing gpt-4o to write a full
+  // 2-warm-up/6-core/2-challenge worksheet confined to one narrow
+  // prerequisite sub-skill measurably broke its question-count reliability
+  // (5 of 6 test generations came back under 10 questions, vs. zero
+  // failures observed anywhere else this session), while the identical
+  // single-sub-skill instruction inside the already-5-question daily shape
+  // was reliable every time it was tested. A focused 5-question set is also
+  // a better pedagogical fit for "master the prerequisite first" than a
+  // full tiered worksheet forces anyway.
+  const fundamentalsTarget = selectFundamentalsTarget(student.skill_map ?? {});
+  const subSkillDirective = fundamentalsTarget
+    ? `The student is struggling with the sub-skill "${fundamentalsTarget.subSkill}" within "${fundamentalsTarget.topic}" (scored below 50% last time). Using your own curriculum knowledge, identify its single prerequisite sub-skill and write every question on that prerequisite instead - name the prerequisite in alignment_note.`
+    : undefined;
+  const typeOrder = fundamentalsTarget ? DAILY_TYPE_ORDER : EXPECTED_TYPE_ORDER;
+
   const userPrompt = buildUserPrompt({
     studentName: student.name,
     country: student.country,
@@ -110,6 +141,8 @@ export async function POST(request: NextRequest) {
     subjectHint: student.subjects ?? [],
     sessionNotes: latestNote?.content ?? 'none',
     topicPrompt: sanitizedTopic,
+    questionCount: fundamentalsTarget ? 5 : 10,
+    subSkillDirective,
   });
 
   const controller = new AbortController();
@@ -117,7 +150,7 @@ export async function POST(request: NextRequest) {
 
   let worksheet;
   try {
-    worksheet = await generateWorksheet(userPrompt, controller.signal);
+    worksheet = await generateWorksheet(userPrompt, controller.signal, typeOrder);
   } catch (error) {
     if (controller.signal.aborted) {
       return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
@@ -126,6 +159,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
   } finally {
     clearTimeout(timeout);
+  }
+
+  // Phase 7 Step 42: pull verified question_bank rows for the AI's own
+  // inferred subject (only known now, post-generation) and swap in any
+  // matching-sub-skill question - see blendWithBank.ts for why this is
+  // post-hoc. question_bank has deny-all RLS to anon/authenticated (see
+  // admin/question-bank/actions.ts's own comment), so this must go through
+  // the admin client, not the RLS'd `supabase` used everywhere else in this
+  // route - best-effort, a bank lookup failure must not block generation.
+  try {
+    const admin = createAdminClient();
+    const bankRows = await pullVerifiedQuestions(admin, student.country, student.curriculum_level, worksheet.subject);
+    worksheet = blendWithBank(worksheet, bankRows).worksheet;
+  } catch (error) {
+    console.error('Failed to blend question_bank rows', error);
   }
 
   const { questionsJson, markSchemeJson } = splitMarkScheme(worksheet);
@@ -169,6 +217,21 @@ export async function POST(request: NextRequest) {
   if (insertError || !inserted) {
     console.error('Failed to store worksheet', insertError);
     return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+  }
+
+  // Only clear on a SUCCESSFUL insert (not a failed attempt above) - a
+  // retry after a transient failure should still route to fundamentals.
+  // Best-effort: a failure here must not fail the response for a worksheet
+  // that was already successfully generated and stored.
+  if (fundamentalsTarget) {
+    try {
+      await supabase
+        .from('student_profiles')
+        .update({ skill_map: clearFundamentalsFlag(student.skill_map ?? {}, fundamentalsTarget.subSkill) })
+        .eq('id', studentId);
+    } catch (error) {
+      console.error('Failed to clear fundamentals flag', error);
+    }
   }
 
   // EMAIL 2 (Email Templates): "Worksheet ready - manual generation, sent

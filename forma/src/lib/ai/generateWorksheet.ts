@@ -1,25 +1,98 @@
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { WORKSHEET_SYSTEM_PROMPT } from './systemPrompt';
-import { WORKSHEET_JSON_SCHEMA, validateWorksheet, type GeneratedWorksheet } from './schema';
+import { WORKSHEET_JSON_SCHEMA, validateWorksheet, EXPECTED_TYPE_ORDER, type GeneratedWorksheet, type QuestionType } from './schema';
 
-const client = new Anthropic();
+// PROVIDER: OpenAI (gpt-4o) is the standing default, per the user directly
+// (2026-08-19) - not a temporary workaround pending an Anthropic
+// restoration. Supersedes Tech Stack's "claude-haiku-4-5 for worksheet
+// generation" line. The Anthropic client and its original call are kept
+// below, unused, as an alternate path - not a "restore this" placeholder,
+// just a clean swap available if Anthropic is ever the deliberate choice
+// again. WORKSHEET_JSON_SCHEMA (schema.ts) is unchanged - every object node
+// already sets additionalProperties:false and lists every property as
+// required, which happens to satisfy OpenAI Structured Outputs' strict-mode
+// rules as well as Anthropic's, so no schema edit was needed for the swap.
+const openaiClient = new OpenAI();
+const anthropicClient = new Anthropic();
 
-const MODEL = 'claude-haiku-4-5';
+// Deliberately the full model, not gpt-4o-mini - user preference (quality
+// over cost) for this task, confirmed live after mini was flagged as a
+// cost-tier match to claude-haiku-4-5. Costs more per generation; no
+// other code path depends on which OpenAI model this constant names.
+const OPENAI_MODEL = 'gpt-4o';
+const ANTHROPIC_MODEL = 'claude-haiku-4-5';
 // 10 questions with diagram_specs and full mark schemes can run past 8000
 // tokens - a truncated response looks identical to invalid JSON and burns a
-// retry for no reason. 16000 stays well under the SDK's non-streaming
-// timeout threshold (~16-21K tokens) so no need to switch to streaming.
+// retry for no reason. 16000 stays well under either provider's
+// non-streaming timeout threshold so no need to switch to streaming.
 const MAX_TOKENS = 16000;
 const MAX_ATTEMPTS = 2;
 
-export async function generateWorksheet(userPrompt: string, signal: AbortSignal): Promise<GeneratedWorksheet> {
+export async function generateWorksheet(
+  userPrompt: string,
+  signal: AbortSignal,
+  expectedTypeOrder: QuestionType[] = EXPECTED_TYPE_ORDER
+): Promise<GeneratedWorksheet> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const response = await client.messages.create(
+      const response = await openaiClient.chat.completions.create(
         {
-          model: MODEL,
+          model: OPENAI_MODEL,
+          max_completion_tokens: MAX_TOKENS,
+          messages: [
+            { role: 'system', content: WORKSHEET_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'worksheet', strict: true, schema: WORKSHEET_JSON_SCHEMA },
+          },
+        },
+        { signal }
+      );
+
+      const message = response.choices[0]?.message;
+      if (message?.refusal) {
+        throw new Error('Generation was declined - please rephrase the topic.');
+      }
+
+      const text = message?.content;
+      if (!text) {
+        throw new Error('AI response had no text content.');
+      }
+
+      const parsed = JSON.parse(text);
+      return validateWorksheet(parsed, expectedTypeOrder);
+    } catch (error) {
+      lastError = error;
+      if (signal.aborted) throw error;
+      // Retry once on any failure (invalid JSON, failed validation, transient
+      // API error) - see CLAUDE.md Technical Challenge 2.
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Worksheet generation failed.');
+}
+
+// INACTIVE - the original Anthropic call path. Swap this back in as
+// generateWorksheet's body if Anthropic is ever the deliberate choice
+// again; anthropicClient/ANTHROPIC_MODEL above are kept in place for
+// exactly this.
+async function generateWorksheetAnthropic(
+  userPrompt: string,
+  signal: AbortSignal,
+  expectedTypeOrder: QuestionType[] = EXPECTED_TYPE_ORDER
+): Promise<GeneratedWorksheet> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await anthropicClient.messages.create(
+        {
+          model: ANTHROPIC_MODEL,
           max_tokens: MAX_TOKENS,
           system: WORKSHEET_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: userPrompt }],
@@ -38,14 +111,13 @@ export async function generateWorksheet(userPrompt: string, signal: AbortSignal)
       }
 
       const parsed = JSON.parse(textBlock.text);
-      return validateWorksheet(parsed);
+      return validateWorksheet(parsed, expectedTypeOrder);
     } catch (error) {
       lastError = error;
       if (signal.aborted) throw error;
-      // Retry once on any failure (invalid JSON, failed validation, transient
-      // API error) - see CLAUDE.md Technical Challenge 2.
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error('Worksheet generation failed.');
 }
+void generateWorksheetAnthropic;

@@ -20,8 +20,11 @@ const inputClass =
 const primaryButtonClass =
   'px-6 py-3 rounded-[10px] text-sm font-medium bg-[#1A3D2E] text-white hover:bg-[#152F23] active:scale-[0.98] transition-all duration-micro ease-premium disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100';
 
-const cardClass =
-  'bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-6 shadow-card';
+// Same drift as page.tsx's local cardClass - shadow-card was already the
+// right token, but the border was still the pre-Phase-8 0.5px value, which
+// renders as invisible on plenty of displays (the exact bug the app-wide
+// fix addressed everywhere else). Bumped to a full 1px to match.
+const cardClass = 'bg-[#F0EBE3] border border-[#E0D9D0] rounded-[12px] p-6 shadow-card';
 
 export default function StudentWorksheetForm({
   digitalCode,
@@ -116,7 +119,7 @@ export default function StudentWorksheetForm({
           <div key={question.id}>
             {divider && (
               <p
-                className={`text-[9px] uppercase tracking-widest mb-2 mt-2 ${
+                className={`text-[9px] uppercase tracking-widest mb-3 mt-4 pb-1.5 border-b border-[#E0D9D0] ${
                   divider === 'Warm-up' ? 'text-[#C8A84B]' : 'text-[#1A3D2E]'
                 }`}
               >
@@ -149,19 +152,25 @@ export default function StudentWorksheetForm({
                     </div>
                     {part.diagram_spec && (
                       <div
-                        className="my-2 flex justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+                        className="my-3 flex justify-center [&_svg]:max-w-full [&_svg]:h-auto"
                         dangerouslySetInnerHTML={{ __html: renderDiagramSvg(part.diagram_spec) }}
                       />
                     )}
-                    <textarea
-                      rows={2}
-                      maxLength={2000}
-                      className={inputClass}
-                      placeholder="Type your answer"
-                      value={answers[question.id]?.[partIndex] ?? ''}
-                      onChange={(event) => setAnswer(question.id, partIndex, event.target.value)}
-                      disabled={phase === 'submitting'}
-                    />
+                    {/* A hairline above the answer input - the same "question
+                        ends, answer space begins" separator as the PDF
+                        template, so the digital and printed versions read as
+                        the same product rather than two different ones. */}
+                    <div className="pt-2 mt-1 border-t border-[#E0D9D0]">
+                      <textarea
+                        rows={2}
+                        maxLength={2000}
+                        className={inputClass}
+                        placeholder="Type your answer"
+                        value={answers[question.id]?.[partIndex] ?? ''}
+                        onChange={(event) => setAnswer(question.id, partIndex, event.target.value)}
+                        disabled={phase === 'submitting'}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

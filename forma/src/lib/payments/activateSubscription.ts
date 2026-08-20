@@ -3,6 +3,7 @@ import { decodeTxRef } from './txRef';
 import { PLAN_PRICING, isSubscribableRole, type SubscribableRole } from './plans';
 import { sendPaymentConfirmedEmail, sendPaymentFailedEmail } from '@/lib/email/send';
 import { findActiveSubscriptionId } from './flutterwave';
+import { createInvoice } from '@/lib/invoices/createInvoice';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -66,7 +67,15 @@ export async function activateSubscriptionFromTransaction(
   admin: AdminClient,
   transactionId: string,
   txRef: string,
-  customerEmail?: string | null
+  customerEmail?: string | null,
+  // Optional so both existing call sites keep compiling if either omits
+  // them, but both actually pass verifyTransaction's own data.amount/
+  // data.currency (the real charged amount, not PLAN_PRICING's static
+  // list) - used for the invoice only; the confirmation email's own
+  // amountFormatted line below is unchanged and still reads from
+  // PLAN_PRICING, matching its pre-existing behaviour.
+  chargedAmount?: number,
+  chargedCurrency?: string
 ): Promise<{ activated: boolean; reason?: string }> {
   const eventId = `flw-tx-${transactionId}`;
 
@@ -116,11 +125,38 @@ export async function activateSubscriptionFromTransaction(
   });
 
   const planName = owner.planKey === 'tutor' ? 'Tutor' : 'Parent';
-  await sendPaymentConfirmedEmail(owner.email, {
-    planName,
-    amountFormatted: `$${PLAN_PRICING[owner.planKey].amount.toFixed(2)}`,
-    renewalDateFormatted: new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-  });
+
+  // Best-effort, same as the subscription-id lookup above - a PDF/DB
+  // failure here must not undo the plan activation that already happened,
+  // it just means the confirmation email goes out without an attachment
+  // (PaymentConfirmedEmail's invoiceAttached prop covers that case).
+  let invoicePdf: { filename: string; content: Buffer } | undefined;
+  try {
+    const invoice = await createInvoice(admin, {
+      userId: owner.userId,
+      customerEmail: owner.email,
+      paymentReference: transactionId,
+      amount: chargedAmount ?? PLAN_PRICING[owner.planKey].amount,
+      currency: chargedCurrency ?? 'USD',
+      planKey: owner.planKey,
+    });
+    if (invoice) {
+      invoicePdf = { filename: `${invoice.invoiceNumber}.pdf`, content: invoice.pdfBuffer };
+    }
+  } catch (error) {
+    console.error('Failed to create invoice', error);
+  }
+
+  await sendPaymentConfirmedEmail(
+    owner.email,
+    {
+      planName,
+      amountFormatted: `$${PLAN_PRICING[owner.planKey].amount.toFixed(2)}`,
+      renewalDateFormatted: new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+      invoiceAttached: Boolean(invoicePdf),
+    },
+    invoicePdf
+  );
 
   return { activated: true };
 }

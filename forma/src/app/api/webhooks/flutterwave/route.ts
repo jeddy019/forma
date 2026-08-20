@@ -44,7 +44,14 @@ export async function POST(request: NextRequest) {
       const admin = createAdminClient();
 
       if (verified?.data?.status === 'successful') {
-        await activateSubscriptionFromTransaction(admin, String(data.id), data.tx_ref, verified.data.customer?.email);
+        await activateSubscriptionFromTransaction(
+          admin,
+          String(data.id),
+          data.tx_ref,
+          verified.data.customer?.email,
+          verified.data.amount,
+          verified.data.currency
+        );
       } else if (verified?.data && verified.data.status !== 'successful') {
         // EMAIL 8: covers both a failed first payment and a failed
         // renewal attempt - notifyPaymentFailedFromTransaction shares

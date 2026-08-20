@@ -28,8 +28,14 @@ interface WorksheetRow {
   };
 }
 
-const cardClass =
-  'bg-[#F0EBE3] border-[0.5px] border-[#E0D9D0] rounded-[12px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.05)]';
+// Kept local rather than importing formStyles.ts's cardClass, same
+// deliberate reasoning as StudentWorksheetForm.tsx (this route is the one
+// place in the app with zero auth) - but the actual values had drifted from
+// it: still the pre-Phase-8 0.5px border and an ad hoc shadow value, missed
+// when the rest of the app's card/shadow contrast was fixed. Corrected to
+// match (1px border, shadow-card) - confirmed live this page read flatter
+// than the rest of the app for exactly that reason.
+const cardClass = 'bg-[#F0EBE3] border border-[#E0D9D0] rounded-[12px] p-6 shadow-card';
 
 export default async function StudentWorksheetPage({
   params,

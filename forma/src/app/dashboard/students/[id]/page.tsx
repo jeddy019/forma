@@ -7,6 +7,7 @@ import { computeTopicsCovered } from '@/lib/curriculum/topicsCovered';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import { BookOpen, StickyNote, ChevronLeft } from 'lucide-react';
 import SessionNotesForm from './SessionNotesForm';
+import ParentReportForm from './ParentReportForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -23,6 +24,7 @@ interface StudentRow {
   curriculum_level: string | null;
   year_level: string | null;
   subjects: string[] | null;
+  parent_email: string | null;
 }
 
 interface SessionNoteRow {
@@ -65,7 +67,7 @@ export default async function StudentDetailPage({
   // covers both "doesn't exist" and "isn't yours" without distinguishing them.
   const { data: student } = await supabase
     .from('student_profiles')
-    .select('id, name, curriculum_level, year_level, subjects')
+    .select('id, name, curriculum_level, year_level, subjects, parent_email')
     .eq('id', studentId)
     .single<StudentRow>();
 
@@ -154,6 +156,8 @@ export default async function StudentDetailPage({
         </div>
       ) : (
         <>
+          <ParentReportForm studentId={student.id} hasParentEmail={Boolean(student.parent_email)} />
+
           <SessionNotesForm studentId={student.id} />
 
           <div className="flex flex-col gap-3">

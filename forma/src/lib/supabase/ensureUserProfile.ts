@@ -9,14 +9,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // dashboard visit to create the row the first time an authenticated request
 // actually arrives - covering both the immediate-session and
 // confirm-later-then-log-in paths with one code path.
-export async function ensureUserProfile(supabase: SupabaseClient, userId: string): Promise<void> {
-  const { data: existing } = await supabase.from('users').select('id').eq('id', userId).maybeSingle();
-  if (existing) return;
+// Returns the user's role so callers (dashboard/layout.tsx) don't need a
+// second round-trip just to read back what this function already fetched -
+// the layout previously ran this existence check and then its own separate
+// `.select('role')` query on every single dashboard page load.
+export async function ensureUserProfile(supabase: SupabaseClient, userId: string): Promise<string | null> {
+  const { data: existing } = await supabase.from('users').select('id, role').eq('id', userId).maybeSingle();
+  if (existing) return existing.role ?? null;
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) return null;
 
   const role = typeof user.user_metadata?.role === 'string' ? user.user_metadata.role : 'tutor';
   const region = typeof user.user_metadata?.region === 'string' ? user.user_metadata.region : 'england';
@@ -29,4 +33,6 @@ export async function ensureUserProfile(supabase: SupabaseClient, userId: string
     region,
     paper_size: paperSize,
   });
+
+  return role;
 }

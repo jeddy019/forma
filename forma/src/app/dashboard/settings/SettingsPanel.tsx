@@ -11,16 +11,35 @@ const PLAN_LABELS: Record<string, { name: string; price: string }> = {
   parent: { name: 'Parent', price: '$10/month' },
 };
 
+export interface InvoiceRow {
+  id: string;
+  invoice_number: string;
+  amount: number;
+  currency: string;
+  plan: string;
+  created_at: string;
+}
+
+function formatInvoiceAmount(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
+
 export default function SettingsPanel({
   role,
   isPro,
   planExpiresAt,
   paymentNotice,
+  invoices,
 }: {
   role: string | null;
   isPro: boolean;
   planExpiresAt: string | null;
   paymentNotice: 'success' | 'failed' | null;
+  invoices: InvoiceRow[];
 }) {
   const router = useRouter();
   const [upgrading, setUpgrading] = useState(false);
@@ -120,6 +139,37 @@ export default function SettingsPanel({
       </div>
 
       {error && <p className="text-sm text-[#C0392B]">{error}</p>}
+
+      <div className={cardClass}>
+        <h2 className="text-lg font-semibold text-[#1A1A18] mb-3">Billing history</h2>
+        {invoices.length === 0 ? (
+          <p className="text-sm text-[#9A9080] italic">No invoices yet - one appears here after your first payment.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-[#E0D9D0]">
+            {invoices.map((invoice) => (
+              <div key={invoice.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                <div className="flex flex-col">
+                  <span className="text-sm text-[#1A1A18] font-medium">
+                    {PLAN_LABELS[invoice.plan]?.name ?? invoice.plan} plan
+                  </span>
+                  <span className="text-xs text-[#9A9080]">
+                    {new Date(invoice.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-[#1A1A18]">{formatInvoiceAmount(invoice.amount, invoice.currency)}</span>
+                  <a
+                    href={`/api/invoices/${invoice.id}/pdf`}
+                    className="text-sm text-[#1A3D2E] font-medium underline"
+                  >
+                    Download
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className={cardClass}>
         <h2 className="text-lg font-semibold text-[#1A1A18] mb-2">Delete account</h2>

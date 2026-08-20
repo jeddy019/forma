@@ -54,7 +54,7 @@ CREATE TABLE worksheets (
   difficulty TEXT,
   paper_size TEXT DEFAULT 'a4',
   difficulty_feedback TEXT CHECK (difficulty_feedback IN ('too_easy','just_right','too_hard',NULL)),
-  generated_from TEXT DEFAULT 'manual' CHECK (generated_from IN ('manual','scheduled')),
+  generated_from TEXT DEFAULT 'manual' CHECK (generated_from IN ('manual','scheduled','daily')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   -- Enforces the 30-day digital link expiry promised in User Challenges -
   -- see supabase/add-worksheet-expiry.sql for the standalone fix, applied

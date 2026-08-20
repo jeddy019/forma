@@ -23,7 +23,18 @@ import ScheduleFailedEmail, { type ScheduleFailedEmailProps } from '@/emails/Sch
 // expects (welcome, a worksheet they just requested, billing), not the
 // recurring/summary category that requirement is aimed at.
 
-async function send(args: { to: string; subject: string; react: React.ReactElement; headers?: Record<string, string> }): Promise<boolean> {
+interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+}
+
+async function send(args: {
+  to: string;
+  subject: string;
+  react: React.ReactElement;
+  headers?: Record<string, string>;
+  attachments?: EmailAttachment[];
+}): Promise<boolean> {
   // Checked before touching the Resend client at all - see resend.ts's own
   // comment for why: constructing the SDK with no key throws synchronously,
   // so this check has to happen first, not inside a try/catch around .send().
@@ -38,6 +49,7 @@ async function send(args: { to: string; subject: string; react: React.ReactEleme
     subject: args.subject,
     react: args.react,
     headers: args.headers,
+    attachments: args.attachments,
   });
   if (error) {
     console.error(`Failed to send email (${args.subject})`, error);
@@ -85,8 +97,17 @@ export function sendTutorParentReportEmail(to: string, props: TutorParentReportE
   });
 }
 
-export function sendPaymentConfirmedEmail(to: string, props: PaymentConfirmedEmailProps): Promise<boolean> {
-  return send({ to, subject: 'Payment confirmed', react: <PaymentConfirmedEmail {...props} /> });
+export function sendPaymentConfirmedEmail(
+  to: string,
+  props: PaymentConfirmedEmailProps,
+  invoicePdf?: { filename: string; content: Buffer }
+): Promise<boolean> {
+  return send({
+    to,
+    subject: 'Payment confirmed',
+    react: <PaymentConfirmedEmail {...props} />,
+    attachments: invoicePdf ? [invoicePdf] : undefined,
+  });
 }
 
 export function sendRenewalReminderEmail(to: string, props: RenewalReminderEmailProps): Promise<boolean> {

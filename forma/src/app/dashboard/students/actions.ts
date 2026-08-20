@@ -33,6 +33,7 @@ export async function createStudentAction(
   const curriculumLevel = String(formData.get('curriculumLevel') ?? '').trim();
   const yearLevel = String(formData.get('yearLevel') ?? '').trim();
   const email = String(formData.get('email') ?? '').trim();
+  const parentEmail = String(formData.get('parentEmail') ?? '').trim();
   const weaknesses = String(formData.get('weaknesses') ?? '').trim();
   const subjects = formData.getAll('subjects').map(String);
 
@@ -55,6 +56,12 @@ export async function createStudentAction(
   if (email && (email.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(email))) {
     return { error: 'Please enter a valid email address, or leave it blank.' };
   }
+  // Also optional - only shown/meaningful for tutor accounts (see
+  // add-parent-email.sql's own comment on why this is a separate field
+  // from the student's own optional email above).
+  if (parentEmail && (parentEmail.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(parentEmail))) {
+    return { error: 'Please enter a valid parent email address, or leave it blank.' };
+  }
 
   const validSubjects = subjects.filter((subject): subject is Subject =>
     (SUBJECTS as readonly string[]).includes(subject)
@@ -68,6 +75,7 @@ export async function createStudentAction(
     year_level: yearLevel,
     subjects: validSubjects,
     email: email || null,
+    parent_email: parentEmail || null,
     weaknesses: weaknesses || null,
   });
 

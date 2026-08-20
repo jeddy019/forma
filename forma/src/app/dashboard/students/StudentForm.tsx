@@ -1,9 +1,11 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { UserPlus } from 'lucide-react';
 import { createStudentAction, type CreateStudentResult } from './actions';
-import { SUBJECTS } from '@/lib/constants';
+import { CORE_SUBJECTS, CODING_SUBJECTS, COMING_SOON_SUBJECTS } from '@/lib/constants';
 import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
+import { FormHeader } from '@/lib/ui/FormHeader';
 
 // student_profiles.curriculum_level is unconstrained TEXT (no DB CHECK), so
 // this can follow the Country and Curriculum Catalogue's labels directly
@@ -18,13 +20,13 @@ const CURRICULUM_LEVELS_BY_COUNTRY: Record<string, string[]> = {
 
 const initialState: CreateStudentResult = {};
 
-export default function StudentForm() {
+export default function StudentForm({ isTutor }: { isTutor: boolean }) {
   const [state, formAction, pending] = useActionState(createStudentAction, initialState);
   const [country, setCountry] = useState('england');
 
   return (
     <form action={formAction} className={`${accentCardClass} flex flex-col gap-4`}>
-      <h2 className="text-lg font-semibold text-[#1A1A18]">Add a student</h2>
+      <FormHeader icon={UserPlus} title="Add a student" />
 
       <div>
         <label className={labelClass} htmlFor="name">
@@ -78,7 +80,7 @@ export default function StudentForm() {
       <div>
         <span className={labelClass}>Subjects</span>
         <div className="flex flex-wrap gap-2">
-          {SUBJECTS.map((subject) => (
+          {CORE_SUBJECTS.map((subject) => (
             <label
               key={subject}
               className="flex items-center gap-1.5 text-sm text-[#1A1A18] bg-white border border-[#E0D9D0] rounded-[10px] px-3 py-1.5 cursor-pointer"
@@ -87,6 +89,39 @@ export default function StudentForm() {
               {subject}
             </label>
           ))}
+        </div>
+
+        <div className="mt-3">
+          <span className="text-xs text-[#9A9080]">Computer Science</span>
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {CODING_SUBJECTS.map((subject) => (
+              <label
+                key={subject}
+                className="flex items-center gap-1.5 text-sm text-[#1A1A18] bg-white border border-[#E0D9D0] rounded-[10px] px-3 py-1.5 cursor-pointer"
+              >
+                <input type="checkbox" name="subjects" value={subject} className="accent-[#1A3D2E]" />
+                {subject}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Deliberately non-interactive - no input, no click handler, no
+            name attribute, so nothing here can ever be submitted. Purely a
+            roadmap signal on the actual subject-selection UI, per the
+            user's explicit "show it clearly but do not make it clickable". */}
+        <div className="mt-3">
+          <span className="text-xs text-[#9A9080]">More subjects coming soon</span>
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {COMING_SOON_SUBJECTS.map((subject) => (
+              <span
+                key={subject}
+                className="text-sm text-[#9A9080] bg-[#F0EBE3] border border-[#E0D9D0] rounded-[10px] px-3 py-1.5 cursor-default"
+              >
+                {subject}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -103,6 +138,22 @@ export default function StudentForm() {
           placeholder="Leave blank to send worksheets to your own email instead"
         />
       </div>
+
+      {isTutor && (
+        <div>
+          <label className={labelClass} htmlFor="parentEmail">
+            Parent email (optional)
+          </label>
+          <input
+            id="parentEmail"
+            name="parentEmail"
+            type="email"
+            maxLength={200}
+            className={inputClass}
+            placeholder="For sending parent progress reports"
+          />
+        </div>
+      )}
 
       <div>
         <label className={labelClass} htmlFor="weaknesses">
