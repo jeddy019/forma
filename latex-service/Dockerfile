@@ -51,11 +51,25 @@ RUN groupadd -r forma && useradd -r -g forma -m forma
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+RUN npm install
 
 COPY tsconfig.json ./
 COPY src ./src
-RUN npx --package=typescript tsc -p tsconfig.json
+RUN npx tsc -p tsconfig.json
+
+# Deploy failure found and fixed live (2026-08-20): "npm install --omit=dev"
+# here skips devDependencies entirely, which is where typescript,
+# @types/node, and @types/express all live (package.json) - the tsc build
+# above then had no type declarations to compile against at all (every
+# "Cannot find name 'process'/'console'/'Buffer'" error was this, not a
+# real code bug), and npx's "--package=typescript" flag was separately
+# fetching a fresh, unpinned typescript from the registry instead of using
+# the pinned ^5.6.0 devDependency, compounding the confusion. Fixed by
+# installing the full dependency tree (including dev) before the build,
+# letting npx resolve typescript from node_modules/.bin like it should,
+# then pruning dev-only packages afterward so the final image doesn't
+# carry typescript/@types/* it no longer needs at runtime.
+RUN npm prune --omit=dev
 
 RUN mkdir -p /app/scratch && chown -R forma:forma /app
 USER forma
