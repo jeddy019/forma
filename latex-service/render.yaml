@@ -1,0 +1,25 @@
+# Render Blueprint for the LaTeX compile microservice. Paths below are
+# written relative to the repo root (not to this file's own location in
+# latex-service/) - that's how Render's dockerfilePath/dockerContext are
+# documented to resolve regardless of where render.yaml itself lives, so
+# this stays correct even though the file sits in this subfolder rather
+# than the repo root, per how it was asked to be placed.
+#
+# No "plan" key is set on purpose - see latex-service/README.md's
+# "Deploying to Render" section: sizing for ~3 concurrent LuaLaTeX compiles
+# needs a real look at Render's current plan pricing, not a guess baked
+# into a committed file. Pick/upgrade the plan in the dashboard during
+# Blueprint creation instead.
+services:
+  - type: web
+    name: forma-latex-service
+    runtime: docker
+    dockerfilePath: ./latex-service/Dockerfile
+    dockerContext: ./latex-service
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      # Prompted for during Blueprint creation (sync: false = never
+      # committed here). Must match LATEX_COMPILE_SECRET in Vercel exactly.
+      - key: LATEX_COMPILE_SECRET
+        sync: false
