@@ -2,9 +2,11 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generatePdf } from '@/lib/pdf/browser-pool';
-import { renderWorksheetHtml, type WorksheetQuestion } from '@/lib/pdf/worksheet-template';
-import { renderMarkSchemeHtml, type MarkSchemeQuestion } from '@/lib/pdf/mark-scheme-template';
+import { compileLatex, LatexCompileError } from '@/lib/pdf/latexClient';
+import { renderWorksheetLatex } from '@/lib/pdf/worksheetLatexTemplate';
+import { renderMarkSchemeLatex } from '@/lib/pdf/markSchemeLatexTemplate';
+import type { WorksheetQuestion } from '@/lib/pdf/worksheet-template';
+import type { MarkSchemeQuestion } from '@/lib/pdf/mark-scheme-template';
 import { isActivePro } from '@/lib/payments/planStatus';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -110,53 +112,62 @@ export async function POST(request: NextRequest) {
   const curriculumBadge = worksheet.student?.curriculum_level ?? '';
   const yearOrGradeBadge = worksheet.student?.year_level ?? '';
 
-  const { html, footerTemplate } =
+  const { source, images } =
     document === 'worksheet'
-      ? renderWorksheetHtml({
-          header: {
-            studentName,
-            subject: worksheet.subject,
-            topic: worksheet.topic,
-            curriculumBadge,
-            yearOrGradeBadge,
-            alignmentNote: worksheet.alignment_note,
-            curriculumLevelForFallback: curriculumBadge,
-            digitalCode: worksheet.digital_code,
-            createdAt,
+      ? await renderWorksheetLatex(
+          {
+            header: {
+              studentName,
+              subject: worksheet.subject,
+              topic: worksheet.topic,
+              curriculumBadge,
+              yearOrGradeBadge,
+              alignmentNote: worksheet.alignment_note,
+              curriculumLevelForFallback: curriculumBadge,
+              digitalCode: worksheet.digital_code,
+              createdAt,
+            },
+            questions: worksheet.questions_json.questions,
           },
-          questions: worksheet.questions_json.questions,
-        })
-      : renderMarkSchemeHtml({
-          header: {
-            studentName,
-            subject: worksheet.subject,
-            topic: worksheet.topic,
-            curriculumBadge,
-            yearOrGradeBadge,
-            alignmentNote: worksheet.alignment_note,
-            curriculumLevelForFallback: curriculumBadge,
-            createdAt,
+          format
+        )
+      : await renderMarkSchemeLatex(
+          {
+            header: {
+              studentName,
+              subject: worksheet.subject,
+              topic: worksheet.topic,
+              curriculumBadge,
+              yearOrGradeBadge,
+              alignmentNote: worksheet.alignment_note,
+              curriculumLevelForFallback: curriculumBadge,
+              createdAt,
+            },
+            // Presence already checked above when document === 'mark_scheme'.
+            questions: worksheet.mark_scheme_json!.questions,
           },
-          // Presence already checked above when document === 'mark_scheme'.
-          questions: worksheet.mark_scheme_json!.questions,
-        });
+          format
+        );
 
-  // Puppeteer's page.pdf() has no cancellation signal, so this race only
-  // stops the client from waiting past 25s - the underlying render still
-  // runs to completion in the background and still holds a
-  // browser-pool.ts MAX_CONCURRENT slot until it does.
+  // The compile service has no cancellation signal of its own, so this race
+  // (same pattern as before the LaTeX migration) only stops the client from
+  // waiting past 25s - an AbortController drives the fetch's own signal so
+  // the underlying HTTP request is actually cancelled too, unlike the old
+  // Puppeteer path where the render kept running in the background
+  // regardless.
   let pdfBuffer: Buffer;
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), PDF_TIMEOUT_MS);
   try {
-    pdfBuffer = await Promise.race([
-      generatePdf(html, format, { footerTemplate }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PDF_TIMEOUT')), PDF_TIMEOUT_MS)),
-    ]);
+    pdfBuffer = await compileLatex(source, images, abortController.signal);
   } catch (error) {
-    if (error instanceof Error && error.message === 'PDF_TIMEOUT') {
+    if (error instanceof Error && error.name === 'AbortError') {
       return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
     }
-    console.error('PDF generation failed', error);
+    console.error('PDF generation failed', error, error instanceof LatexCompileError ? error.log : undefined);
     return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const firstName = sanitizeForFilename(studentName.split(' ')[0] ?? '');

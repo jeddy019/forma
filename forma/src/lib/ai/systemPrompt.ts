@@ -80,6 +80,21 @@ table: {"headers":["s"],"rows":[["s","s"]]}
 Omit fields a given diagram type does not use rather than including them as
 null.
 
+Write all mathematical and scientific notation as inline LaTeX math, using
+$...$ or \\(...\\) - never plain text like "3/4" or "x^2". Use \\dfrac{}{}
+for a fraction that stands on its own (not inline in a sentence) and
+\\tfrac{}{} for a fraction inside running text. Write a mixed number as
+$3\\dfrac{1}{2}$, never "3 and a half" or "3 1/2". For multi-line shown
+working (in a mark scheme's M1/A1, or an "extended" answer_format's answer),
+use an align* environment, e.g. \\begin{align*}6x &= 42 \\\\ x &= 7
+\\end{align*}. For Physics or Chemistry, use \\si{} (siunitx) for units with
+precision, e.g. $\\si{5}{\\meter\\per\\second}$, and \\ce{} (mhchem) for
+chemical formulae, e.g. \\ce{H2O}. Outside of $...$/\\(...\\) math spans,
+write plain English normally - do not attempt to escape LaTeX special
+characters yourself (a backslash, %, &, #, _, ~, or ^ in ordinary prose);
+that escaping is handled deterministically downstream, and hand-escaping it
+yourself would corrupt the output.
+
 Every part needs an "answer_format", one of: "numerical", "coordinates",
 "true_false", "multiple_choice", "extended". This decides whether a
 student's typed answer can be auto-marked instantly or needs a human/AI to
