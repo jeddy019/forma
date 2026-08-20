@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import type { WorksheetQuestion } from '@/lib/pdf/worksheet-template';
 import { renderDiagramSvg } from '@/lib/diagrams/renderDiagramSpec';
@@ -56,6 +56,52 @@ export default function StudentWorksheetForm({
     [answers, questions]
   );
   const progressPercent = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
+
+  // The LaTeX PDF pipeline's system prompt now teaches the AI to write
+  // maths as inline $...$/\(...\) - this page is the one other surface
+  // that renders questions_json's raw text (see worksheet-template.ts's own
+  // top comment on why this file still exports the WorksheetQuestion type
+  // used here). Without this, that text would show up as literal "$x^2$"
+  // on a student's screen the moment the AI starts producing it. Same
+  // MathJax config as MATHJAX_SCRIPTS (worksheet-template.ts), loaded here
+  // directly rather than importing that HTML-string constant, since this is
+  // a live DOM/script-tag injection, not a Puppeteer page.setContent() call.
+  useEffect(() => {
+    interface MathJaxRuntime {
+      typesetPromise?: () => Promise<void>;
+      startup: { ready: () => void; defaultReady?: () => void };
+      tex: { inlineMath: string[][] };
+      svg: { fontCache: string };
+    }
+    const win = window as unknown as { MathJax?: MathJaxRuntime };
+
+    function typeset() {
+      win.MathJax?.typesetPromise?.().catch(() => {});
+    }
+
+    if (win.MathJax?.typesetPromise) {
+      typeset();
+      return;
+    }
+
+    if (document.getElementById('mathjax-script')) return;
+
+    win.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+      svg: { fontCache: 'global' },
+      startup: {
+        ready: () => {
+          win.MathJax?.startup.defaultReady?.();
+          typeset();
+        },
+      },
+    };
+
+    const script = document.createElement('script');
+    script.id = 'mathjax-script';
+    script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js';
+    document.head.appendChild(script);
+  }, [questions]);
 
   async function handleSubmit() {
     setPhase('submitting');
