@@ -44,6 +44,27 @@ The real injection defense is upstream of this service, in
 `forma/src/lib/pdf/escapeLatex.ts` — this service is a second, independent
 layer (no shell-escape, non-root), not the primary one.
 
+## Real bug found and fixed live (2026-08-20): luaotfload cold-start timeout
+
+The first-ever real generation against this service, run end to end
+through the actual production app, returned `compile_failed` with `[compile
+timed out]` in the log - not a LaTeX syntax problem. The real cause was
+`luaotfload` (LuaTeX's font loader) building its font-names database from
+scratch on first use ("db: Font names database not found, generating
+new one... This can take several minutes"), which comfortably exceeds
+`COMPILE_TIMEOUT_MS` (20s per lualatex pass, `src/server.ts`). Confirmed
+directly by calling `/compile` against the live deployed service with a
+minimal test document and reading the returned log, not guessed at.
+Worse specifically because this service is pinned to Render's free plan
+(see "Deploying to Render" below): the container spins down after 15
+minutes idle, so without a fix this multi-minute regeneration would repeat
+on every cold start, not happen once ever. Fixed in the Dockerfile by
+pre-building the font database at image-build time (`luaotfload-tool
+--update`, with `TEXMFVAR` pinned to an explicit path both the root build
+step and the non-root runtime user share) instead of paying that cost on
+the first real request. See the Dockerfile's own comment for the full
+detail.
+
 ## Fonts — one thing to verify before trusting this in production
 
 `fonts/` contains the actual OFL-licensed variable-weight TTF files for Inter
