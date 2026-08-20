@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { createQuestionAction, type QuestionBankActionResult } from './actions';
-import { COUNTRIES, SUBJECTS } from '@/lib/constants';
+import { COUNTRIES, CORE_SUBJECTS, CODING_SUBJECTS } from '@/lib/constants';
 import { ANSWER_FORMATS } from '@/lib/ai/schema';
 import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
 
@@ -54,11 +54,18 @@ export default function QuestionForm() {
             <option value="" disabled>
               Select...
             </option>
-            {SUBJECTS.map((s) => (
+            {CORE_SUBJECTS.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
+            <optgroup label="Computer Science">
+              {CODING_SUBJECTS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
         <div>

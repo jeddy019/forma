@@ -105,10 +105,10 @@ body { background: #F7F4EF; color: #1A1A18; font-family: 'Inter', sans-serif; fo
 .badge { display: inline-block; background: #E8F2ED; color: #1A3D2E; font-family: 'Inter', sans-serif; font-size: 9px; font-weight: 500; letter-spacing: 0.06em; border-radius: 20px; padding: 3px 10px; }
 .alignment-note { font-family: 'Inter', sans-serif; font-size: 10px; font-style: italic; color: #9A9080; margin-bottom: 4px; }
 .topic-date { font-family: 'Inter', sans-serif; font-size: 11px; color: #9A9080; margin-bottom: 20px; }
-.section-divider { font-family: 'Inter', sans-serif; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; margin: 16px 0 8px; page-break-after: avoid; }
+.section-divider { font-family: 'Inter', sans-serif; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; margin: 22px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #E0D9D0; page-break-after: avoid; }
 .section-divider.warm-up { color: #C8A84B; }
 .section-divider.challenge { color: #1A3D2E; }
-.question-block { page-break-inside: avoid; margin-bottom: 20px; }
+.question-block { page-break-inside: avoid; margin-bottom: 26px; }
 .question-header { display: flex; justify-content: space-between; align-items: baseline; }
 .q-number { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; color: #1A3D2E; }
 .q-marks { font-family: 'Inter', sans-serif; font-size: 10px; color: #9A9080; }

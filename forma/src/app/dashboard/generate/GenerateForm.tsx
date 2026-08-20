@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Sparkles } from 'lucide-react';
+import { FilePlus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { inputClass, labelClass, primaryButtonClass, secondaryButtonClass, cardClass, accentCardClass } from '@/lib/ui/formStyles';
 import { PageHeader } from '@/lib/ui/PageHeader';
@@ -74,15 +74,18 @@ export default function GenerateForm({
   students,
   canDownloadMarkScheme,
   canUseGroupMode,
+  canUseDailyMode,
   templates,
 }: {
   students: StudentOption[];
   canDownloadMarkScheme: boolean;
   canUseGroupMode: boolean;
+  canUseDailyMode: boolean;
   templates: TemplateOption[];
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState(students[0]?.id ?? '');
   const [groupMode, setGroupMode] = useState(false);
+  const [dailyMode, setDailyMode] = useState(false);
   const [selectedGroupStudentIds, setSelectedGroupStudentIds] = useState<string[]>([]);
   const [topicPrompt, setTopicPrompt] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
@@ -135,7 +138,7 @@ export default function GenerateForm({
     abortControllerRef.current = controller;
 
     try {
-      const res = await fetch(groupMode ? '/api/generate/group' : '/api/generate', {
+      const res = await fetch(groupMode ? '/api/generate/group' : dailyMode ? '/api/generate/daily' : '/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
@@ -235,11 +238,11 @@ export default function GenerateForm({
 
   return (
     <div className="flex flex-col gap-6 max-w-xl">
-      <PageHeader icon={Sparkles} title="Generate a worksheet" subtitle="Describe the struggle. Forma builds the practice." />
+      <PageHeader icon={FilePlus} title="New assignment" subtitle="Describe the struggle. Forma builds the practice." />
 
       {phase !== 'loading' && (
         <div className={`${accentCardClass} flex flex-col gap-4`}>
-          {canUseGroupMode && phase !== 'success' && (
+          {canUseGroupMode && !dailyMode && phase !== 'success' && (
             <label className="flex items-center gap-3 text-sm text-[#5C5849] cursor-pointer w-fit">
               <span className="relative inline-flex h-5 w-9 shrink-0">
                 <input
@@ -252,6 +255,22 @@ export default function GenerateForm({
                 <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-micro ease-premium peer-checked:translate-x-4" />
               </span>
               Group mode - one worksheet for multiple students
+            </label>
+          )}
+
+          {canUseDailyMode && !groupMode && phase !== 'success' && (
+            <label className="flex items-center gap-3 text-sm text-[#5C5849] cursor-pointer w-fit">
+              <span className="relative inline-flex h-5 w-9 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={dailyMode}
+                  onChange={(event) => setDailyMode(event.target.checked)}
+                  className="peer sr-only"
+                />
+                <span className="absolute inset-0 rounded-full bg-[#E0D9D0] peer-checked:bg-[#1A3D2E] transition-colors duration-micro ease-premium" />
+                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-micro ease-premium peer-checked:translate-x-4" />
+              </span>
+              Daily practice - 5 short questions on one skill
             </label>
           )}
 
@@ -386,7 +405,7 @@ export default function GenerateForm({
               </details>
 
               <button type="button" onClick={handleGenerate} disabled={!canSubmit} className={`${primaryButtonClass} self-start`}>
-                Generate worksheet
+                Create assignment
               </button>
             </>
           )}
@@ -425,13 +444,13 @@ export default function GenerateForm({
             <p className="text-sm font-medium text-[#1A1A18]">
               {groupResult.subject} - {groupResult.topic}
             </p>
-            <p className="text-xs text-[#9A9080] mt-1">Generated for {groupResult.studentCount} students.</p>
+            <p className="text-xs text-[#9A9080] mt-1">Created for {groupResult.studentCount} students.</p>
           </div>
           <Link href={`/dashboard/generate/group/${groupResult.groupId}`} className={`${primaryButtonClass} self-start`}>
             View group results
           </Link>
           <button type="button" onClick={handleReset} className={`${secondaryButtonClass} self-start`}>
-            Generate another
+            Start another
           </button>
         </div>
       )}
@@ -523,7 +542,7 @@ export default function GenerateForm({
           {downloadError && <p className="text-sm text-[#C0392B]">{downloadError}</p>}
 
           <button type="button" onClick={handleReset} className={`${primaryButtonClass} self-start`}>
-            Generate another
+            Start another
           </button>
         </div>
       )}

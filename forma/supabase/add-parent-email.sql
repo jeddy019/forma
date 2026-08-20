@@ -1,0 +1,13 @@
+-- Standalone addition, run manually in Supabase SQL Editor (same pattern as
+-- the other add-*.sql files).
+--
+-- Phase 5 Step 25 (tutor parent report): student_profiles.email is the
+-- STUDENT's own optional portal-login address (see Legal Requirements'
+-- Student Accounts section) - it is not a parent's contact, and a tutor's
+-- student and that student's parent are two different people. Nothing in
+-- the schema captured a parent contact until now, which made EMAIL 5
+-- ("Tutor parent report") impossible to actually address. parent_email is
+-- only meaningful for tutor-owned students - a parent-role account already
+-- IS the parent, so their own students' parent_email stays null by
+-- convention (StudentForm only shows the field for tutor accounts).
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS parent_email TEXT;

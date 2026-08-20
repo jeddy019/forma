@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { nextDifficulty } from '@/lib/adaptive/nextDifficulty';
-import { DIFFICULTY_LEVELS, type DifficultyLevel } from '@/lib/constants';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { recordScore } from '@/lib/mastery/recordScore';
+import type { SubSkillPartEntry } from '@/lib/mastery/accumulateBySubSkill';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FEEDBACK_MAX_LENGTH = 2000;
@@ -27,6 +27,8 @@ interface QuestionsJsonPart {
 
 interface QuestionsJsonQuestion {
   id: string;
+  // Phase 7 Step 37/38: see api/submit/route.ts's identical field for why.
+  sub_skill: string;
   parts: QuestionsJsonPart[];
 }
 
@@ -35,7 +37,7 @@ interface SubmissionRow {
   student_id: string | null;
   answers_json: Record<string, string[]> | null;
   auto_marks_json: Record<string, (Tier1PartResult | null)[]> | null;
-  worksheet: { questions_json: { questions: QuestionsJsonQuestion[] } } | null;
+  worksheet: { id: string; questions_json: { questions: QuestionsJsonQuestion[] }; topic: string } | null;
 }
 
 // Tier 1 parts are objective exact-match results, not the tutor's to
@@ -74,7 +76,7 @@ export async function saveMarkingAction(
   // tutor's own typed-in marks and feedback come from formData.
   const { data: submission } = await supabase
     .from('submissions')
-    .select('id, student_id, answers_json, auto_marks_json, worksheet:worksheets(questions_json)')
+    .select('id, student_id, answers_json, auto_marks_json, worksheet:worksheets(id, questions_json, topic)')
     .eq('id', submissionId)
     .single<SubmissionRow>();
 
@@ -88,6 +90,7 @@ export async function saveMarkingAction(
   const tutorMarksJson: Record<string, (number | null)[]> = {};
   let totalAwarded = 0;
   let totalAvailable = 0;
+  const subSkillParts: SubSkillPartEntry[] = [];
 
   for (const question of submission.worksheet.questions_json.questions) {
     const answeredParts = answers[question.id];
@@ -99,16 +102,21 @@ export async function saveMarkingAction(
       const tier1 = tier1Parts?.[i];
       if (tier1) {
         totalAwarded += tier1.marks_awarded;
+        subSkillParts.push({ subSkill: question.sub_skill, marksAwarded: tier1.marks_awarded, marksAvailable: part.marks });
         return null; // Tier 1 already marked this part - not the tutor's to set
       }
 
       const wasAnswered = (answeredParts?.[i] ?? '').trim() !== '';
-      if (!wasAnswered) return 0; // nothing submitted for this part - no marks, nothing to award
+      if (!wasAnswered) {
+        subSkillParts.push({ subSkill: question.sub_skill, marksAwarded: 0, marksAvailable: part.marks });
+        return 0; // nothing submitted for this part - no marks, nothing to award
+      }
 
       const raw = formData.get(`mark:${question.id}:${i}`);
       const parsed = raw === null ? 0 : Math.round(Number(raw));
       const clamped = Number.isFinite(parsed) ? Math.max(0, Math.min(part.marks, parsed)) : 0;
       totalAwarded += clamped;
+      subSkillParts.push({ subSkill: question.sub_skill, marksAwarded: clamped, marksAvailable: part.marks });
       return clamped;
     });
   }
@@ -129,36 +137,26 @@ export async function saveMarkingAction(
     return { error: 'Could not save marking - please try again.' };
   }
 
-  // Adaptive Difficulty: only runs once a real score exists (totalAvailable
-  // could be 0 for a worksheet with no markable parts, in which case
-  // scorePercentage is null and there's nothing to adjust). A failure here
-  // must not undo the marking that was just successfully saved above - it's
-  // a best-effort follow-on, not part of the save's own success/failure.
+  // Adaptive Difficulty + Phase 7 Step 38 (skill_map): only runs once a real
+  // score exists (totalAvailable could be 0 for a worksheet with no
+  // markable parts, in which case scorePercentage is null and there's
+  // nothing to adjust). A failure here must not undo the marking that was
+  // just successfully saved above - it's a best-effort follow-on, not part
+  // of the save's own success/failure.
   let difficultyNotice: string | undefined;
   if (scorePercentage !== null && submission.student_id) {
-    const { data: studentRow } = await supabase
-      .from('student_profiles')
-      .select('current_difficulty')
-      .eq('id', submission.student_id)
-      .single();
-
-    const rawCurrent = studentRow?.current_difficulty;
-    const current: DifficultyLevel = (DIFFICULTY_LEVELS as readonly string[]).includes(rawCurrent ?? '')
-      ? (rawCurrent as DifficultyLevel)
-      : 'standard';
-
-    const updated = nextDifficulty(current, scorePercentage);
-    if (updated) {
-      const { error: difficultyError } = await supabase
-        .from('student_profiles')
-        .update({ current_difficulty: updated })
-        .eq('id', submission.student_id);
-
-      if (difficultyError) {
-        console.error('Failed to update current_difficulty', difficultyError);
-      } else {
-        difficultyNotice = 'Difficulty adjusted based on recent performance.';
-      }
+    try {
+      const result = await recordScore(
+        supabase,
+        submission.student_id,
+        submission.worksheet.id,
+        submission.worksheet.topic,
+        scorePercentage,
+        subSkillParts
+      );
+      difficultyNotice = result.difficultyNotice;
+    } catch (error) {
+      console.error('Failed to record score for adaptive difficulty / skill_map', error);
     }
   }
 

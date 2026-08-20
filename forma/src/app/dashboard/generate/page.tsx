@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { UserPlus, Sparkles } from 'lucide-react';
+import { UserPlus, FilePlus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import GenerateForm from './GenerateForm';
 import { EmptyState } from '@/lib/ui/EmptyState';
@@ -38,6 +38,11 @@ export default async function GeneratePage() {
   const isTutorPro = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
   const canDownloadMarkScheme = isTutorPro;
   const canUseGroupMode = isTutorPro;
+  // Phase 7 Step 40 (Daily practice mode): isActivePro alone, not tutor-only
+  // - matches the schedule/* precedent (open to both Tutor-pro and
+  // Parent-pro), unlike mark-scheme/marking-dashboard/group-mode's
+  // tutor-only gate above.
+  const canUseDailyMode = isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
 
   // Same capped-picker pattern as students above - only fetched for
   // tutor-pro accounts, since templates are gated the same way.
@@ -48,7 +53,7 @@ export default async function GeneratePage() {
   if (!students || students.length === 0) {
     return (
       <div className="flex flex-col gap-6 max-w-xl">
-        <PageHeader icon={Sparkles} title="Generate a worksheet" subtitle="Describe the struggle. Forma builds the practice." />
+        <PageHeader icon={FilePlus} title="New assignment" subtitle="Describe the struggle. Forma builds the practice." />
         <EmptyState
           icon={UserPlus}
           message="Add a student first, then come back here to generate practice for them."
@@ -64,6 +69,7 @@ export default async function GeneratePage() {
       students={students as StudentOption[]}
       canDownloadMarkScheme={canDownloadMarkScheme}
       canUseGroupMode={canUseGroupMode}
+      canUseDailyMode={canUseDailyMode}
       templates={(templates ?? []) as TemplateOption[]}
     />
   );

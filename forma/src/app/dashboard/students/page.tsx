@@ -29,6 +29,13 @@ export default async function StudentsPage({
 
   const supabase = await createClient();
   const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: ownerRow } = user
+    ? await supabase.from('users').select('role').eq('id', user.id).maybeSingle()
+    : { data: null };
+
+  const {
     data: students,
     count,
     error,
@@ -46,7 +53,7 @@ export default async function StudentsPage({
     <div className="flex flex-col gap-8">
       <PageHeader icon={Users} title="Students" subtitle="Add a student, then generate practice built for them." />
 
-      <StudentForm />
+      <StudentForm isTutor={ownerRow?.role === 'tutor'} />
 
       <div className="flex flex-col gap-3">
         {error && <p className="text-sm text-[#C0392B]">Could not load students - please refresh.</p>}

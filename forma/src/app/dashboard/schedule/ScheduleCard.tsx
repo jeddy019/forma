@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { updateScheduleAction, pauseScheduleAction, resumeScheduleAction, deleteScheduleAction, type ScheduleActionResult } from './actions';
-import { SUBJECTS, DIFFICULTY_LEVELS, DELIVERY_TIMEZONES, DAY_OF_WEEK_LABELS } from '@/lib/constants';
+import { CORE_SUBJECTS, CODING_SUBJECTS, DIFFICULTY_LEVELS, DELIVERY_TIMEZONES, DAY_OF_WEEK_LABELS } from '@/lib/constants';
 import { inputClass, labelClass, primaryButtonClass, secondaryButtonClass, cardClass } from '@/lib/ui/formStyles';
 
 export interface ScheduleRow {
@@ -80,11 +80,18 @@ export default function ScheduleCard({ schedule, students }: { schedule: Schedul
             Subject
           </label>
           <select id={`subject-${schedule.id}`} name="subject" required className={inputClass} defaultValue={schedule.subject}>
-            {SUBJECTS.map((subject) => (
+            {CORE_SUBJECTS.map((subject) => (
               <option key={subject} value={subject}>
                 {subject}
               </option>
             ))}
+            <optgroup label="Computer Science">
+              {CODING_SUBJECTS.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
 

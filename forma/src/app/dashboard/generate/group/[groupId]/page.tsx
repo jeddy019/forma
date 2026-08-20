@@ -80,7 +80,7 @@ export default async function GroupComparisonPage({ params }: { params: Promise<
     <div className="flex flex-col gap-8">
       <div>
         <Link href="/dashboard/generate" className="text-sm text-[#5C5849]">
-          Generate
+          New
         </Link>
         <h1 className="text-xl font-semibold text-[#1A1A18] mb-1 mt-1">
           {first.subject} - {first.topic}

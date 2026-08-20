@@ -1,9 +1,11 @@
 'use client';
 
 import { useActionState } from 'react';
+import { Calendar } from 'lucide-react';
 import { createScheduleAction, type ScheduleActionResult } from './actions';
-import { SUBJECTS, DIFFICULTY_LEVELS, DELIVERY_TIMEZONES, DAY_OF_WEEK_LABELS } from '@/lib/constants';
+import { CORE_SUBJECTS, CODING_SUBJECTS, COMING_SOON_SUBJECTS, DIFFICULTY_LEVELS, DELIVERY_TIMEZONES, DAY_OF_WEEK_LABELS } from '@/lib/constants';
 import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
+import { FormHeader } from '@/lib/ui/FormHeader';
 
 interface StudentOption {
   id: string;
@@ -23,7 +25,7 @@ export default function ScheduleForm({ students }: { students: StudentOption[] }
 
   return (
     <form action={formAction} className={`${accentCardClass} flex flex-col gap-4`}>
-      <h2 className="text-lg font-semibold text-[#1A1A18]">Create a schedule</h2>
+      <FormHeader icon={Calendar} title="Create a schedule" />
 
       <div>
         <label className={labelClass} htmlFor="studentId">
@@ -49,11 +51,25 @@ export default function ScheduleForm({ students }: { students: StudentOption[] }
           <option value="" disabled>
             Select a subject
           </option>
-          {SUBJECTS.map((subject) => (
+          {CORE_SUBJECTS.map((subject) => (
             <option key={subject} value={subject}>
               {subject}
             </option>
           ))}
+          <optgroup label="Computer Science">
+            {CODING_SUBJECTS.map((subject) => (
+              <option key={subject} value={subject}>
+                {subject}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="More subjects coming soon">
+            {COMING_SOON_SUBJECTS.map((subject) => (
+              <option key={subject} value={subject} disabled>
+                {subject}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </div>
 

@@ -9,8 +9,13 @@
 // before - one shared feel across every interactive element, not a
 // per-component guess.
 
+// hover:border-strong added (Phase 9 forms pass) - inputs previously only
+// reacted on focus, so a form read as inert until you actually clicked into
+// a field. Buttons already had hover/active feedback; this brings inputs
+// onto the same "responds to you" standard instead of sitting flat next to
+// them.
 export const inputClass =
-  'w-full px-4 py-[14px] rounded-[10px] text-sm bg-white border border-[#E0D9D0] text-[#1A1A18] placeholder:text-[#9A9080] placeholder:italic outline-none focus:border-[#1A3D2E] focus:shadow-[0_0_0_3px_rgba(26,61,46,0.12)] transition-colors duration-micro ease-premium';
+  'w-full px-4 py-[14px] rounded-[10px] text-sm bg-white border border-[#E0D9D0] text-[#1A1A18] placeholder:text-[#9A9080] placeholder:italic outline-none hover:border-[#C4B9AC] focus:border-[#1A3D2E] focus:shadow-[0_0_0_3px_rgba(26,61,46,0.12)] transition-colors duration-micro ease-premium';
 
 export const labelClass = 'block text-xs font-medium mb-1 text-[#5C5849]';
 
@@ -44,5 +49,14 @@ export const interactiveCardClass =
 // for every card - data-display rows (list items, static info panels)
 // stay on plain cardClass; using this everywhere would dilute it back to
 // noise instead of a signal.
+// Phase 9 forms pass: escalated from shadow-card to shadow-raised - these
+// forms are the one primary action on their page, so they should read as
+// elevated above the rest of the page at rest, not sit at the same flat
+// weight as a static info panel and only distinguish themselves via the
+// gold rail. Confirmed live: the user found every accentCardClass form
+// across the dashboard (students, generate, schedule, session notes,
+// templates) still read as flat even with the rail in place - this is a
+// token-level fix, so it corrects all five at once rather than drifting
+// out of sync as five separate per-form edits would.
 export const accentCardClass =
-  'bg-[#F0EBE3] border-y border-r border-[#E0D9D0] border-l-[3px] border-l-[#C8A84B] rounded-[12px] p-6 shadow-card';
+  'bg-[#F0EBE3] border-y border-r border-[#E0D9D0] border-l-[3px] border-l-[#C8A84B] rounded-[12px] p-6 shadow-raised';

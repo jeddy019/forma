@@ -25,6 +25,9 @@ export function splitMarkScheme(worksheet: GeneratedWorksheet) {
   const questionsJson = {
     ...worksheet,
     questions: worksheet.questions.map((question) => ({
+      // ...question keeps id/type/sub_skill automatically - sub_skill
+      // (Phase 7 Step 37) is not answer-revealing, so it's fine for the
+      // student-safe half, unlike answer/mark_scheme below.
       ...question,
       parts: question.parts.map((part) => ({
         part_label: part.part_label,
@@ -43,6 +46,11 @@ export function splitMarkScheme(worksheet: GeneratedWorksheet) {
       // Warm-up/Challenge section dividers as the worksheet - mark schemes
       // walk the same 10 questions in the same order.
       type: question.type,
+      // Phase 7 Step 38 needs this server-side (mastery aggregation reads
+      // questions_json's copy instead - see /api/submit's own comment -
+      // but this copy exists too so any future mark-scheme-only consumer
+      // doesn't have to round-trip through questions_json for it).
+      sub_skill: question.sub_skill,
       parts: question.parts.map((part) => ({
         part_label: part.part_label,
         marks: part.marks,

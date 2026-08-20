@@ -1,59 +1,80 @@
 import Link from 'next/link';
-import { PenLine, FileCheck, TrendingUp } from 'lucide-react';
-import { primaryButtonClass, secondaryButtonClass } from '@/lib/ui/formStyles';
+import { PenLine, FileCheck, TrendingUp, ChevronRight } from 'lucide-react';
+import { primaryButtonClass } from '@/lib/ui/formStyles';
 
-// Design System v2: this was previously a bare centred h1 + tagline with no
-// nav, no CTA, and nothing communicating what the product actually produces.
-// The hero's worksheet mock is built from the PDF spec's own header/question
-// styling (badges, mark allocation, working lines) rather than a stock
-// image or illustration - the product's own output is the marketing asset,
-// per the "the worksheet PDF is the product" principle in CLAUDE.md.
+// Design System v3 (Phase 9): rebuilt against the standard the user named
+// explicitly - linear.app, arc.net, cal.com. Concretely, versus the v2
+// rebuild this replaces: a bordered secondary CTA with a plain text+chevron
+// link (fewer boxes, hierarchy from type), an eyebrow badge carrying the
+// "3 free/month" fact instead of repeating it lower on the page (Linear's
+// "pill above the headline" pattern, but with real information in it, not
+// a decorative label), one purposeful gold accent word in the headline
+// instead of green used uniformly everywhere, and a full-bleed gold-tinted
+// band behind the curriculum strip - arc.net's "colour used sparingly and
+// on purpose" rather than one flat shade for the whole page. The hero's
+// worksheet mock is unchanged in spirit (built from the PDF spec's own
+// tokens, not a stock image - "the worksheet PDF is the product") but now
+// actually uses the shared shadow-modal token instead of an ad hoc shadow
+// value that only matched shadow-modal in this file's own old comment, not
+// in the code.
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="flex items-center justify-between px-6 md:px-10 py-5 max-w-6xl mx-auto w-full">
-        <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
-          Forma
-        </span>
-        <nav className="flex items-center gap-1 sm:gap-3">
-          <Link
-            href="/student/login"
-            className="hidden sm:inline text-sm text-[#5C5849] px-3 py-2 hover:text-[#1A1A18] transition-colors duration-micro ease-premium"
-          >
-            Student login
-          </Link>
-          <Link href="/login" className="text-sm text-[#5C5849] px-3 py-2 hover:text-[#1A1A18] transition-colors duration-micro ease-premium">
-            Log in
-          </Link>
-          <Link href="/signup" className={primaryButtonClass}>
-            Get started free
-          </Link>
-        </nav>
+      <header className="sticky top-0 z-10 bg-[#F7F4EF]/90 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-6 md:px-10 py-4 max-w-6xl mx-auto w-full">
+          <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+            Forma
+          </span>
+          <nav className="flex items-center gap-1 sm:gap-2">
+            <Link
+              href="/student/login"
+              className="hidden sm:inline text-sm text-[#5C5849] px-3 py-2 hover:text-[#1A1A18] transition-colors duration-micro ease-premium"
+            >
+              Student login
+            </Link>
+            <Link href="/login" className="text-sm text-[#5C5849] px-3 py-2 hover:text-[#1A1A18] transition-colors duration-micro ease-premium">
+              Log in
+            </Link>
+            <Link href="/signup" className={primaryButtonClass}>
+              Get started free
+            </Link>
+          </nav>
+        </div>
       </header>
 
       <main className="flex-1 px-6 md:px-10">
         {/* Hero */}
-        <section className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center py-12 md:py-20">
-          <div className="flex flex-col gap-6 animate-fade-up">
+        <section className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center pt-10 pb-16 md:pt-16 md:pb-24">
+          <div className="flex flex-col gap-5 animate-fade-up">
+            <span className="inline-flex w-fit items-center bg-[#FEF9EC] text-[#8A6D22] text-xs font-medium tracking-[0.02em] rounded-full px-3 py-1.5">
+              3 free assignments every month - no card required
+            </span>
             <h1
-              className="text-4xl md:text-[48px] leading-[1.1] font-semibold text-[#1A1A18]"
+              className="text-4xl md:text-[48px] leading-[1.08] font-semibold text-[#1A1A18]"
               style={{ fontFamily: 'var(--font-playfair)' }}
             >
-              Practice built for your student.
+              Practice built for <span className="text-[#C8A84B]">your student</span>.
             </h1>
-            <p className="text-base md:text-md text-[#5C5849] max-w-md">
-              Describe what a student is struggling with. Forma generates a curriculum-aligned worksheet,
-              coloured diagrams and all, in minutes, not hours.
+            <p className="text-base md:text-md text-[#5C5849] max-w-md leading-relaxed">
+              Describe what a student is struggling with. Forma generates a curriculum-aligned assignment
+              or timed test, coloured diagrams and all, in minutes, not hours.
             </p>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-1">
               <Link href="/signup" className={primaryButtonClass}>
                 Get started free
               </Link>
-              <a href="#how-it-works" className={secondaryButtonClass}>
+              <a
+                href="#how-it-works"
+                className="group inline-flex items-center gap-1 text-sm font-medium text-[#1A3D2E] hover:text-[#152F23] transition-colors duration-micro ease-premium"
+              >
                 See how it works
+                <ChevronRight
+                  className="w-4 h-4 transition-transform duration-micro ease-premium group-hover:translate-x-0.5"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
               </a>
             </div>
-            <p className="text-xs text-[#9A9080]">3 free worksheets every month. No card required.</p>
 
             {/* Tutors, parents, and students land here for different reasons -
                 naming all three up front (rather than one generic CTA) is
@@ -63,7 +84,7 @@ export default function Home() {
                 Students" nav): a visitor should not have to guess whether
                 this product is for them. role= pre-selects SignupForm's own
                 "I am a" field rather than being a cosmetic label only. */}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[#5C5849] pt-1">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[#5C5849] pt-2">
               <span className="text-[#9A9080]">I&apos;m a:</span>
               <Link href="/signup?role=tutor" className="font-medium text-[#1A3D2E] hover:underline">
                 Tutor
@@ -83,7 +104,7 @@ export default function Home() {
         </section>
 
         {/* How it works */}
-        <section id="how-it-works" className="max-w-6xl mx-auto py-12 md:py-16 border-t border-[#E0D9D0] scroll-mt-20">
+        <section id="how-it-works" className="max-w-6xl mx-auto py-16 border-t border-[#E0D9D0] scroll-mt-20">
           <h2
             className="text-xl md:text-2xl font-semibold text-[#1A1A18] mb-10 text-center"
             style={{ fontFamily: 'var(--font-playfair)' }}
@@ -98,36 +119,41 @@ export default function Home() {
             />
             <Step
               icon={FileCheck}
-              title="Get the worksheet"
+              title="Get the assignment"
               body="A curriculum-accurate PDF with diagrams and a proper mark scheme, plus a digital version students complete online."
             />
             <Step
               icon={TrendingUp}
               title="Track improvement"
-              body="Scores, time taken, and topics mastered - so the next worksheet targets exactly what's still weak."
+              body="Scores, time taken, and topics mastered - so the next assignment targets exactly what's still weak."
             />
           </div>
         </section>
+      </main>
 
-        {/* Curriculum strip */}
-        <section className="max-w-6xl mx-auto py-12 md:py-16 border-t border-[#E0D9D0] flex flex-col items-center gap-6 text-center">
-          <p className="text-xs uppercase tracking-[0.08em] text-[#9A9080]">Curriculum-accurate, wherever your student studies</p>
+      {/* Curriculum strip - the one deliberate full-bleed colour band on the
+          page (arc.net's "colour used sparingly, not uniformly" principle),
+          rather than another plain cream section identical to the ones
+          above and below it. */}
+      <section className="bg-[#FEF9EC] py-14">
+        <div className="max-w-6xl mx-auto px-6 md:px-10 flex flex-col items-center gap-6 text-center">
+          <p className="text-xs uppercase tracking-[0.08em] text-[#8A6D22]">Curriculum-accurate, wherever your student studies</p>
           <div className="flex flex-wrap justify-center gap-3">
             {['England: KS2, KS3, GCSE, A-Level', 'Canada: Ontario Elementary and Secondary', 'United States: Common Core, AP, SAT, ACT'].map(
               (label) => (
                 <span
                   key={label}
-                  className="bg-[#E8F2ED] text-[#1A3D2E] text-xs font-medium tracking-[0.02em] rounded-full px-4 py-2"
+                  className="bg-white text-[#1A3D2E] text-xs font-medium tracking-[0.02em] rounded-full px-4 py-2 border border-[#E9DCB8]"
                 >
                   {label}
                 </span>
               )
             )}
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
 
-      <footer className="border-t border-[#E0D9D0] px-6 md:px-10 py-8">
+      <footer className="px-6 md:px-10 py-8">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#9A9080]">
           <span>Forma - Practice built for your student.</span>
           <div className="flex items-center gap-4">
@@ -165,7 +191,7 @@ function Step({ icon: Icon, title, body }: { icon: typeof PenLine; title: string
 function WorksheetMock() {
   return (
     <div
-      className="bg-white border border-[#E0D9D0] rounded-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.12)] p-6 w-full max-w-sm rotate-1 hover:rotate-0 transition-transform duration-standard ease-premium"
+      className="bg-white border border-[#E0D9D0] rounded-[12px] shadow-modal p-6 w-full max-w-sm rotate-1 hover:rotate-0 transition-transform duration-standard ease-premium"
       aria-hidden="true"
     >
       <div className="flex items-start justify-between mb-2">

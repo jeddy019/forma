@@ -1,9 +1,11 @@
 'use client';
 
 import { useActionState } from 'react';
+import { LayoutTemplate } from 'lucide-react';
 import { createTemplateAction, type TemplateActionResult } from './actions';
-import { SUBJECTS, DIFFICULTY_LEVELS } from '@/lib/constants';
+import { CORE_SUBJECTS, CODING_SUBJECTS, COMING_SOON_SUBJECTS, DIFFICULTY_LEVELS } from '@/lib/constants';
 import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
+import { FormHeader } from '@/lib/ui/FormHeader';
 
 const initialState: TemplateActionResult = {};
 
@@ -12,7 +14,7 @@ export default function TemplateForm() {
 
   return (
     <form action={formAction} className={`${accentCardClass} flex flex-col gap-4`}>
-      <h2 className="text-lg font-semibold text-[#1A1A18]">New template</h2>
+      <FormHeader icon={LayoutTemplate} title="New template" />
 
       <div>
         <label className={labelClass} htmlFor="name">
@@ -28,11 +30,25 @@ export default function TemplateForm() {
           </label>
           <select id="subject" name="subject" defaultValue="" className={inputClass}>
             <option value="">Any</option>
-            {SUBJECTS.map((subject) => (
+            {CORE_SUBJECTS.map((subject) => (
               <option key={subject} value={subject}>
                 {subject}
               </option>
             ))}
+            <optgroup label="Computer Science">
+              {CODING_SUBJECTS.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="More subjects coming soon">
+              {COMING_SOON_SUBJECTS.map((subject) => (
+                <option key={subject} value={subject} disabled>
+                  {subject}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
         <div>

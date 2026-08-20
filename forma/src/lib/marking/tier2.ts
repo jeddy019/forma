@@ -1,12 +1,30 @@
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 // Phase 3 Step 17 - Marking Logic (CLAUDE.md), Tier 2: AI-assisted marking
 // for "extended" parts (shown working, explanations, proofs, extended
-// writing) that Tier 1 can't auto-mark. Uses claude-sonnet-4-6, per Tech
-// Stack ("claude-sonnet-4-6 for AI-assisted marking only").
-const client = new Anthropic();
+// writing) that Tier 1 can't auto-mark.
+//
+// PROVIDER: OpenAI (gpt-4o) is the standing default here, same as
+// generateWorksheet.ts and generateParentReport.ts - not a temporary
+// workaround pending an Anthropic restoration. Found live in a 2026-08-19
+// audit that this file was the one AI-calling path in the project that
+// never got the OpenAI swap those two did - it was still constructing
+// `new Anthropic()` directly with no fallback, meaning every Tier 2 call
+// was silently failing (caught by /api/submit's Promise.allSettled into a
+// null result, logged, never surfaced) for as long as the Anthropic
+// account has been unusable. Fixed the same way those two files already
+// were: OpenAI is the active call, the original Anthropic call is kept
+// below as markExtendedPartAnthropic, inactive, for a clean swap back if
+// the Anthropic account is ever the deliberate choice again. Tech Stack's
+// "claude-sonnet-4-6 for AI-assisted marking only" is superseded by this -
+// gpt-4o (the same model already used for generation) is the standard now,
+// not a second/different model tier.
+const openaiClient = new OpenAI();
+const anthropicClient = new Anthropic();
 
-const MODEL = 'claude-sonnet-4-6';
+const OPENAI_MODEL = 'gpt-4o';
+const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 512;
 
 const CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const;
@@ -53,8 +71,8 @@ const RESPONSE_SCHEMA = {
   additionalProperties: false,
 };
 
-export async function markExtendedPart(input: Tier2Input, signal: AbortSignal): Promise<Tier2Result> {
-  const userPrompt = `Question: ${input.questionText}
+function buildUserPrompt(input: Tier2Input): string {
+  return `Question: ${input.questionText}
 Maximum marks: ${input.marks}
 Mark scheme:
 M1 (method): ${input.markScheme.M1}
@@ -64,13 +82,63 @@ Common error: ${input.markScheme.common_error}
 
 Student's answer:
 ${input.studentAnswer}`;
+}
 
-  const response = await client.messages.create(
+function toResult(parsed: { marks_awarded: number; reasoning: string; confidence: Confidence }, maxMarks: number): Tier2Result {
+  // Defensive clamp - a mark outside [0, marks] can't come from a correct
+  // reading of the mark scheme, so treat it the same as any other model
+  // slip rather than trusting it verbatim.
+  const marksAwarded = Math.max(0, Math.min(maxMarks, Math.round(parsed.marks_awarded)));
+  return {
+    marks_awarded: marksAwarded,
+    reasoning: parsed.reasoning,
+    confidence: parsed.confidence,
+    needs_review: parsed.confidence === 'low',
+  };
+}
+
+export async function markExtendedPart(input: Tier2Input, signal: AbortSignal): Promise<Tier2Result> {
+  const response = await openaiClient.chat.completions.create(
     {
-      model: MODEL,
+      model: OPENAI_MODEL,
+      max_completion_tokens: MAX_TOKENS,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserPrompt(input) },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'tier2_marking', strict: true, schema: RESPONSE_SCHEMA },
+      },
+    },
+    { signal }
+  );
+
+  const message = response.choices[0]?.message;
+  if (message?.refusal) {
+    throw new Error('AI marking was declined.');
+  }
+
+  const text = message?.content;
+  if (!text) {
+    throw new Error('AI marking response had no text content.');
+  }
+
+  const parsed = JSON.parse(text) as { marks_awarded: number; reasoning: string; confidence: Confidence };
+  return toResult(parsed, input.marks);
+}
+
+// INACTIVE - the original Anthropic call path. Restore by swapping this
+// back in as markExtendedPart's body if Anthropic is ever the deliberate
+// choice again; anthropicClient/ANTHROPIC_MODEL above are kept in place for
+// exactly this, same pattern as generateWorksheet.ts's own inactive path.
+async function markExtendedPartAnthropic(input: Tier2Input, signal: AbortSignal): Promise<Tier2Result> {
+  const response = await anthropicClient.messages.create(
+    {
+      model: ANTHROPIC_MODEL,
       max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userPrompt }],
+      messages: [{ role: 'user', content: buildUserPrompt(input) }],
       output_config: { format: { type: 'json_schema', schema: RESPONSE_SCHEMA } },
     },
     { signal }
@@ -81,21 +149,7 @@ ${input.studentAnswer}`;
     throw new Error('AI marking response had no text content.');
   }
 
-  const parsed = JSON.parse(textBlock.text) as {
-    marks_awarded: number;
-    reasoning: string;
-    confidence: Confidence;
-  };
-
-  // Defensive clamp - a mark outside [0, marks] can't come from a correct
-  // reading of the mark scheme, so treat it the same as any other model
-  // slip rather than trusting it verbatim.
-  const marksAwarded = Math.max(0, Math.min(input.marks, Math.round(parsed.marks_awarded)));
-
-  return {
-    marks_awarded: marksAwarded,
-    reasoning: parsed.reasoning,
-    confidence: parsed.confidence,
-    needs_review: parsed.confidence === 'low',
-  };
+  const parsed = JSON.parse(textBlock.text) as { marks_awarded: number; reasoning: string; confidence: Confidence };
+  return toResult(parsed, input.marks);
 }
+void markExtendedPartAnthropic;

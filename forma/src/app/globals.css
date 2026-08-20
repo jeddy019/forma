@@ -62,8 +62,14 @@
      of a generic grey drop-shadow. Still well inside SLOP TO AVOID's
      "heavy shadows" ban - opacity stays low, this is about definition,
      not weight. */
-  --shadow-card: 0 1px 2px rgba(26,26,24,0.05), 0 3px 10px rgba(26,26,24,0.07);
-  --shadow-raised: 0 2px 4px rgba(26,26,24,0.06), 0 10px 24px rgba(26,26,24,0.11);
+  /* Strengthened again (Phase 9 forms/pages pass) - even after the Phase 8
+     fix above, the user found live that individual card depth wasn't
+     enough to stop a whole PAGE reading as flat, since every surface on it
+     (sidebar, cards, page) still sits within a few percent lightness of
+     each other. Still two layered passes each, still nowhere near
+     SLOP TO AVOID's "heavy shadows" - opacity peaks under 0.17. */
+  --shadow-card: 0 1px 3px rgba(26,26,24,0.08), 0 4px 12px rgba(26,26,24,0.09);
+  --shadow-raised: 0 2px 5px rgba(26,26,24,0.09), 0 12px 28px rgba(26,26,24,0.14);
   --shadow-modal: 0 4px 8px rgba(26,26,24,0.07), 0 20px 48px rgba(26,26,24,0.16);
 
   /* Motion (Design System v2) - one shared easing curve and duration
