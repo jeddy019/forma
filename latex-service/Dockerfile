@@ -38,16 +38,39 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # they're used, and README.md's Fonts section for the same not-yet-
 # compiled caveat that applies to the brand fonts below.
 
+# Non-root: this service compiles AI-influenced LaTeX source. Even with
+# shell-escape disabled (never enable it - see server.ts), running as an
+# unprivileged user is a second, independent layer of containment. Moved
+# earlier than before (was after font setup) so the luaotfload cache step
+# below can be chown'd to this user instead of staying root-owned.
+RUN groupadd -r forma && useradd -r -g forma -m forma
+
 # Brand fonts - variable-weight OFL files (see fonts/OFL-*.txt), registered
 # with fontconfig so fontspec can find them by family name ("Inter",
 # "Playfair Display") rather than a brittle exact-filename Path lookup.
 COPY fonts/*.ttf /usr/share/fonts/truetype/forma/
 RUN fc-cache -f
 
-# Non-root: this service compiles AI-influenced LaTeX source. Even with
-# shell-escape disabled (never enable it - see server.ts), running as an
-# unprivileged user is a second, independent layer of containment.
-RUN groupadd -r forma && useradd -r -g forma -m forma
+# Real deploy bug found and fixed live (2026-08-20), via the actual /compile
+# error log: the first-ever real generation on Render returned "compile
+# timed out" - not a LaTeX syntax error, but luaotfload (LuaTeX's font
+# loader) building its font-names database from scratch on first use ("db:
+# Font names database not found, generating new one... This can take
+# several minutes"), scanning the full texlive-fonts-extra install plus
+# fonts-stix/fonts-firacode/the bundled brand fonts - all comfortably
+# longer than COMPILE_TIMEOUT_MS (20s per lualatex pass, src/server.ts).
+# Worse on Render's free plan specifically (see render.yaml/README.md):
+# the container spins down after 15 minutes idle, so without a fix this
+# multi-minute regeneration would repeat on every cold start, not just once
+# ever. Fixed by pre-building the cache at image-build time instead of
+# first-request time - TEXMFVAR is pinned to an explicit path (rather than
+# relying on root's and forma's default resolution agreeing, which they
+# might not) so the build-time (root) and runtime (forma) invocations of
+# lualatex share the exact same cache location.
+ENV TEXMFVAR=/var/cache/texmf-var
+RUN mkdir -p /var/cache/texmf-var && chown -R forma:forma /var/cache/texmf-var
+RUN luaotfload-tool --update
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
