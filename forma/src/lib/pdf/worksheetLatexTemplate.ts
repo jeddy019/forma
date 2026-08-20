@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { escapeLatexOutsideMath } from './escapeLatex';
 import { renderDiagramToPng, RASTER_DENSITY } from './diagramToImage';
 import { sectionDividerLabel } from '../worksheet/sectionDividerLabel';
+import { CODING_SUBJECTS } from '../constants';
 import { formatDate, type WorksheetHeaderData, type WorksheetQuestion, type WorksheetQuestionPart, type WorksheetTemplateData } from './worksheet-template';
 
 // Replaces renderWorksheetHtml's role. worksheet-template.ts itself is kept
@@ -54,12 +55,35 @@ function paperGeometry(format: 'A4' | 'Letter'): string {
 // files are registered (fc-cache, in the Dockerfile) - an explicit
 // ItalicFont pointing at a fabricated "Inter Italic" family name would
 // have silently failed to resolve.
-const FONT_SETUP = `\\usepackage{fontspec}
-\\setmainfont{Inter}[
+//
+// Main body font swaps to Fira Code for the four Computer Science subjects
+// (CODING_SUBJECTS) - the CLAUDE.md-documented "future upgrade" item,
+// built now. No UprightFont/BoldFont axis keys given (unlike Inter/
+// Playfair above): Fira Code isn't a variable font, and its Debian
+// packaging (fonts-firacode, not a bundled file - see Dockerfile) exposes
+// plain Regular/Bold static faces under one family name, which fontspec
+// resolves via fontconfig automatically the same way Inter's italic does
+// above. There is no separate "code block" field in the AI's JSON schema
+// (see CLAUDE.md's system prompt: code is written as plain text directly
+// inside a question's own text field) so this switches the WHOLE question
+// body font for these subjects rather than just inline code spans - the
+// closest fit to "makes code and syntax readable" without a schema change.
+// Headings (Forma wordmark, cover title) stay on \headingfont regardless.
+function isCodingSubject(subject: string): boolean {
+  return (CODING_SUBJECTS as readonly string[]).includes(subject);
+}
+
+function fontSetup(subject: string): string {
+  const mainFont = isCodingSubject(subject)
+    ? `\\setmainfont{Fira Code}`
+    : `\\setmainfont{Inter}[
   UprightFont = {*[wght=400]},
   BoldFont = {*[wght=600]},
-]
+]`;
+  return `\\usepackage{fontspec}
+${mainFont}
 \\newfontfamily\\headingfont{Playfair Display}[UprightFont={*[wght=600]}]`;
+}
 
 const PREAMBLE_PACKAGES = `\\usepackage{amsmath}
 \\usepackage{amssymb}
@@ -74,6 +98,19 @@ const PREAMBLE_PACKAGES = `\\usepackage{amsmath}
 \\usepackage{fancyhdr}
 \\usepackage{lastpage}
 \\usepackage{parskip}`;
+
+// unicode-math must load after amsmath/amssymb (its own documented
+// requirement - loading earlier risks it re-defining symbols amsmath
+// hasn't registered yet), so this is a separate block inserted after
+// PREAMBLE_PACKAGES in the document assembly below, not folded into
+// fontSetup() above even though both are "font" concerns. STIX Two Math
+// applies globally to every $...$/\(...\) math span (sharper symbols,
+// "similar to Cambria Math in Word" per the CLAUDE.md spec) - unlike the
+// body-font swap above, this one is subject-independent by design, since
+// the spec asks for it on "all maths and science worksheets" without a
+// per-subject carve-out.
+const MATH_FONT_SETUP = `\\usepackage{unicode-math}
+\\setmathfont{STIX Two Math}`;
 
 function mmFromPx(px: number): number {
   return (px * 25.4) / RASTER_DENSITY;
@@ -293,8 +330,9 @@ export async function renderWorksheetLatex(data: WorksheetTemplateData, format: 
 
   const source = `\\documentclass[11pt]{article}
 ${paperGeometry(format)}
-${FONT_SETUP}
+${fontSetup(header.subject)}
 ${PREAMBLE_PACKAGES}
+${MATH_FONT_SETUP}
 ${COLOR_DEFS}
 \\pagestyle{fancy}
 \\setlength{\\parindent}{0pt}

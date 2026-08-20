@@ -65,7 +65,7 @@ resolve to the italic file automatically via that shared family name once
 "Playfair Display".
 
 **The weight-axis selection has not been compiled and visually verified**
-— there is no LaTeX toolchain available in the environment this service was
+- there is no LaTeX toolchain available in the environment this service was
 built in, so `lualatex`/`fontspec`'s variable-font handling could not be
 test-compiled locally. It's written to match the documented `fontspec`
 manual syntax, but the first real deploy should specifically check: does
@@ -75,6 +75,35 @@ a slanted synthetic one)? If it doesn't, the fix is almost certainly in the
 `FontAxis`/`UprightFont`/`BoldFont` keys in
 `forma/src/lib/pdf/worksheetLatexTemplate.ts`'s preamble, not in these font
 files themselves.
+
+### STIX Two Math and Fira Code (the CLAUDE.md "future upgrade", now built)
+
+Unlike Inter/Playfair Display above, these aren't bundled files - they come
+from the Debian bookworm packages `fonts-stix` and `fonts-firacode`
+(installed in the Dockerfile, verified to exist via `packages.debian.org`
+before adding them). No `fontTools` inspection was needed the way it was for
+the brand fonts: both have stable, well-documented family names rather than
+custom/ambiguous ones - "STIX Two Math" is unicode-math's own canonical
+manual example, and "Fira Code" is stable across every distribution of it.
+
+`worksheetLatexTemplate.ts`/`markSchemeLatexTemplate.ts` load `unicode-math`
+and `\setmathfont{STIX Two Math}` unconditionally (applies to every math
+span, on every subject) via a separate `MATH_FONT_SETUP` block placed after
+`amsmath`/`amssymb` load, per unicode-math's own documented load-order
+requirement. Separately, `fontSetup(subject)` swaps the main body font to
+Fira Code specifically for the four Computer Science subjects
+(`CODING_SUBJECTS` in `forma/src/lib/constants.ts`) - there's no dedicated
+"code block" field in the AI's JSON schema (code is written as plain text
+inside a question's own `text` field, per the system prompt), so this
+switches the whole question body font for those subjects rather than just
+inline code spans, which is the closest fit available without a schema
+change. Headings stay on `\headingfont` (Playfair Display) regardless of
+subject.
+
+Same caveat as the brand fonts: **not compiled or visually verified** -
+confirm on first real deploy that `\setmathfont{STIX Two Math}` actually
+resolves (not a silent fallback to Computer Modern) and that Fira Code's
+Regular/Bold faces resolve correctly for Computer Science worksheets.
 
 ## Deploying to Render
 

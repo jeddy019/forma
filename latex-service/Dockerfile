@@ -22,9 +22,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-science \
     texlive-plain-generic \
     lmodern \
+    fonts-stix \
+    fonts-firacode \
     fontconfig \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
+# fonts-stix (STIX Two Math/Text) and fonts-firacode (Fira Code) are real
+# Debian bookworm packages - used instead of bundling our own binaries the
+# way the brand fonts below are, since both have stable, well-documented
+# family names ("STIX Two Math" is unicode-math's own canonical manual
+# example; "Fira Code" is stable across every distribution of it) and
+# aren't Forma-specific, unlike Inter/Playfair Display. See
+# worksheetLatexTemplate.ts's MATH_FONT_SETUP and fontSetup() for how
+# they're used, and README.md's Fonts section for the same not-yet-
+# compiled caveat that applies to the brand fonts below.
 
 # Brand fonts - variable-weight OFL files (see fonts/OFL-*.txt), registered
 # with fontconfig so fontspec can find them by family name ("Inter",

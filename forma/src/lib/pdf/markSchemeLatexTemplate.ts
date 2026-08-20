@@ -1,5 +1,6 @@
 import { escapeLatexOutsideMath } from './escapeLatex';
 import { sectionDividerLabel } from '../worksheet/sectionDividerLabel';
+import { CODING_SUBJECTS } from '../constants';
 import { formatDate } from './worksheet-template';
 import type { MarkSchemeHeaderData, MarkSchemeQuestion, MarkSchemeQuestionPart, MarkSchemeTemplateData } from './mark-scheme-template';
 import type { LatexRenderResult } from './worksheetLatexTemplate';
@@ -26,15 +27,27 @@ function paperGeometry(format: 'A4' | 'Letter'): string {
   return `\\usepackage[${size},top=20mm,bottom=20mm,left=22mm,right=22mm]{geometry}`;
 }
 
-// No explicit ItalicFont key - see worksheetLatexTemplate.ts's FONT_SETUP
+// No explicit ItalicFont key - see worksheetLatexTemplate.ts's fontSetup()
 // comment (both Inter font files share one family name, distinguished by
-// style, so fontconfig resolves italic automatically).
-const FONT_SETUP = `\\usepackage{fontspec}
-\\setmainfont{Inter}[
+// style, so fontconfig resolves italic automatically). Same Fira-Code-for-
+// coding-subjects swap as the worksheet template, for the same reason: a
+// mark scheme's M1/A1 lines show code output/syntax for these subjects
+// too (see CLAUDE.md's system prompt), so the readability need is identical.
+function isCodingSubject(subject: string): boolean {
+  return (CODING_SUBJECTS as readonly string[]).includes(subject);
+}
+
+function fontSetup(subject: string): string {
+  const mainFont = isCodingSubject(subject)
+    ? `\\setmainfont{Fira Code}`
+    : `\\setmainfont{Inter}[
   UprightFont = {*[wght=400]},
   BoldFont = {*[wght=600]},
-]
+]`;
+  return `\\usepackage{fontspec}
+${mainFont}
 \\newfontfamily\\headingfont{Playfair Display}[UprightFont={*[wght=600]}]`;
+}
 
 const PREAMBLE_PACKAGES = `\\usepackage{amsmath}
 \\usepackage{amssymb}
@@ -49,6 +62,12 @@ const PREAMBLE_PACKAGES = `\\usepackage{amsmath}
 \\usepackage{fancyhdr}
 \\usepackage{lastpage}
 \\usepackage{parskip}`;
+
+// See worksheetLatexTemplate.ts's MATH_FONT_SETUP comment - same ordering
+// requirement (must load after amsmath/amssymb) and same subject-
+// independent STIX Two Math application.
+const MATH_FONT_SETUP = `\\usepackage{unicode-math}
+\\setmathfont{STIX Two Math}`;
 
 const FOOTER_SETUP = `\\pagestyle{fancy}
 \\fancyhf{}
@@ -136,8 +155,9 @@ export async function renderMarkSchemeLatex(data: MarkSchemeTemplateData, format
 
   const source = `\\documentclass[11pt]{article}
 ${paperGeometry(format)}
-${FONT_SETUP}
+${fontSetup(header.subject)}
 ${PREAMBLE_PACKAGES}
+${MATH_FONT_SETUP}
 ${COLOR_DEFS}
 \\pagestyle{fancy}
 \\setlength{\\parindent}{0pt}
