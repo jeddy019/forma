@@ -107,25 +107,32 @@ Regular/Bold faces resolve correctly for Computer Science worksheets.
 
 ## Deploying to Render
 
-These steps are manual — done in Render's dashboard, not something this
-session can do from here:
+`render.yaml` in this folder is a Render Blueprint - the dashboard's
+**New → Blueprint** flow reads it directly (point it at
+`latex-service/render.yaml` specifically, since it doesn't live at the repo
+root), so most of what used to be manual per-field setup here is now just
+confirming what the file already declares:
 
 1. Push this repository to GitHub (or wherever Render pulls from) if it
    isn't already hosted there.
-2. In Render: **New → Web Service**, connect the repo, set **Root Directory**
-   to `latex-service`, **Runtime** to Docker (it will pick up this
-   `Dockerfile` automatically).
-3. Set the environment variable `LATEX_COMPILE_SECRET` to a freshly generated
-   random secret. Store the exact same value in Vercel as `LATEX_COMPILE_SECRET`
-   too — they must match.
-4. Pick an instance plan with enough RAM/CPU for LuaLaTeX compiles under
-   ~3 concurrent jobs (`MAX_CONCURRENT` in `src/server.ts`) — check Render's
-   current pricing/plan page directly, sizing wasn't guessed here.
-5. Decide whether the chosen plan tier spins down on idle. If it does, the
-   first PDF request after idle pays a full container cold-start on top of
-   the LuaLaTeX compile itself — worth checking against
-   `forma/src/app/api/pdf/route.ts`'s `PDF_TIMEOUT_MS` (25s) /
-   `vercel.json`'s `maxDuration` (60s) budget for that route.
+2. In Render: **New → Blueprint**, connect the repo, and set the Blueprint
+   file path to `latex-service/render.yaml`.
+3. When prompted for `LATEX_COMPILE_SECRET` (declared `sync: false` in the
+   file, so it's never committed), paste a freshly generated random secret.
+   Store the exact same value in Vercel as `LATEX_COMPILE_SECRET` too - they
+   must match.
+4. Confirm the plan Render shows for `forma-latex-service` - currently
+   pinned to `free` in `render.yaml` (a deliberate choice, see that file's
+   own comment: no payment info required, at the cost of a real OOM risk
+   under concurrent LuaLaTeX compiles and a cold start after 15 minutes
+   idle). Upgrade to at least Standard directly in the dashboard whenever
+   payment info stops being the blocker - no code change needed for that.
+5. If still on the free plan, remember the cold-start cost specifically:
+   the first PDF request after 15 minutes idle pays a full container
+   cold-start on top of the LuaLaTeX compile itself - worth checking
+   against `forma/src/app/api/pdf/route.ts`'s `PDF_TIMEOUT_MS` (25s) /
+   `vercel.json`'s `maxDuration` (60s) budget for that route, since a cold
+   start could plausibly blow both.
 6. Once deployed, note the service URL (`https://<name>.onrender.com`) and
    set it as `LATEX_COMPILE_URL` in Vercel.
 7. Verify with `curl https://<name>.onrender.com/health` before wiring
