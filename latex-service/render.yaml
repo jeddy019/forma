@@ -5,17 +5,24 @@
 # this stays correct even though the file sits in this subfolder rather
 # than the repo root, per how it was asked to be placed.
 #
-# No "plan" key is set on purpose - see latex-service/README.md's
-# "Deploying to Render" section: sizing for ~3 concurrent LuaLaTeX compiles
-# needs a real look at Render's current plan pricing, not a guess baked
-# into a committed file. Pick/upgrade the plan in the dashboard during
-# Blueprint creation instead.
+# plan: free - deliberate choice (2026-08-20) so the Render Blueprint flow
+# doesn't require payment info, overriding this file's earlier "leave it
+# unset, pick a real plan in the dashboard" stance. Known tradeoff, not
+# silently accepted: Render's free tier is ~512MB RAM/shared CPU and
+# spins down after 15 minutes idle (the next request pays a cold start on
+# top of the LuaLaTeX compile itself), and this image runs a fairly heavy
+# TeX Live install (texlive-fonts-extra, texlive-science, etc - see the
+# Dockerfile's own "broad, not minimal" comment) with MAX_CONCURRENT=3
+# concurrent lualatex processes (src/server.ts) - 3 real compiles at once
+# on 512MB is a genuine OOM risk, not just a slow-cold-start one. Upgrade
+# to at least Standard the moment payment info stops being the blocker.
 services:
   - type: web
     name: forma-latex-service
     runtime: docker
     dockerfilePath: ./latex-service/Dockerfile
     dockerContext: ./latex-service
+    plan: free
     region: oregon
     healthCheckPath: /health
     envVars:
