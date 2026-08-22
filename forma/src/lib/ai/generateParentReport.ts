@@ -1,13 +1,14 @@
 import OpenAI from 'openai';
 
-// Same provider as generateWorksheet.ts - OpenAI (gpt-4o) is the standing
-// default, not a temporary workaround (see that file's own header comment).
-// This was built directly against OpenAI with no Anthropic path at all,
-// since there was never a working Anthropic call for this feature to begin
-// with - Phase 5 Step 25 was skipped entirely in every session before this
-// one specifically because no AI provider was available (see CHANGELOG.md).
+// Same provider as generateWorksheet.ts - OpenAI (gpt-5.6-terra) is the
+// standing default, not a temporary workaround (see that file's own header
+// comment). This was built directly against OpenAI with no Anthropic path
+// at all, since there was never a working Anthropic call for this feature
+// to begin with - Phase 5 Step 25 was skipped entirely in every session
+// before this one specifically because no AI provider was available (see
+// CHANGELOG.md).
 const openaiClient = new OpenAI();
-const OPENAI_MODEL = 'gpt-4o';
+const OPENAI_MODEL = 'gpt-5.6-terra';
 // A parent report is a handful of short paragraphs, nowhere near
 // generateWorksheet.ts's 16000-token budget - kept deliberately smaller so
 // a runaway response fails fast rather than idling toward a large token bill.
