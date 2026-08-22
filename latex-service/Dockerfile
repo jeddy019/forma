@@ -63,13 +63,30 @@ RUN fc-cache -f
 # the container spins down after 15 minutes idle, so without a fix this
 # multi-minute regeneration would repeat on every cold start, not just once
 # ever. Fixed by pre-building the cache at image-build time instead of
-# first-request time - TEXMFVAR is pinned to an explicit path (rather than
-# relying on root's and forma's default resolution agreeing, which they
-# might not) so the build-time (root) and runtime (forma) invocations of
-# lualatex share the exact same cache location.
+# first-request time. Both TEXMFVAR *and* TEXMFCACHE are pinned to the same
+# explicit path: luaotfload's own man page says the names database lands in
+# "$TEXMFCACHE as set in texmf.cnf"-resolved texmf-var/luatex-cache/, and
+# whether Debian bookworm's texmf.cnf derives TEXMFCACHE from TEXMFVAR or
+# resolves it independently is exactly the kind of detail we can't verify
+# without running the image - pinning both removes the ambiguity entirely,
+# so the build-time (root) and runtime (forma) invocations of lualatex share
+# the same cache location whichever variable kpathsea consults.
+#
+# The RUN below is deliberately loud and self-verifying (added after the
+# 2026-08-22 deploy whose build log contained ZERO luaotfload matches yet
+# still "succeeded" with the identical error): the FORMA-FONTCACHE markers
+# make the step trivially searchable in Render's build log, and the
+# find|test guard FAILS THE BUILD if no database file actually landed under
+# the pinned tree - a silent no-op here would otherwise resurface as the
+# same first-request timeout, hours later, in production.
 ENV TEXMFVAR=/var/cache/texmf-var
+ENV TEXMFCACHE=/var/cache/texmf-var
 RUN mkdir -p /var/cache/texmf-var && chown -R forma:forma /var/cache/texmf-var
-RUN luaotfload-tool --update
+RUN echo "FORMA-FONTCACHE-START building luaotfload names database" \
+  && luaotfload-tool --update \
+  && find /var/cache/texmf-var -name "luaotfload-names*" | tee /tmp/forma-fontcache-results.txt \
+  && test -s /tmp/forma-fontcache-results.txt \
+  && echo "FORMA-FONTCACHE-DONE database verified present"
 
 WORKDIR /app
 
