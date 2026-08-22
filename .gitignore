@@ -1,0 +1,14 @@
+# Local-only project docs - never commit (contain operational secrets/credentials)
+CLAUDE.md
+NAVIGATION.md
+
+# Demo seeding script - contains real demo-account credentials
+seed-demo-account.mts
+
+# Environment files (belt-and-braces; forma/.gitignore also covers these)
+.env
+.env.*
+*.env
+
+# Dependencies / build artifacts at wrapper level
+node_modules/
