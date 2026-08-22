@@ -81,12 +81,22 @@ RUN fc-cache -f
 # same first-request timeout, hours later, in production.
 ENV TEXMFVAR=/var/cache/texmf-var
 ENV TEXMFCACHE=/var/cache/texmf-var
-RUN mkdir -p /var/cache/texmf-var && chown -R forma:forma /var/cache/texmf-var
+# chown deliberately happens AFTER luaotfload-tool below, not before:
+# --update runs as root during build, so every file it creates is
+# root-owned. Chowning the empty dir upfront (the original order) left the
+# freshly-built database root-owned, and the runtime forma user then failed
+# every cache write - "Lookup cache file not writable" (found live
+# 2026-08-22 via direct /compile diagnostics, after the prebuild itself
+# was confirmed working by the same log no longer saying "Font names
+# database not found"). Owning the whole tree also lets lualatex persist
+# per-font lookup caches and generated tables at runtime.
+RUN mkdir -p /var/cache/texmf-var
 RUN echo "FORMA-FONTCACHE-START building luaotfload names database" \
   && luaotfload-tool --update \
   && find /var/cache/texmf-var -name "luaotfload-names*" | tee /tmp/forma-fontcache-results.txt \
   && test -s /tmp/forma-fontcache-results.txt \
   && echo "FORMA-FONTCACHE-DONE database verified present"
+RUN chown -R forma:forma /var/cache/texmf-var
 
 WORKDIR /app
 
