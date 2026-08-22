@@ -10,10 +10,14 @@ import type { MarkSchemeQuestion } from '@/lib/pdf/mark-scheme-template';
 import { isActivePro } from '@/lib/payments/planStatus';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Performance Rule 10: "PDF: 25 seconds". vercel.json's maxDuration: 60 for
-// this route is the hard platform ceiling, not the user-facing budget - this
-// is what actually determines the timeout error message.
-const PDF_TIMEOUT_MS = 25_000;
+// Performance Rule 10 originally said "PDF: 25 seconds", written when
+// Puppeteer rendered PDFs in-process. Since the LuaLaTeX migration (and
+// measured live 2026-08-22: a bare document alone takes ~11s on Render's
+// free 0.1-CPU instance), 25s cannot fit even a trivial compile, let alone
+// the service's two passes. Raised to sit just under vercel.json's
+// maxDuration: 60 hard platform ceiling; latex-service's per-pass
+// COMPILE_TIMEOUT_MS is budgeted so two full passes fit inside this window.
+const PDF_TIMEOUT_MS = 55_000;
 const GENERIC_FAILURE_MESSAGE = 'Could not generate the PDF - please try again.';
 
 interface PdfRequestBody {

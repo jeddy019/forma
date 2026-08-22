@@ -24,7 +24,14 @@ if (!COMPILE_SECRET || COMPILE_SECRET.trim().length === 0) {
 }
 
 const MAX_CONCURRENT = 3;
-const COMPILE_TIMEOUT_MS = 20_000; // per lualatex pass
+// Budget math (measured live 2026-08-22): the caller (api/pdf/route.ts)
+// aborts at 55s, just under Vercel's maxDuration: 60 ceiling. This service
+// runs lualatex TWICE per request (needspace/lastpage resolution), so each
+// pass gets at most 26s - two full-length passes = 52s, leaving ~3s for
+// HTTP overhead and the PDF response body itself. The old 20s value could
+// not fit even a trivial fontspec document on Render's free 0.1-CPU
+// instance (~11s for a bare article with no fonts).
+const COMPILE_TIMEOUT_MS = 26_000; // per lualatex pass
 const LOG_TAIL_CHARS = 20_000;
 const MAX_IMAGES = 30;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB per image, generous for a rasterized diagram/QR code

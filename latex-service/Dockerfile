@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-recommended \
     texlive-latex-extra \
     texlive-fonts-recommended \
-    texlive-fonts-extra \
     texlive-luatex \
     texlive-pictures \
     texlive-science \
@@ -27,6 +26,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
+# texlive-fonts-extra was deliberately dropped (2026-08-22): it installs
+# thousands of OpenType/TrueType fonts that luaotfload must index into its
+# names database, inflating both image size and - critically on Render's
+# free 0.1-CPU instance - the database load cost of EVERY lualatex startup.
+# None of Forma's templates (worksheetLatexTemplate.ts /
+# markSchemeLatexTemplate.ts) use any font from it: text fonts are Inter/
+# Playfair Display (bundled below) plus Fira Code (fonts-firacode), math is
+# STIX Two Math (fonts-stix), and LaTeX defaults resolve via lmodern +
+# texlive-fonts-recommended. Re-add only if a template ever names a font
+# that ships exclusively in it.
 
 # fonts-stix (STIX Two Math/Text) and fonts-firacode (Fira Code) are real
 # Debian bookworm packages - used instead of bundling our own binaries the
@@ -96,6 +106,26 @@ RUN echo "FORMA-FONTCACHE-START building luaotfload names database" \
   && find /var/cache/texmf-var -name "luaotfload-names*" | tee /tmp/forma-fontcache-results.txt \
   && test -s /tmp/forma-fontcache-results.txt \
   && echo "FORMA-FONTCACHE-DONE database verified present"
+# Bake per-font parse caches (.luc bytecode) into the image by actually
+# running one real compile as root: the first lualatex on a fresh container
+# otherwise re-parses every font it touches (the bundled Inter variable TTF
+# is the expensive one), which measured live 2026-08-22 at >20s on the free
+# instance - blowing the whole compile budget before a single question
+# rendered. With this warmup, that cost is paid once at build time and the
+# resulting caches ship inside the image. The chown below must stay AFTER
+# this step so the freshly written caches end up forma-owned.
+RUN mkdir -p /tmp/fontwarm && cd /tmp/fontwarm \
+  && printf '%s\n' \
+       '\documentclass{article}' \
+       '\usepackage{fontspec}' \
+       '\setmainfont{Inter}' \
+       '\begin{document}' \
+       'Warmup $x^2+1$ \textit{italic} \textbf{bold}' \
+       '\end{document}' > main.tex \
+  && lualatex -interaction=nonstopmode -no-shell-escape main.tex >/dev/null 2>&1 \
+  && test -s main.pdf \
+  && rm -rf /tmp/fontwarm \
+  && echo "FORMA-FONTWARM-DONE Inter cache baked"
 RUN chown -R forma:forma /var/cache/texmf-var
 
 WORKDIR /app
