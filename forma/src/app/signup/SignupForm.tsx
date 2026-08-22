@@ -79,7 +79,7 @@ export default function SignupForm() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F7F4EF' }}>
       <div className="w-full max-w-sm animate-fade-up">
-        <Link href="/" className="block text-2xl font-semibold mb-1 text-center text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+        <Link href="/" className="block text-2xl font-semibold mb-1 text-center text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
           Forma
         </Link>
         <p className="text-sm text-center mb-8 text-[#5C5849]">Practice built for your student.</p>

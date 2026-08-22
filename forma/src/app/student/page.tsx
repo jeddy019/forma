@@ -196,7 +196,7 @@ export default async function StudentPortalPage({
 function PortalHeader() {
   return (
     <header className="flex items-center justify-between px-6 py-3 border-b border-[#E0D9D0] bg-[#F7F4EF]/95 backdrop-blur-sm sticky top-0 z-10">
-      <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+      <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
         Forma
       </span>
       <form action={signOutAction}>

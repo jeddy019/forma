@@ -22,7 +22,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-10 bg-[#F7F4EF]/90 backdrop-blur-sm">
         <div className="flex items-center justify-between px-6 md:px-10 py-4 max-w-6xl mx-auto w-full">
-          <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+          <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
             Forma
           </span>
           <nav className="flex items-center gap-1 sm:gap-2">
@@ -51,7 +51,7 @@ export default function Home() {
             </span>
             <h1
               className="text-4xl md:text-[48px] leading-[1.08] font-semibold text-[#1A1A18]"
-              style={{ fontFamily: 'var(--font-playfair)' }}
+              style={{ fontFamily: 'var(--font-fira)' }}
             >
               Practice built for <span className="text-[#C8A84B]">your student</span>.
             </h1>
@@ -107,7 +107,7 @@ export default function Home() {
         <section id="how-it-works" className="max-w-6xl mx-auto py-16 border-t border-[#E0D9D0] scroll-mt-20">
           <h2
             className="text-xl md:text-2xl font-semibold text-[#1A1A18] mb-10 text-center"
-            style={{ fontFamily: 'var(--font-playfair)' }}
+            style={{ fontFamily: 'var(--font-fira)' }}
           >
             One loop. Done properly.
           </h2>
@@ -195,10 +195,10 @@ function WorksheetMock() {
       aria-hidden="true"
     >
       <div className="flex items-start justify-between mb-2">
-        <span className="text-base font-semibold text-[#1A1A18]" style={{ fontFamily: 'var(--font-playfair)' }}>
+        <span className="text-base font-semibold text-[#1A1A18]" style={{ fontFamily: 'var(--font-fira)' }}>
           Naeto
         </span>
-        <span className="text-[10px] text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+        <span className="text-[10px] text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
           Forma
         </span>
       </div>
