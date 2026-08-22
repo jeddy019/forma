@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 // for "extended" parts (shown working, explanations, proofs, extended
 // writing) that Tier 1 can't auto-mark.
 //
-// PROVIDER: OpenAI (gpt-4o) is the standing default here, same as
+// PROVIDER: OpenAI (gpt-5.6-terra) is the standing default here, same as
 // generateWorksheet.ts and generateParentReport.ts - not a temporary
 // workaround pending an Anthropic restoration. Found live in a 2026-08-19
 // audit that this file was the one AI-calling path in the project that
@@ -18,12 +18,12 @@ import OpenAI from 'openai';
 // below as markExtendedPartAnthropic, inactive, for a clean swap back if
 // the Anthropic account is ever the deliberate choice again. Tech Stack's
 // "claude-sonnet-4-6 for AI-assisted marking only" is superseded by this -
-// gpt-4o (the same model already used for generation) is the standard now,
-// not a second/different model tier.
+// gpt-5.6-terra (the same model already used for generation) is the
+// standard now, not a second/different model tier.
 const openaiClient = new OpenAI();
 const anthropicClient = new Anthropic();
 
-const OPENAI_MODEL = 'gpt-4o';
+const OPENAI_MODEL = 'gpt-5.6-terra';
 const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 512;
 
@@ -101,6 +101,10 @@ export async function markExtendedPart(input: Tier2Input, signal: AbortSignal): 
   const response = await openaiClient.chat.completions.create(
     {
       model: OPENAI_MODEL,
+      // GPT-5.6 is a reasoning-hybrid model; this is a tiny, well-defined
+      // judgement task and the spec budgets Tier 2 at ~5 seconds, so cap
+      // reasoning effort explicitly instead of letting it default higher.
+      reasoning_effort: 'low',
       max_completion_tokens: MAX_TOKENS,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
