@@ -81,7 +81,7 @@ export default async function StudentWorksheetPage({
     return (
       <div className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: '#F7F4EF' }}>
         <div className={`${cardClass} max-w-md text-center`}>
-          <h1 className="text-xl font-semibold text-[#1A1A18] mb-2" style={{ fontFamily: 'var(--font-playfair)' }}>
+          <h1 className="text-xl font-semibold text-[#1A1A18] mb-2" style={{ fontFamily: 'var(--font-fira)' }}>
             This link has expired
           </h1>
           <p className="text-sm text-[#5C5849]">Ask your tutor to resend the worksheet link.</p>
@@ -99,7 +99,7 @@ export default async function StudentWorksheetPage({
       <div className="max-w-2xl mx-auto flex flex-col gap-6">
         <div className={cardClass}>
           <div className="flex items-center justify-between mb-3">
-            <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-playfair)' }}>
+            <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
               Forma
             </span>
           </div>

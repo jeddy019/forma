@@ -129,7 +129,7 @@ export default function StudentWorksheetForm({
     return (
       <div className={`${cardClass} text-center animate-fade-up`}>
         <CheckCircle2 className="w-8 h-8 text-[#1A3D2E] mx-auto mb-3" strokeWidth={1.5} aria-hidden="true" />
-        <h2 className="text-lg font-semibold text-[#1A1A18] mb-1" style={{ fontFamily: 'var(--font-playfair)' }}>
+        <h2 className="text-lg font-semibold text-[#1A1A18] mb-1" style={{ fontFamily: 'var(--font-fira)' }}>
           Answers submitted
         </h2>
         <p className="text-sm text-[#5C5849]">Your tutor will review your work soon.</p>

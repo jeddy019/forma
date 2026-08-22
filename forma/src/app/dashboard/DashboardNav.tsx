@@ -50,7 +50,7 @@ export function DashboardSidebar({
       <Link
         href="/dashboard/students"
         className="flex items-center justify-center md:justify-start px-0 md:px-5 h-14 shrink-0 border-b border-[#E0D9D0] text-lg font-semibold text-[#1A3D2E]"
-        style={{ fontFamily: 'var(--font-playfair)' }}
+        style={{ fontFamily: 'var(--font-fira)' }}
       >
         <span className="hidden md:inline">Forma</span>
         <span className="md:hidden">F</span>
