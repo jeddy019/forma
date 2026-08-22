@@ -496,22 +496,28 @@ export default function GenerateForm({
           <div>
             <p className={labelClass}>Worksheet</p>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => handleDownload('A4', 'worksheet')}
-                disabled={downloading['worksheet-A4']}
-                className={secondaryButtonClass}
-              >
-                {downloading['worksheet-A4'] ? 'Preparing...' : 'Download A4'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDownload('Letter', 'worksheet')}
-                disabled={downloading['worksheet-Letter']}
-                className={secondaryButtonClass}
-              >
-                {downloading['worksheet-Letter'] ? 'Preparing...' : 'Download Letter'}
-              </button>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => handleDownload('A4', 'worksheet')}
+                  disabled={downloading['worksheet-A4']}
+                  className={secondaryButtonClass}
+                >
+                  {downloading['worksheet-A4'] ? 'Preparing...' : 'Download A4'}
+                </button>
+                <p className="text-xs text-muted text-center mt-1">UK style print</p>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => handleDownload('Letter', 'worksheet')}
+                  disabled={downloading['worksheet-Letter']}
+                  className={secondaryButtonClass}
+                >
+                  {downloading['worksheet-Letter'] ? 'Preparing...' : 'Download Letter'}
+                </button>
+                <p className="text-xs text-muted text-center mt-1">America style print</p>
+              </div>
             </div>
           </div>
 
@@ -519,22 +525,28 @@ export default function GenerateForm({
             <div>
               <p className={labelClass}>Mark scheme</p>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDownload('A4', 'mark_scheme')}
-                  disabled={downloading['mark_scheme-A4']}
-                  className={secondaryButtonClass}
-                >
-                  {downloading['mark_scheme-A4'] ? 'Preparing...' : 'Download A4'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload('Letter', 'mark_scheme')}
-                  disabled={downloading['mark_scheme-Letter']}
-                  className={secondaryButtonClass}
-                >
-                  {downloading['mark_scheme-Letter'] ? 'Preparing...' : 'Download Letter'}
-                </button>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('A4', 'mark_scheme')}
+                    disabled={downloading['mark_scheme-A4']}
+                    className={secondaryButtonClass}
+                  >
+                    {downloading['mark_scheme-A4'] ? 'Preparing...' : 'Download A4'}
+                  </button>
+                  <p className="text-xs text-muted text-center mt-1">UK style print</p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('Letter', 'mark_scheme')}
+                    disabled={downloading['mark_scheme-Letter']}
+                    className={secondaryButtonClass}
+                  >
+                    {downloading['mark_scheme-Letter'] ? 'Preparing...' : 'Download Letter'}
+                  </button>
+                  <p className="text-xs text-muted text-center mt-1">America style print</p>
+                </div>
               </div>
             </div>
           )}
