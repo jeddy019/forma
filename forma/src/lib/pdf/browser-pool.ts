@@ -44,6 +44,7 @@ async function getBrowser(): Promise<Browser> {
           headless: true,
         }
       : {
+          args: ['--no-first-run', '--disable-dev-shm-usage'],
           executablePath: findLocalExecutablePath(),
           headless: true,
         }
@@ -58,34 +59,85 @@ export interface GeneratePdfOptions {
   // both keeps the previous plain-content-only behaviour.
   headerTemplate?: string;
   footerTemplate?: string;
+  // Abort signal wired from /api/pdf's timeout. Firing it closes the page
+  // mid-print so a timed-out job cannot linger as a zombie holding memory -
+  // before this existed, the route's Promise.race returned 504 while the
+  // underlying print kept running unbounded in the background.
+  signal?: AbortSignal;
 }
 
+function abortError(): Error {
+  return Object.assign(new Error('PDF print aborted'), { name: 'AbortError' });
+}
+
+// Per-step elapsed-time logging. Every step names itself so one real download
+// click pinpoints exactly where time (or a hang) went, instead of a single
+// opaque "504 after 25s".
 export async function generatePdf(
   html: string,
   format: 'A4' | 'Letter' = 'A4',
   options: GeneratePdfOptions = {}
 ): Promise<Buffer> {
+  const started = Date.now();
+  const step = (label: string, from: number) =>
+    console.log(`[pdf-timing] ${label}: ${Date.now() - from}ms (t+${Date.now() - started}ms)`);
+
+  if (options.signal?.aborted) throw abortError();
+
   while (activeJobs >= MAX_CONCURRENT) {
     await new Promise((resolve) => setTimeout(resolve, 500));
+    if (options.signal?.aborted) throw abortError();
   }
   activeJobs++;
+
+  let pageClosedByAbort = false;
   try {
+    const launchStart = Date.now();
     const browser = await getBrowser();
+    step('launch', launchStart);
+
+    if (options.signal?.aborted) throw abortError();
+
+    const contentStart = Date.now();
     const page = await browser.newPage();
+    options.signal?.addEventListener(
+      'abort',
+      () => {
+        pageClosedByAbort = true;
+        void page.close().catch(() => {});
+      },
+      { once: true }
+    );
+
     await page.setContent(html, { waitUntil: 'load' });
-    await page.evaluate(() => (window as unknown as { MathJax?: { typesetPromise?: () => Promise<void> } }).MathJax?.typesetPromise?.());
-    const displayHeaderFooter = Boolean(options.headerTemplate || options.footerTemplate);
+    step('setContent', contentStart);
+
+    // All fonts are embedded as data URIs (printStyles.ts), so this resolves
+    // near-instantly with zero network dependency; it stays as the guard that
+    // Chromium has finished applying every face before printing.
+    const fontsStart = Date.now();
+    await page.evaluate(() => document.fonts.ready);
+    step('fonts.ready', fontsStart);
+
+    const pdfStart = Date.now();
     const pdf = await page.pdf({
       format,
       printBackground: true,
       margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' },
-      displayHeaderFooter,
+      displayHeaderFooter: Boolean(options.headerTemplate || options.footerTemplate),
       headerTemplate: options.headerTemplate ?? '<span></span>',
       footerTemplate: options.footerTemplate ?? '<span></span>',
     });
+    step('page.pdf', pdfStart);
+
     await page.close();
+    step('total', started);
     return Buffer.from(pdf);
   } catch (error) {
+    if (pageClosedByAbort) {
+      // The caller aborted on purpose - the warm browser is fine to keep.
+      throw abortError();
+    }
     browserInstance = null;
     throw error;
   } finally {

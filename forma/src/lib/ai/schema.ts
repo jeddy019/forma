@@ -202,6 +202,31 @@ export const EXPECTED_TYPE_ORDER: QuestionType[] = [
 // doesn't invent a proportional split it wasn't asked for.
 export const DAILY_TYPE_ORDER: QuestionType[] = ['core', 'core', 'core', 'core', 'core'];
 
+// Postgres TEXT columns reject NUL bytes outright (error 22P05, found live
+// 2026-08-24: a real generation stored \u0000 inside questions_json and the
+// insert failed AFTER the paid AI call had already succeeded), and the other
+// C0 control characters render as garbage in HTML/PDF output. Models
+// occasionally emit literal \u0000 escapes inside string values, so every
+// string in the parsed response is scrubbed here - at the single choke point
+// both AI paths flow through - before anything downstream (DB insert, PDF
+// renderer, digital page) ever sees it. \n, \r, \t are deliberately kept.
+const UNSAFE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+
+function deepSanitizeStrings<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(UNSAFE_CONTROL_CHARS, '') as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(deepSanitizeStrings) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, deepSanitizeStrings(entry)])
+    ) as unknown as T;
+  }
+  return value;
+}
+
 // Structured outputs already guarantees the shape above; this checks the
 // business rules a JSON Schema can't express (exact question count and the
 // warm-up/core/challenge order the PDF section dividers depend on).
@@ -213,7 +238,7 @@ export function validateWorksheet(data: unknown, expectedTypeOrder: QuestionType
   if (typeof data !== 'object' || data === null) {
     throw new Error('AI response was not a JSON object.');
   }
-  const worksheet = data as GeneratedWorksheet;
+  const worksheet = deepSanitizeStrings(data) as GeneratedWorksheet;
 
   if (!Array.isArray(worksheet.questions) || worksheet.questions.length !== expectedTypeOrder.length) {
     throw new Error(

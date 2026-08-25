@@ -1,8 +1,10 @@
-import { FONT_LINKS, buildFooterTemplate, escapeHtml, formatDate } from './worksheet-template';
+import { buildFooterTemplate, escapeHtml, formatDate } from './worksheet-template';
+import { printFontFaces } from '@/lib/render/printStyles';
 
-// No MathJax here - invoices have no maths notation, so this skips
-// worksheet-template.ts's MATHJAX_SCRIPTS entirely (nothing to typeset,
-// no reason to pay for the CDN fetch on every invoice render).
+// Fonts are embedded via printFontFaces() (base64 data URIs, built once per
+// process) - invoices previously fetched Google Fonts at print time over the
+// network inside headless Chromium, the same stall risk that took down
+// worksheet downloads. No maths notation here, so no KaTeX styles.
 
 export interface InvoiceTemplateData {
   invoiceNumber: string;
@@ -38,7 +40,7 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): { html: string; fo
 <html lang="en">
 <head>
 <meta charset="utf-8">
-${FONT_LINKS}
+<style>${printFontFaces()}</style>
 <style>${INVOICE_STYLES}</style>
 </head>
 <body>

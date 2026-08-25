@@ -12,3 +12,4 @@ seed-demo-account.mts
 
 # Dependencies / build artifacts at wrapper level
 node_modules/
+dev-server.log

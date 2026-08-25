@@ -5,32 +5,15 @@ import { saveMarkingAction, type SaveMarkingResult } from './actions';
 import { sectionDividerLabel } from '@/lib/worksheet/sectionDividerLabel';
 import { cardClass, inputClass, labelClass, primaryButtonClass } from '@/lib/ui/formStyles';
 import type { SpeedFlag } from '@/lib/marking/speedAwareness';
+import type { MergedPart, MergedQuestion } from '@/lib/marking/loadMarkingDetail';
+
+export type { MergedPart, MergedQuestion };
 
 // Phase 7 Step 39: "18 min" rather than a raw second count.
 function formatTimeTaken(seconds: number): string {
   const minutes = Math.round(seconds / 60);
   if (minutes < 1) return 'under a minute';
   return `${minutes} min`;
-}
-
-export interface MergedPart {
-  partLabel: string | null;
-  text: string;
-  marks: number;
-  studentAnswer: string;
-  answered: boolean;
-  isExtended: boolean;
-  correctAnswer: string | null;
-  markScheme: { M1: string; A1: string; allow: string; commonError: string } | null;
-  tier1: { matched: boolean; marksAwarded: number } | null;
-  aiSuggestion: { marks_awarded: number; reasoning: string; confidence: 'low' | 'medium' | 'high' } | null;
-  existingTutorMark: number | null;
-}
-
-export interface MergedQuestion {
-  id: string;
-  type: string;
-  parts: MergedPart[];
 }
 
 const CONFIDENCE_STYLES: Record<string, string> = {
@@ -125,10 +108,13 @@ export default function MarkingForm({
                   {question.parts.map((part, partIndex) => (
                     <div key={partIndex} className={isMultiPart ? 'pl-4 border-l-2 border-[#E0D9D0]' : ''}>
                       <div className="flex items-start justify-between gap-3 mb-2">
-                        <p className="text-sm text-[#1A1A18] leading-relaxed">
+                        {/* textHtml arrives pre-rendered through the shared
+                            renderRichText pipeline (same as PDF + student
+                            page) - see loadMarkingDetail.ts. */}
+                        <div className="rich-text text-sm text-[#1A1A18] leading-relaxed flex-1">
                           {part.partLabel && <span className="font-medium">({part.partLabel}) </span>}
-                          {part.text}
-                        </p>
+                          <span dangerouslySetInnerHTML={{ __html: part.textHtml }} />
+                        </div>
                         <span className="text-xs text-[#9A9080] whitespace-nowrap">[{part.marks}]</span>
                       </div>
 

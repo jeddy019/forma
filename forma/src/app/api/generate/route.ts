@@ -19,7 +19,12 @@ import type { SkillMap } from '@/lib/mastery/types';
 import type { Country } from '@/lib/constants';
 
 const TOPIC_MAX_LENGTH = 1000;
-const GENERATION_TIMEOUT_MS = 30_000;
+// Raised from 30s to 55s with user sign-off, 2026-08-24: gpt-5.6-terra at
+// reasoning_effort 'low' measured 31-34s on consecutive real generations
+// (two 504 aborts live), against a documented 29.3s best case - the old cap
+// turned model variance into failed generations. 55s fits inside this
+// route's Vercel maxDuration of 60s with headroom for the DB write.
+const GENERATION_TIMEOUT_MS = 55_000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const GENERIC_FAILURE_MESSAGE = 'Worksheet generation failed - please try again.';

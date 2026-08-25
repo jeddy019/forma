@@ -27,13 +27,16 @@ entirely - it never appears on a Combined Science exam, so never include it.
 For Python, JavaScript, or HTML/CSS: write short, self-contained coding
 problems appropriate to the student's curriculum level - reading a snippet
 and predicting its output, finding and fixing a bug, or writing a short
-function or block to solve a stated problem. Present all code as plain
-text, correctly indented with real line breaks (this renders in a printed
-PDF, not a syntax-highlighted editor). Keep every snippet short enough to
-read comfortably on paper. In the mark scheme, M1 describes the correct
-method or logic and A1 gives the exact expected output or a correct worked
-example of the code - the same M1/A1 structure used for every other
-subject, adapted to show output/syntax instead of a numeric answer.
+function or block to solve a stated problem. Wrap EVERY code snippet in
+triple-backtick fences with the language on the opening fence (e.g.
+\`\`\`python), keeping real indentation and line breaks inside the fences -
+the renderer turns fenced blocks into monospace code panels, and unfenced
+code loses its formatting or breaks the document. Never put code inside
+$...$ math spans. Keep every snippet short enough to read comfortably on
+paper. In the mark scheme, M1 describes the correct method or logic and A1
+gives the exact expected output or a correct worked example of the code -
+the same M1/A1 structure used for every other subject, adapted to show
+output/syntax instead of a numeric answer (fence code examples there too).
 For "Programming Concepts": write theory questions on computational
 thinking, algorithms (sorting, searching, decomposition), data
 representation (binary, logic gates), and computer systems fundamentals,
@@ -86,14 +89,17 @@ for a fraction that stands on its own (not inline in a sentence) and
 \\tfrac{}{} for a fraction inside running text. Write a mixed number as
 $3\\dfrac{1}{2}$, never "3 and a half" or "3 1/2". For multi-line shown
 working (in a mark scheme's M1/A1, or an "extended" answer_format's answer),
-use an align* environment, e.g. \\begin{align*}6x &= 42 \\\\ x &= 7
-\\end{align*}. For Physics or Chemistry, use \\si{} (siunitx) for units with
-precision, e.g. $\\si{5}{\\meter\\per\\second}$, and \\ce{} (mhchem) for
-chemical formulae, e.g. \\ce{H2O}. Outside of $...$/\\(...\\) math spans,
-write plain English normally - do not attempt to escape LaTeX special
-characters yourself (a backslash, %, &, #, _, ~, or ^ in ordinary prose);
-that escaping is handled deterministically downstream, and hand-escaping it
-yourself would corrupt the output.
+use \\begin{align*}...\\end{align*}. For Physics quantities with units,
+write the value and unit together inside one math span using \\text{} for
+the unit, e.g. $5\\,\\text{m/s}$, $12\\,\\text{cm}^{3}$,
+$2.5\\times10^{8}\\,\\text{m/s}$ - never use \\si{}, \\SI{}, or any siunitx
+syntax (the renderer does not support it). For chemical formulae use \\ce{}
+(mhchem) always inside a math span, e.g. $\\ce{H2O}$,
+$\\ce{2HCl + CaCO3 -> CaCl2 + H2O + CO2}$. Outside
+of $...$/\\(...\\) math spans, write plain English normally - do not attempt
+to escape LaTeX special characters yourself (a backslash, %, &, #, _, ~, or
+^ in ordinary prose); that escaping is handled deterministically downstream,
+and hand-escaping it yourself would corrupt the output.
 
 Every part needs an "answer_format", one of: "numerical", "coordinates",
 "true_false", "multiple_choice", "extended". This decides whether a

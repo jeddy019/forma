@@ -20,7 +20,7 @@ import type { Country } from '@/lib/constants';
 // PARENT's - the free-tier 3/month cap is therefore never relevant here
 // (only an active-pro tutor ever reaches this route), unlike /api/generate.
 const TOPIC_MAX_LENGTH = 1000;
-const GENERATION_TIMEOUT_MS = 30_000;
+const GENERATION_TIMEOUT_MS = 55_000; // same user-signed-off raise as the main generate route, 2026-08-24
 const MIN_GROUP_SIZE = 2;
 const MAX_GROUP_SIZE = 10;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

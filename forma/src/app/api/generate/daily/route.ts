@@ -28,7 +28,7 @@ import type { Country } from '@/lib/constants';
 // sub-skill instead of 10 across a full decomposition, and
 // generated_from: 'daily'.
 const TOPIC_MAX_LENGTH = 1000;
-const GENERATION_TIMEOUT_MS = 30_000;
+const GENERATION_TIMEOUT_MS = 55_000; // same user-signed-off raise as the main generate route, 2026-08-24
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const GENERIC_FAILURE_MESSAGE = 'Worksheet generation failed - please try again.';

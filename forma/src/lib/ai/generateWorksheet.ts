@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { WORKSHEET_SYSTEM_PROMPT } from './systemPrompt';
 import { WORKSHEET_JSON_SCHEMA, validateWorksheet, EXPECTED_TYPE_ORDER, type GeneratedWorksheet, type QuestionType } from './schema';
+import { stripNulCharacters } from './sanitize';
 
 // PROVIDER: OpenAI (gpt-5.6-terra) is the standing default, per the user
 // directly (2026-08-22, upgrading from gpt-4o) - not a temporary
@@ -75,7 +76,7 @@ export async function generateWorksheet(
       }
 
       const parsed = JSON.parse(text);
-      return validateWorksheet(parsed, expectedTypeOrder);
+      return validateWorksheet(stripNulCharacters(parsed), expectedTypeOrder);
     } catch (error) {
       lastError = error;
       if (signal.aborted) throw error;
@@ -121,7 +122,7 @@ async function generateWorksheetAnthropic(
       }
 
       const parsed = JSON.parse(textBlock.text);
-      return validateWorksheet(parsed, expectedTypeOrder);
+      return validateWorksheet(stripNulCharacters(parsed), expectedTypeOrder);
     } catch (error) {
       lastError = error;
       if (signal.aborted) throw error;

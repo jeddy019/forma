@@ -89,33 +89,42 @@ export default async function MarkingPage({
           const reviewed = submission.tutor_marks_json !== null;
           const timeTaken = timeTakenLabel(submission.worksheet?.first_opened_at ?? null, submission.submitted_at);
           return (
-            <Link
-              key={submission.id}
-              href={`/dashboard/marking/${submission.id}`}
-              className={`${interactiveCardClass} p-4 flex items-center justify-between gap-4`}
-            >
-              <div>
-                <p className="text-sm font-medium text-[#1A1A18]">
-                  {submission.student?.name ?? 'Student'} - {submission.worksheet?.subject ?? ''}
-                </p>
-                <p className="text-xs text-[#9A9080]">
-                  {submission.worksheet?.topic ?? ''} - {new Date(submission.submitted_at).toLocaleDateString('en-GB')}
-                  {timeTaken && ` - took ${timeTaken}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {reviewed && submission.score_percentage !== null && (
-                  <span className="text-sm font-medium text-[#1A3D2E]">{submission.score_percentage}%</span>
-                )}
-                <span
-                  className={`text-xs font-medium rounded-full px-2.5 py-1 ${
-                    reviewed ? 'bg-[#E8F2ED] text-[#1A3D2E]' : 'bg-[#FEF9EC] text-[#B8963C]'
-                  }`}
-                >
-                  {reviewed ? 'Reviewed' : 'Needs review'}
-                </span>
-              </div>
-            </Link>
+            <div key={submission.id} className="flex items-stretch gap-2">
+              <Link
+                href={`/dashboard/marking/${submission.id}`}
+                className={`${interactiveCardClass} p-4 flex-1 min-w-0 flex items-center justify-between gap-4`}
+              >
+                <div>
+                  <p className="text-sm font-medium text-[#1A1A18]">
+                    {submission.student?.name ?? 'Student'} - {submission.worksheet?.subject ?? ''}
+                  </p>
+                  <p className="text-xs text-[#9A9080]">
+                    {submission.worksheet?.topic ?? ''} - {new Date(submission.submitted_at).toLocaleDateString('en-GB')}
+                    {timeTaken && ` - took ${timeTaken}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {reviewed && submission.score_percentage !== null && (
+                    <span className="text-sm font-medium text-[#1A3D2E]">{submission.score_percentage}%</span>
+                  )}
+                  <span
+                    className={`text-xs font-medium rounded-full px-2.5 py-1 ${
+                      reviewed ? 'bg-[#E8F2ED] text-[#1A3D2E]' : 'bg-[#FEF9EC] text-[#B8963C]'
+                    }`}
+                  >
+                    {reviewed ? 'Reviewed' : 'Needs review'}
+                  </span>
+                </div>
+              </Link>
+              {/* R4 quick flow: thumb-sized entry straight into the phone
+                  decision screen, next to the row's link into full review. */}
+              <Link
+                href={`/dashboard/marking/${submission.id}/quick`}
+                className="self-stretch flex items-center px-4 rounded-[12px] border border-[#1A3D2E]/25 text-sm font-medium text-[#1A3D2E] bg-transparent hover:bg-[#E8F2ED] active:scale-[0.98] transition-all duration-micro ease-premium"
+              >
+                Quick
+              </Link>
+            </div>
           );
         })}
       </div>

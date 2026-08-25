@@ -75,4 +75,26 @@ describe('validateWorksheet', () => {
     expect(() => validateWorksheet(null)).toThrow(/not a JSON object/);
     expect(() => validateWorksheet('a string')).toThrow(/not a JSON object/);
   });
+
+  // Found live 2026-08-24: the model emitted a literal \u0000 inside
+  // questions_json; Postgres refused the insert (22P05) after the paid AI
+  // call had already succeeded, surfacing as a failed generation. The
+  // validator must scrub control characters before anything downstream.
+  it('strips NUL and unsafe control characters from every nested string', () => {
+    const worksheet = makeWorksheet(EXPECTED_TYPE_ORDER);
+    worksheet.questions[0].parts[0].text = 'Solve\u0000 for x';
+    worksheet.questions[0].parts[0].mark_scheme.A1 = 'x = 4\u001B';
+    (worksheet.questions[0].parts[0].mark_scheme as unknown as Record<string, string>).common_error = 'bad\x00answer';
+    const cleaned = validateWorksheet(worksheet);
+    expect(cleaned.questions[0].parts[0].text).toBe('Solve for x');
+    expect(cleaned.questions[0].parts[0].mark_scheme.A1).toBe('x = 4');
+    expect(cleaned.questions[0].parts[0].mark_scheme.common_error).toBe('badanswer');
+  });
+
+  it('keeps legitimate whitespace characters while sanitising', () => {
+    const worksheet = makeWorksheet(EXPECTED_TYPE_ORDER);
+    worksheet.questions[0].parts[0].text = 'line one\nline two\tindented\r\nend';
+    const cleaned = validateWorksheet(worksheet);
+    expect(cleaned.questions[0].parts[0].text).toBe('line one\nline two\tindented\r\nend');
+  });
 });

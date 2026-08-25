@@ -20,7 +20,7 @@
   --color-error-light: #FDEDEC;
 
   /* Font Families - app-wide Fira Code (user decision 2026-08-22);
-     PDF downloads are unaffected (LaTeX fonts live in latex-service/) */
+     PDF downloads embed their own fonts (src/lib/render/printStyles.ts) */
   --font-heading: var(--font-fira);
   --font-body: var(--font-fira);
 
@@ -127,4 +127,28 @@ h1, h2, h3, h4, h5, h6 {
   100% {
     transform: translateX(250%);
   }
+}
+
+/* /s/[code] rich text - the part.textHtml blocks are rendered server-side
+   by renderRichText (worksheetHtml.ts), the same pipeline that builds the
+   PDF. These rules give its emitted classes their screen equivalents: code
+   fences become monospace panels (Fira Code, per Design System v2's coding-
+   subject font) and display math gets breathing room. KaTeX's own stylesheet
+   is imported by StudentWorksheetForm.tsx. */
+.rich-text .code-block {
+  font-family: var(--font-fira), 'Fira Code', ui-monospace, monospace;
+  font-size: 13px;
+  background: #F7F4EF;
+  border: 1px solid #E0D9D0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+.rich-text .katex-display {
+  margin: 10px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }

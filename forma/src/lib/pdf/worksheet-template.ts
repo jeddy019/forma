@@ -1,18 +1,16 @@
 import type { DiagramSpec } from '../ai/schema';
 
-// Shared HTML/type primitives, not a worksheet renderer any more. The
-// worksheet and mark-scheme PDFs moved to worksheetLatexTemplate.ts /
-// markSchemeLatexTemplate.ts (LaTeX, via the self-hosted compile service in
-// latex-service/) - this file's own HTML-rendering functions were trimmed
-// out accordingly. What's left is still load-bearing for two other
-// surfaces that were never part of that migration:
+// Shared HTML/type primitives, not a worksheet renderer any more. PDF
+// rendering moved to src/lib/render/worksheetHtml.ts (HTML -> Chromium
+// print, fonts embedded via src/lib/render/printStyles.ts). What's left
+// here is still load-bearing for two other surfaces:
 //   - invoice-template.ts (invoices stay on Puppeteer/HTML - no maths, no
-//     diagrams, nothing to gain from moving) imports escapeHtml, formatDate,
-//     FONT_LINKS, and buildFooterTemplate from here.
-//   - the live /s/[code] student page (StudentWorksheetForm.tsx, page.tsx)
-//     imports the WorksheetQuestion/WorksheetHeaderData type shapes from
-//     here, since that page renders the same questions_json structure in
-//     the browser, independently of how the PDF gets built.
+//     diagrams, nothing to gain from moving) imports escapeHtml,
+//     formatDate, and buildFooterTemplate from here.
+//   - the live /s/[code] student page builds its student-safe question
+//     shape from the WorksheetQuestion types here, since that page renders
+//     the same questions_json structure in the browser, independently of
+//     how the PDF gets built.
 
 export interface WorksheetHeaderData {
   studentName: string;
@@ -55,10 +53,7 @@ export interface WorksheetTemplateData {
 // All AI-generated free text (question text, alignment notes, badges,
 // student names) flows straight into page.setContent() as real HTML, so it
 // must be escaped - an unescaped '<' from the model's output would otherwise
-// be parsed as a tag rather than displayed as text. The LaTeX pipeline's
-// equivalent is escapeLatex.ts's escapeLatexOutsideMath - a different
-// function, not this one, since HTML and LaTeX have different special
-// characters and different injection risks.
+// be parsed as a tag rather than displayed as text.
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -71,25 +66,6 @@ export function escapeHtml(value: string): string {
 export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
-
-// Shared with mark-scheme-template.ts and invoice-template.ts - identical
-// HTML head requirements (same fonts) for every Puppeteer-rendered document.
-export const FONT_LINKS = `<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">`;
-
-// Still used by mark-scheme-template.ts - mark schemes have not moved to
-// this file's Puppeteer path (they moved to markSchemeLatexTemplate.ts),
-// but this constant stays exported here since mark-scheme-template.ts's own
-// surviving type exports still live alongside it. invoice-template.ts does
-// NOT import this - invoices have no maths notation.
-export const MATHJAX_SCRIPTS = `<script>
-  window.MathJax = {
-    tex: { inlineMath: [['$', '$'], ['\\\\(', '\\\\)']] },
-    svg: { fontCache: 'global' }
-  };
-</script>
-<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>`;
 
 // The footer is the one piece of the layout that genuinely repeats on every
 // printed page, so it goes through Puppeteer's footerTemplate mechanism

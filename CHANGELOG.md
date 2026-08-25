@@ -3115,3 +3115,226 @@ Two pieces of work in one session, both user-directed after an external read-onl
 
 **Verified**: direct API smoke test confirmed the model ID valid + strict Structured Outputs + reasoning_effort accepted (HTTP 200); two full real generations through the actual code path (one failing at 38.7s pre-fix, one passing at 29.3s post-fix); `tsc --noEmit` clean; eslint clean on changed files; full suite green 132/132. openai SDK is 7.5.0 - has `reasoning_effort` typed natively. **Not verified / flagged**: the 29.3s margin is thin (~0.7s under the abort); occasional slow generations may still trip it. If that shows up in real use, options are raising `GENERATION_TIMEOUT_MS` (deviation from Performance Rule 10's documented 30s cap - needs user sign-off) or accepting retry-once behaviour as designed. No browser click-through test this session - dev server left running for the user to generate a worksheet themselves.
 Decisions: terra over cheaper gpt-5.4-mini (quality headroom where curriculum accuracy is the product; user delegated the pick with a cost ceiling). One model everywhere (existing documented rule). reasoning_effort 'low' everywhere OpenAI is called, evidence-driven. History purge approved by user despite keeping the same keys.
+
+## 2026-08-24 - Architecture redesign: LaTeX microservice retired, unified HTML/KaTeX renderer
+
+USER DIRECTIVE: "we are actually redrawing the app's architecture" - approved the
+unified one-renderer-two-skins plan (print + future digital share one HTML source)
+and the subject-loophole audit across all 8+ subjects.
+
+WHAT WAS BUILT
+- src/lib/render/worksheetHtml.ts: the new single renderer. Worksheet AND mark
+  scheme render as HTML (KaTeX for $...$/\(...\)/align* math with mhchem loaded;
+  inline SVG diagrams via the existing renderDiagramSvg - no more sharp PNG
+  rasterization; print-safe palette identical to the LaTeX template's colour
+  floor; cover page, header rows, section dividers, per-part working lines,
+  QR block, all carried over 1:1). Rich-text pipeline: ``` fences -> escaped
+  monospace code panels; math spans -> KaTeX (throwOnError:false, never crashes
+  a PDF); prose -> HTML-escaped with newlines preserved.
+- /api/pdf rewired: renders HTML in-process and prints via browser-pool
+  generatePdf() with the existing footerTemplate ("Forma" / "N of M"). Timeout
+  back to 25s per Performance Rule 10 (LaTeX needed 55s; Chromium is fast).
+  Race now actually rejects (old AbortController was dead wiring after the swap).
+- browser-pool.ts: added document.fonts.ready wait before printing - Google
+  Fonts/KaTeX glyphs must settle or Chromium prints fallback fonts.
+- Subject loopholes fixed:
+  * Sciences: system prompt no longer teaches siunitx (\si) - KaTeX cannot
+    parse it. Units now $5\,\text{m/s}$ style. Defensive macros shim legacy
+    \si{5}{\meter\per\second} rows so old worksheets still print cleanly.
+  * Chemistry: \ce must arrive inside math spans going forward; renderer ALSO
+    lifts bare \ce{...} out of prose into KaTeX, so legacy rows render.
+  * CS subjects: code must arrive in triple-backtick fences; renderer turns
+    them into monospace panels (Fira Code), whole-document font stays swapped
+    for coding subjects as before.
+  * All subjects: every AI prose string is HTML-escaped BEFORE insertion -
+    literal <div>-style text in HTML/CSS questions can no longer break documents.
+- New tests: worksheetHtml.test.ts (12 tests: math spans, \ce, \si shim, fence
+  escaping incl. HTML-subject tags, dividers, coding-font switch, malformed-
+  LaTeX degradation).
+
+VERIFICATION
+- tsc clean, eslint clean (3 warnings fixed during build-out), 144/144 vitest.
+- npm run build clean (all routes compiled, statics still prerendered).
+- REAL end-to-end smoke (temporary test, deleted after): renderWorksheetHtml +
+  generatePdf produced valid %PDF bytes (>10KB) for BOTH worksheet and mark
+  scheme through the actual production code path, exercising math + mhchem +
+  \si shim + python fence + bar_chart diagram. This closes the previous
+  session's "STILL BROKEN: PDF generation fails end to end".
+- Dev server running on localhost:3000 (HTTP 200 on /).
+
+BUGS FOUND/FIXED THIS SESSION
+- Multi-part mark-scheme header repeated per part during first draft - caught
+  and restructured before ever running.
+- /api/pdf abort race was dead wiring after the renderer swap (signal had no
+  consumer) - replaced with a rejecting Promise.race.
+- Turbopack dev panic (0xc0000142 spawning PostCSS worker) hit mid-session;
+  root cause was stale .next dev cache, NOT the code changes - fixed by wiping
+  .next and restarting. Production build had passed clean throughout, which is
+  how we knew it was environmental.
+
+MACHINE CLEANUP (user-directed, not repo work)
+- Root AGENTS.md deleted: machine-made Codex clone of CLAUDE.md (global
+  Claude->Codex substitution artifacts like "Follow AGENTS.md only"), created
+  outside git, untracked. forma/forma/AGENTS.md KEPT - Next.js owns/regenerates it.
+- Claude Code CLI v2.1.237 uninstalled globally (~316MB); ~/.claude kept per user.
+- ~/.cache/puppeteer deleted (698MB, orphaned full-Chromium download; Forma uses
+  @sparticuz/chromium). Desktop/server early prototype KEPT per user choice.
+- npm cache 4.7GB->0 (+501MB _npx), Temp 1.16GB->6MB. ~6.8GB freed total.
+- Edge WebView2 explained to user, deliberately NOT removed despite initial ask
+  (breaks apps; Windows reinstalls it anyway).
+
+DEAD CODE PENDING USER-APPROVED DELETION (do not reference in new work):
+latex-service/ directory (repo root), src/lib/pdf/latexClient.ts,
+worksheetLatexTemplate.ts, markSchemeLatexTemplate.ts, diagramToImage.ts,
+escapeLatex.ts (+ its test). Render service forma-latex-service can be torn
+down in the dashboard; LATEX_COMPILE_URL/LATEX_COMPILE_SECRET env vars retired.
+
+NEXT STEPS (agreed plan)
+- R3: /s/[code] digital parity - StudentWorksheetForm onto this renderer,
+  per-part instant green/red auto-marking (answer_format already gates which
+  parts are auto-markable), progress + submit storing marks.
+- R4: tutor quick-marking screen feeding skill_map (30-second phone flow).
+- Later: JSXGraph interactive graphs, drawing canvas panel, MathLive keypad.
+
+## 2026-08-24 (later same day) - Dead LaTeX code deleted; R3 digital parity shipped
+
+DELETIONS (user-approved): latex-service/ directory removed entirely from the repo,
+plus latexClient.ts, worksheetLatexTemplate.ts, markSchemeLatexTemplate.ts,
+diagramToImage.ts, escapeLatex.ts (+ its 15 tests - suite went 144 -> 129, all green).
+Zero references remained (grep-verified before deletion).
+
+R3 - /s/[code] DIGITAL PARITY:
+- page.tsx now pre-renders every part's text SERVER-side via renderRichText and
+  passes finished HTML (textHtml) to the client form. Zero KaTeX JavaScript in
+  the student bundle (only katex.min.css); MathJax CDN loader deleted. Print and
+  digital interpret AI output identically because it is literally the same function.
+- TURBOPACK CONSTRAINT FOUND LIVE: importing worksheetHtml.ts (node:fs,
+  createRequire, qrcode-generator) into BOTH /api/pdf (App Route) and page.tsx
+  (RSC graph) fails the production build with "non-ecmascript placeable asset".
+  Fixed by extracting the pure rich-text core into src/lib/render/richText.ts
+  (katex+mhchem, macros, fences, math-span parser - no Node deps); worksheetHtml.ts
+  consumes it for documents, page.tsx consumes it directly.
+- Instant per-part marking: new POST /api/check-part loads mark_scheme_json
+  server-side by digital_code, runs the SAME markPart() Tier 1 matcher as
+  /api/submit, returns only { status: correct|incorrect|manual|cleared } - the
+  expected answer never crosses the wire. Form debounces 700ms after typing and
+  also fires on blur; stale-response guard applies verdicts only if the student
+  hasn't kept typing. Extended parts get "Your tutor will review this answer."
+  Visuals follow the design system: green #E8F2ED/#1A3D2E border+tint, red
+  #C0392B/#FDEDEC, lucide icons, animate-fade-up, aria-live polite.
+- worksheet-template.ts header comment updated (referenced deleted LaTeX files).
+- globals.css gained .rich-text .code-block / .katex-display rules (screen
+  equivalents of the PDF's code panels and display math spacing).
+- react-hooks/refs lint rule caught a ref-during-render mutation in the form;
+  ref sync moved into an effect.
+
+VERIFIED: tsc clean, eslint clean, 129/129 tests, production build clean.
+LIVE smoke against real DB rows: /s/beujFdaJ4Fk returns HTTP 200 with 17
+server-rendered KaTeX spans, zero mathjax strings; /api/check-part on that same
+worksheet's Q2(numerical, answer 4) returned correct/incorrect/400-invalid-part
+for right/wrong/malformed inputs respectively.
+
+NEXT: R4 tutor quick-marking screen (30-second phone flow feeding skill_map).
+
+## 2026-08-24 (same day, later still) - R4 tutor quick-marking screen shipped
+
+NEW: /dashboard/marking/[id]/quick - the 30-second phone flow. Only answered
+"extended" parts appear (Tier 1 is auto-marked; unanswered scores zero via the
+action), each as a card with: server-rendered rich-text question, the student's
+answer in a large panel, AI suggestion chip + reasoning, mark scheme collapsed
+behind one tap ("Mark scheme" toggle - progressive disclosure, not always-on),
+and a thumb-sized +/- stepper (44px targets) instead of the desktop page's tiny
+number input. Sticky bottom bar shows the LIVE score percentage moving as
+steppers change (tier1 awarded + current decisions / all available marks).
+Save reuses saveMarkingAction UNCHANGED - so clamping, tutor_marks_json,
+score_percentage, recordScore -> skill_map and adaptive difficulty behave
+identically to full review. Clean save auto-navigates back to the queue; when
+adaptive difficulty moved, it stays put and surfaces the difficultyNotice with
+Done / Open-full-review actions instead of silently eating it.
+
+REFACTOR: extracted src/lib/marking/loadMarkingDetail.ts - shared loader for
+auth, tutor-pro gating, RLS ownership, speed-flag peer queries, and the
+questions/scheme/tier merge - now consumed by BOTH the full review page
+(rewritten from ~110 lines down to a thin switch on the loader result) and the
+quick route. MergedPart gained textHtml (renderRichText) and the full review
+form now renders question text through the same pipeline as PDF/student page
+(the last raw-text surface showing literal "$x^2$" is gone). Merged types moved
+to the loader file; MarkingForm re-exports for compatibility.
+
+QUEUE: marking rows gained a separate "Quick" pill link beside the existing
+row link into full review.
+
+LINT NOTE: react-hooks/set-state-in-effect caught setShowNotice-in-effect;
+showNotice is now derived (state.success && difficultyNotice) rather than
+mirrored state. Second rule this week catching real design smells, not noise.
+
+VERIFIED: tsc clean, eslint clean, 129/129 tests, production build clean.
+Live: both /dashboard/marking/[id] and .../quick 307-redirect unauthenticated
+requests to /login?redirect=<path> on the running dev server with real
+submission ids. Authed click-through left for the user (demo tutor session).
+
+## 2026-08-25 - PDF downloads root-caused and fixed; fonts baked, timeouts made real
+
+CONTEXT: User reported downloads STILL broken after the Render retirement ("this is
+the product - if it doesn't work, everything else doesn't matter"). Also asked for
+(a) a full codebase review (done in-session as a report: done/doing/left/bugs), and
+(b) an honest standalone product assessment with strategy recommendations (delivered
+in chat per user's explicit instruction not to lean on CLAUDE.md's own framing).
+
+ROOT CAUSE: dev-server.log showed both live clicks dying as POST /api/pdf 504 at the
+25s race. Chrome exists locally; curl reached fonts.googleapis.com and cdn.jsdelivr.net
+in ~1.1s each. The hang was INSIDE headless Chromium: printed documents still loaded
+Google Fonts CSS/woff2 and KaTeX glyph fonts over the network at print time, then
+waited on document.fonts.ready - those fetches stalled (mechanism unconfirmed: system-
+proxy/DNS differences between Chromium and curl are the suspect) and blew the cap.
+Honest gap acknowledged: the prior session's end-to-end smoke passed but nobody had
+clicked a real Download button after the swap until now.
+
+FIXES:
+- src/lib/render/printStyles.ts (NEW): bakes every print font into documents as
+  base64 data URIs - Playfair Display 400/500/600 + Inter 300/400/500/600 +
+  Fira Code 400/500 via new @fontsource deps, KaTeX woff2 from node_modules with
+  woff/ttf fallback entries stripped. Zero CDN references remain in any document;
+  printing is offline-deterministic BY CONSTRUCTION, not by luck. No fallback CDN
+  path deliberately - missing font files must fail loudly here. Consumed by
+  worksheetHtml.ts (worksheets/mark schemes) AND invoice-template.ts (invoices had
+  the same latent risk).
+- /api/pdf timeout made REAL: AbortController signal now flows into generatePdf;
+  on expiry the page closes mid-print, so timed-out jobs can no longer linger as
+  zombies (the old race returned 504 while the print kept running unbounded).
+  Promise.race kept as belt-and-braces for client latency only.
+- browser-pool.ts: per-step [pdf-timing] logging (launch/setContent/fonts.ready/
+  page.pdf/total) so any future stall pinpoints itself from one click; abort no
+  longer nukes the warm browser instance; dead window.MathJax evaluate removed;
+  local launches pass --no-first-run --disable-dev-shm-usage.
+- Bug #3 fixed: stripNulCharacters deep-sanitizer (lib/ai/sanitize.ts) strips NUL
+  chars from AI output at generateWorksheet.ts's JSON.parse point - covers manual/
+  daily/group/scheduled call sites at the single source. Live generation once died
+  on Postgres 22P05 (\u0000 cannot be converted to text). +5 tests (136 total).
+- Dead code scrubbed: MATHJAX_SCRIPTS export deleted, FONT_LINKS deleted, stale
+  comments referencing escapeLatex/markSchemeLatexTemplate/latex-service cleaned
+  in worksheet-template.ts, mark-scheme-template.ts, invoice-template.ts, globals.css.
+
+TURBOPACK CONSTRAINTS HIT AND SOLVED LIVE (both now documented in printStyles.ts
+header): (1) require.resolve must take LITERAL string args - a variable argument
+emits "Can't resolve <dynamic>" and fails /api/pdf page-data collection;
+(2) font loading must stay OFF module-evaluation - eager printDocumentHead() ran
+inside Turbopack's build sandbox where real fs is virtualized (EBADF/fstat crash);
+everything is lazy at request time now.
+
+MEASURED: cold pipeline ~10.7s total (launch 6.6s + setContent 1.5s + fonts.ready
+44ms + page.pdf 2.5s); fonts.ready went from hanging-past-25s to 44ms. Warm prints
+a few seconds. Verified real %PDF bytes through production code paths for worksheet
+A4 + mark scheme Letter + invoice via temp vitest smoke (deleted after); asserted
+zero googleapis/jsdelivr strings in document HTML.
+
+NOT DONE (deliberate, needs user decision): free-tier credit still consumed when a
+generation FAILS - check_and_log_generation logs quota before the AI runs (that
+ordering IS the atomicity guarantee), so refunding failed attempts cleanly requires
+a DB function change (e.g. return usage_log id, delete on failure via service role).
+Ask before touching. CLAUDE.md sections still describing latex-service/LATEX_COMPILE_*
+need a doc-scrub pass next session.
+
+VERIFIED: tsc clean, eslint clean, 136/136 tests, production build clean (/api/pdf
+compiles dynamic). Dev server restarted fresh on localhost:3000 (old one gone);
+landing 200 warm in ~0.5s. Real Download click-through left to the user per workflow.

@@ -1,7 +1,29 @@
 import { notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
-import type { WorksheetQuestion } from '@/lib/pdf/worksheet-template';
+import type { DiagramSpec } from '@/lib/ai/schema';
+import { renderRichText } from '@/lib/render/richText';
 import StudentWorksheetForm from './StudentWorksheetForm';
+
+// Student-safe question shape: questions_json is already answer-free
+// (splitMarkScheme.ts moves answer/answer_format/mark_scheme into
+// mark_scheme_json), and this adds textHtml - the part text pre-rendered
+// SERVER-side through the exact same rich-text pipeline the PDF uses
+// (KaTeX math, fenced code panels, escaped prose). Rendering here rather
+// than in the client component means zero KaTeX JavaScript reaches the
+// student's browser bundle - print and digital are guaranteed to interpret
+// AI output identically because it is literally the same function.
+export interface StudentQuestionPart {
+  part_label: string | null;
+  marks: number;
+  diagram_spec: DiagramSpec | null;
+  textHtml: string;
+}
+
+export interface StudentQuestion {
+  id: string;
+  type: 'warm-up' | 'core' | 'challenge';
+  parts: StudentQuestionPart[];
+}
 
 // Security Rules 1 / Routing Structure: this route has no auth and must
 // never expose mark_scheme_json - it selects only student-safe columns via
@@ -24,7 +46,16 @@ interface WorksheetRow {
   questions_json: {
     curriculum: string;
     year_level: string;
-    questions: WorksheetQuestion[];
+    questions: Array<{
+      id: string;
+      type: 'warm-up' | 'core' | 'challenge';
+      parts: Array<{
+        part_label: string | null;
+        text: string;
+        marks: number;
+        diagram_spec: DiagramSpec | null;
+      }>;
+    }>;
   };
 }
 
@@ -94,6 +125,17 @@ export default async function StudentWorksheetPage({
   const alignmentNoteText =
     worksheet.alignment_note ?? `Questions are appropriate for ${curriculum} ${worksheet.subject}.`;
 
+  const studentQuestions: StudentQuestion[] = questions.map((question) => ({
+    id: question.id,
+    type: question.type,
+    parts: question.parts.map((part) => ({
+      part_label: part.part_label,
+      marks: part.marks,
+      diagram_spec: part.diagram_spec,
+      textHtml: renderRichText(part.text),
+    })),
+  }));
+
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6" style={{ backgroundColor: '#F7F4EF' }}>
       <div className="max-w-2xl mx-auto flex flex-col gap-6">
@@ -118,7 +160,7 @@ export default async function StudentWorksheetPage({
           <p className="text-sm text-[#5C5849]">{worksheet.topic}</p>
         </div>
 
-        <StudentWorksheetForm digitalCode={worksheet.digital_code} questions={questions} />
+        <StudentWorksheetForm digitalCode={worksheet.digital_code} questions={studentQuestions} />
       </div>
     </div>
   );

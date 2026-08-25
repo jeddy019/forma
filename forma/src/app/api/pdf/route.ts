@@ -2,22 +2,19 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { compileLatex, LatexCompileError } from '@/lib/pdf/latexClient';
-import { renderWorksheetLatex } from '@/lib/pdf/worksheetLatexTemplate';
-import { renderMarkSchemeLatex } from '@/lib/pdf/markSchemeLatexTemplate';
+import { generatePdf } from '@/lib/pdf/browser-pool';
+import { buildFooterTemplate } from '@/lib/pdf/worksheet-template';
+import { renderWorksheetHtml, renderMarkSchemeHtml } from '@/lib/render/worksheetHtml';
 import type { WorksheetQuestion } from '@/lib/pdf/worksheet-template';
 import type { MarkSchemeQuestion } from '@/lib/pdf/mark-scheme-template';
 import { isActivePro } from '@/lib/payments/planStatus';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Performance Rule 10 originally said "PDF: 25 seconds", written when
-// Puppeteer rendered PDFs in-process. Since the LuaLaTeX migration (and
-// measured live 2026-08-22: a bare document alone takes ~11s on Render's
-// free 0.1-CPU instance), 25s cannot fit even a trivial compile, let alone
-// the service's two passes. Raised to sit just under vercel.json's
-// maxDuration: 60 hard platform ceiling; latex-service's per-pass
-// COMPILE_TIMEOUT_MS is budgeted so two full passes fit inside this window.
-const PDF_TIMEOUT_MS = 55_000;
+// Performance Rule 10's documented "PDF: 25 seconds" cap. The LuaLaTeX
+// microservice (whose two-pass compiles needed 55s) is gone - worksheets and
+// mark schemes are now HTML rendered in-process and printed by Chromium via
+// the shared browser pool, which is a sub-second operation warm.
+const PDF_TIMEOUT_MS = 25_000;
 const GENERIC_FAILURE_MESSAGE = 'Could not generate the PDF - please try again.';
 
 interface PdfRequestBody {
@@ -116,9 +113,9 @@ export async function POST(request: NextRequest) {
   const curriculumBadge = worksheet.student?.curriculum_level ?? '';
   const yearOrGradeBadge = worksheet.student?.year_level ?? '';
 
-  const { source, images } =
+  const html =
     document === 'worksheet'
-      ? await renderWorksheetLatex(
+      ? renderWorksheetHtml(
           {
             header: {
               studentName,
@@ -133,9 +130,8 @@ export async function POST(request: NextRequest) {
             },
             questions: worksheet.questions_json.questions,
           },
-          format
         )
-      : await renderMarkSchemeLatex(
+      : renderMarkSchemeHtml(
           {
             header: {
               studentName,
@@ -150,28 +146,32 @@ export async function POST(request: NextRequest) {
             // Presence already checked above when document === 'mark_scheme'.
             questions: worksheet.mark_scheme_json!.questions,
           },
-          format
         );
 
-  // The compile service has no cancellation signal of its own, so this race
-  // (same pattern as before the LaTeX migration) only stops the client from
-  // waiting past 25s - an AbortController drives the fetch's own signal so
-  // the underlying HTTP request is actually cancelled too, unlike the old
-  // Puppeteer path where the render kept running in the background
-  // regardless.
+  // Chromium prints the HTML directly - no compile service, no image manifest.
+  // The abort signal is what makes the timeout real: on expiry it closes the
+  // page mid-print (see generatePdf), so a hung print cannot linger as a
+  // zombie. The Promise.race stays as belt-and-braces so the client never
+  // waits past the cap even if teardown itself stalls.
+  const controller = new AbortController();
   let pdfBuffer: Buffer;
-  const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), PDF_TIMEOUT_MS);
   try {
-    pdfBuffer = await compileLatex(source, images, abortController.signal);
+    pdfBuffer = await Promise.race([
+      generatePdf(html, format, { footerTemplate: buildFooterTemplate(), signal: controller.signal }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          controller.abort();
+          reject(Object.assign(new Error('PDF render timed out'), { name: 'AbortError' }));
+        }, PDF_TIMEOUT_MS);
+      }),
+    ]);
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      console.error(`PDF render timed out after ${PDF_TIMEOUT_MS}ms for worksheet ${worksheetId} (${document})`);
       return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
     }
-    console.error('PDF generation failed', error, error instanceof LatexCompileError ? error.log : undefined);
+    console.error('PDF generation failed', error);
     return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
-  } finally {
-    clearTimeout(timeoutId);
   }
 
   const firstName = sanitizeForFilename(studentName.split(' ')[0] ?? '');

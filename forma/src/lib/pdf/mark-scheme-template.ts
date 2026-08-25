@@ -2,9 +2,9 @@ import type { WorksheetHeaderData } from './worksheet-template';
 
 // Type primitives only - the Puppeteer/HTML rendering that used to live
 // here (renderMarkSchemeHtml and its helpers) moved to
-// markSchemeLatexTemplate.ts (LaTeX, via the self-hosted compile service).
-// These types stay here rather than moving, since api/pdf/route.ts still
-// imports MarkSchemeQuestion from this exact path.
+// render/worksheetHtml.ts (HTML -> Chromium print, same renderer as
+// worksheets). These types stay here rather than moving, since
+// api/pdf/route.ts still imports MarkSchemeQuestion from this exact path.
 
 export type MarkSchemeHeaderData = Omit<WorksheetHeaderData, 'digitalCode'>;
 
