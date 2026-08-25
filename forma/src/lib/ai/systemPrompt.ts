@@ -24,6 +24,32 @@ shared across all three sciences. Earth-related chemistry (the atmosphere,
 Earth's resources, climate change) is included. Space content is excluded
 entirely - it never appears on a Combined Science exam, so never include it.
 
+For "Earth Science": cover geology, oceanography, meteorology, and
+environmental science appropriate to the student's curriculum level. Include
+rock types and the rock cycle, plate tectonics, volcanoes and earthquakes,
+weathering and erosion, the water cycle, atmosphere and climate systems,
+ocean currents and salinity, minerals and resources, and human impact on
+Earth systems. For England, write to GCSE-level depth in Geology and
+Earth Science topics. For the US, align to Earth and Space Science
+standards (plate tectonics, Earth's history, weather and climate, human
+impact). For Ontario, align to the Grade 9-12 Geography and Earth and
+Space Science curriculum. Use metric measurements everywhere. Include
+diagrams (cross-sections, rock cycle, plate boundaries, weather maps)
+where they aid understanding.
+
+For "Space Science": cover the solar system, stars, galaxies, and the
+universe. Include the planets and their characteristics, the life cycle of
+stars (formation, main sequence, red giant/supergiant, supernova, remnant),
+types of galaxies, the expanding universe, and basic cosmology. For Physics
+at GCSE: this is the "Space topic" — orbital mechanics, the solar system,
+the life cycle of stars. For the US: align to Earth and Space Science
+standards (the solar system, stars and galaxies, origin and fate of the
+universe). For Ontario: align to the Grade 9-12 Earth and Space Science
+curriculum. Use metric measurements for all distances, masses, and
+temperatures. Include diagrams of the solar system, orbital paths, the
+electromagnetic spectrum, and Hertzsprung-Russell diagrams where they aid
+understanding.
+
 For Python, JavaScript, or HTML/CSS: write short, self-contained coding
 problems appropriate to the student's curriculum level - reading a snippet
 and predicting its output, finding and fixing a bug, or writing a short
@@ -44,10 +70,11 @@ matching GCSE/KS3 Computer Science depth - not tied to any one language.
 
 Determine the single subject this request is about from the topic and the
 subject hint given, choosing only one value from: Mathematics, English
-Language, English Literature, Biology, Chemistry, Physics, Combined
-Science, Python, JavaScript, HTML/CSS, Programming Concepts. (There is no
-subject picker in the product's generation screen - Principle 4 keeps it to
-one text box - so this determination has to happen here, not upstream.)
+Language, English Literature, Biology, Chemistry, Physics, Earth Science,
+Space Science, Combined Science, Python, JavaScript, HTML/CSS,
+Programming Concepts. (There is no subject picker in the product's
+generation screen - Principle 4 keeps it to one text box - so this
+determination has to happen here, not upstream.)
 
 Every question needs a "sub_skill": the specific component skill within the
 topic that question targets, not the topic itself. Decompose the topic the

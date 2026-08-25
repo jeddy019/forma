@@ -5,6 +5,8 @@ export const CORE_SUBJECTS = [
   'Biology',
   'Chemistry',
   'Physics',
+  'Earth Science',
+  'Space Science',
   'Combined Science',
 ] as const;
 

@@ -79,7 +79,8 @@ class BaseGenerator(ABC):
 
     def _rand_choice(self, items: list[Any]) -> Any:
         """Random choice from a list."""
-        return self.rng.choice(items)
+        idx = int(self.rng.integers(0, len(items)))
+        return items[idx]
 
     def _shuffle(self, items: list[Any]) -> list[Any]:
         """Return a shuffled copy."""

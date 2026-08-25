@@ -3417,3 +3417,26 @@ all three generators — every internal method now receives `sub_skill` explicit
 - generators/arithmetic.py, generators/algebra.py, generators/equations.py not yet built (next priority after deployment)
 - No contract/property tests for the Python service (Phase 10 step 54)
 - Billing keys/domain verification remain launch blockers
+
+---
+
+SESSION UPDATE (Session 8 — 2026-08-25):
+Completed: Phase 10 routing integration + Earth Science subject + English localisation.
+1. Deterministic routing wired into all 4 generate routes:
+   - /api/generate/route.ts — was already done in Session 7
+   - /api/generate/daily/route.ts — added matchMathEngineTopic + callMathEngine with 5-question deterministic path, AI fallback on failure. Fundamentals-routed generations still go through AI (prerequisite sub-skill may not have a generator).
+   - /api/generate/group/route.ts — same pattern, uses first student's country for locale, 10 questions. Group mode is tutor-only so no free-tier concern.
+   - /api/cron/generate-scheduled/route.ts — same pattern inside generateAndDeliver(), 10 questions. Uses the topic prompt (which includes difficulty) for matching.
+2. Earth Science added as new selectable subject:
+   - constants.ts: added to CORE_SUBJECTS array (now 12 MVP subjects)
+   - CLAUDE.md Subject Catalogue: updated count from 11 to 12, added Earth Science
+   - systemPrompt.ts: added Earth Science to the subject-determination list and added a dedicated guidance paragraph (geology, oceanography, meteorology, environmental science, with country-specific curriculum alignment)
+3. english.py localised for three countries:
+   - England: unchanged from original (UK SPaG, AQA/Edexcel comprehension style, British spelling)
+   - US (Common Core ELA): new path — argumentative/informational/narrative text types, vocabulary in context, text structure analysis, US grammar conventions (homophones, run-ons, sentence types), Common Core-style evidence-based comprehension
+   - Ontario: new path — Canadian spelling (cancelled, coloured), Ontario-specific references (Algonquin, TTC, Canadian Shield), Ontario curriculum-aligned writing tasks, Canadian grammar conventions
+   - Registry patterns expanded: added "ela", "common core ela", "argumentative", "informational", "narrative writing", "text structure", "vocabulary", "homophone", "run-on", "comma splice", "subject and predicate"
+4. Verification: tsc --noEmit clean, python ast.parse clean on english.py
+
+Next: Deploy Python service to Render, test live integration end-to-end.
+Decisions: None — all work followed existing patterns.

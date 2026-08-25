@@ -2,13 +2,14 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generateWorksheet } from '@/lib/ai/generateWorksheet';
+import { generateWorksheet, buildWorksheetFromDeterministic } from '@/lib/ai/generateWorksheet';
 import { buildUserPrompt } from '@/lib/ai/buildUserPrompt';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { sendWorksheetReadyEmail } from '@/lib/email/send';
+import { callMathEngine, matchMathEngineTopic } from '@/lib/ai/mathEngineClient';
 import type { Country } from '@/lib/constants';
 
 // Phase 6 Step 31: Group mode - "one worksheet, multiple students." One
@@ -118,20 +119,52 @@ export async function POST(request: NextRequest) {
     topicPrompt: sanitizedTopic,
   });
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
-
+  // --- Deterministic routing (Phase 10) ---
+  // Same pattern as /api/generate/route.ts but for group mode. The first
+  // student's country determines the locale for the maths engine. Group mode
+  // is tutor-only (always pro), so no free-tier check needed.
   let worksheet;
-  try {
-    worksheet = await generateWorksheet(userPrompt, controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
+  const topicMatch = await matchMathEngineTopic(sanitizedTopic);
+  if (topicMatch.is_deterministic && topicMatch.matched_keys.length > 0) {
+    const engineResult = await callMathEngine({
+      curriculum: first.curriculum_level,
+      locale: first.country === 'canada_ontario' ? 'ontario' : first.country === 'united_states' ? 'us' : 'england',
+      difficulty: first.curriculum_level.includes('A-Level') ? 'higher' : 'standard',
+      year_level: first.year_level,
+      topic: sanitizedTopic,
+      question_count: 10,
+    });
+
+    if (engineResult && engineResult.questions.length === 10) {
+      worksheet = buildWorksheetFromDeterministic(engineResult.questions, {
+        subject: engineResult.subject,
+        topic: engineResult.topic,
+        curriculum: engineResult.curriculum,
+        year_level: engineResult.year_level,
+        difficulty: engineResult.difficulty_overall,
+        alignment_note: engineResult.alignment_note,
+      });
+      console.log(`[deterministic] Routed group ${sanitizedTopic} to maths engine (${topicMatch.matched_keys[0]}), 10 questions`);
+    } else {
+      console.log(`[deterministic] Engine returned ${engineResult?.questions?.length ?? 0}/10 questions, falling back to AI`);
     }
-    console.error('Group worksheet generation failed', error);
-    return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
-  } finally {
-    clearTimeout(timeout);
+  }
+
+  // --- AI fallback (existing path) ---
+  if (!worksheet) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
+    try {
+      worksheet = await generateWorksheet(userPrompt, controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
+      }
+      console.error('Group worksheet generation failed', error);
+      return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   const { questionsJson, markSchemeJson } = splitMarkScheme(worksheet);

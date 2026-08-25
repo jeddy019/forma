@@ -2,13 +2,14 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateWorksheet } from '@/lib/ai/generateWorksheet';
+import { generateWorksheet, buildWorksheetFromDeterministic } from '@/lib/ai/generateWorksheet';
 import { buildUserPrompt } from '@/lib/ai/buildUserPrompt';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { sendWeeklyDeliveryEmail, sendScheduleFailedEmail } from '@/lib/email/send';
 import { isDueNow } from '@/lib/schedule/isDueNow';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { callMathEngine, matchMathEngineTopic } from '@/lib/ai/mathEngineClient';
 import type { Country } from '@/lib/constants';
 
 // Automated Schedule Logic (CLAUDE.md): runs every 30 minutes (vercel.json's
@@ -96,13 +97,47 @@ async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Pr
     topicPrompt,
   });
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
+  // --- Deterministic routing (Phase 10) ---
+  // Same pattern as /api/generate/route.ts. Scheduled worksheets are always
+  // 10 questions. The schedule stores the subject, which gives us a head
+  // start on routing — but we still check the topic text for maths engine
+  // matches since the topics array is the real signal.
   let worksheet;
-  try {
-    worksheet = await generateWorksheet(userPrompt, controller.signal);
-  } finally {
-    clearTimeout(timeout);
+  const topicMatch = await matchMathEngineTopic(topicPrompt);
+  if (topicMatch.is_deterministic && topicMatch.matched_keys.length > 0) {
+    const engineResult = await callMathEngine({
+      curriculum: student.curriculum_level,
+      locale: student.country === 'canada_ontario' ? 'ontario' : student.country === 'united_states' ? 'us' : 'england',
+      difficulty: student.curriculum_level.includes('A-Level') ? 'higher' : 'standard',
+      year_level: student.year_level,
+      topic: topicPrompt,
+      question_count: 10,
+    });
+
+    if (engineResult && engineResult.questions.length === 10) {
+      worksheet = buildWorksheetFromDeterministic(engineResult.questions, {
+        subject: engineResult.subject,
+        topic: engineResult.topic,
+        curriculum: engineResult.curriculum,
+        year_level: engineResult.year_level,
+        difficulty: engineResult.difficulty_overall,
+        alignment_note: engineResult.alignment_note,
+      });
+      console.log(`[deterministic] Routed scheduled ${topicPrompt} to maths engine (${topicMatch.matched_keys[0]}), 10 questions`);
+    } else {
+      console.log(`[deterministic] Engine returned ${engineResult?.questions?.length ?? 0}/10 questions, falling back to AI`);
+    }
+  }
+
+  // --- AI fallback (existing path) ---
+  if (!worksheet) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
+    try {
+      worksheet = await generateWorksheet(userPrompt, controller.signal);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   const { questionsJson, markSchemeJson } = splitMarkScheme(worksheet);
