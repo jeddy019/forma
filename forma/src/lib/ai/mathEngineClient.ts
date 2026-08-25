@@ -2,7 +2,7 @@ import type { GeneratedWorksheet } from '@/lib/ai/schema';
 
 const MATH_ENGINE_URL = process.env.MATH_ENGINE_URL ?? 'http://localhost:8000';
 const MATH_ENGINE_SECRET = process.env.MATH_ENGINE_SECRET ?? '';
-const ENGINE_TIMEOUT_MS = 20_000;
+const ENGINE_TIMEOUT_MS = 10_000;
 
 interface EngineRequest {
   curriculum: string;
@@ -60,7 +60,7 @@ export async function matchMathEngineTopic(topic: string): Promise<{ matched_key
   try {
     const res = await fetch(`${MATH_ENGINE_URL}/match?topic=${encodeURIComponent(topic)}`, {
       headers: { Authorization: `Bearer ${MATH_ENGINE_SECRET}` },
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(2_000),
     });
 
     if (!res.ok) return { matched_keys: [], is_deterministic: false };
