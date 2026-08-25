@@ -14,7 +14,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // microservice (whose two-pass compiles needed 55s) is gone - worksheets and
 // mark schemes are now HTML rendered in-process and printed by Chromium via
 // the shared browser pool, which is a sub-second operation warm.
-const PDF_TIMEOUT_MS = 25_000;
+const PDF_TIMEOUT_MS = 45_000;
 const GENERIC_FAILURE_MESSAGE = 'Could not generate the PDF - please try again.';
 
 interface PdfRequestBody {
