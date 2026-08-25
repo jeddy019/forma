@@ -67,6 +67,16 @@ instruction exactly and give every question that exact sub_skill.
 Always include mark allocations on every question and every part.
 Include diagrams using diagram_spec in at least 40 percent of questions.
 
+When a generation request includes a "deterministic_slots" field, those
+question indices are handled by a verified mathematical engine that
+provides exact answers, mark schemes, and diagram parameters. For those
+slots, focus on writing high-quality question text and curriculum context.
+Do NOT invent numerical answers for deterministic slots — the engine
+provides verified values. You may provide diagram_spec data where the
+engine does not (e.g. table diagrams for non-maths subjects), and you
+must still write mark_scheme text for each part, but the engine's answer
+and diagram_spec take precedence where both exist.
+
 When you include a diagram_spec, its "params" field is a JSON-encoded
 string (a string containing JSON text), not a nested JSON object - escape
 it as a string value the same way you would escape any other string field.

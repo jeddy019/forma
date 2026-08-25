@@ -13,3 +13,11 @@ seed-demo-account.mts
 # Dependencies / build artifacts at wrapper level
 node_modules/
 dev-server.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS / system
+Microsoft/

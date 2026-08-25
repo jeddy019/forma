@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generateWorksheet } from '@/lib/ai/generateWorksheet';
+import { generateWorksheet, buildWorksheetFromDeterministic } from '@/lib/ai/generateWorksheet';
 import { buildUserPrompt } from '@/lib/ai/buildUserPrompt';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
@@ -15,6 +15,7 @@ import { EXPECTED_TYPE_ORDER, DAILY_TYPE_ORDER } from '@/lib/ai/schema';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { pullVerifiedQuestions } from '@/lib/questionBank/pullVerifiedQuestions';
 import { blendWithBank } from '@/lib/questionBank/blendWithBank';
+import { callMathEngine, matchMathEngineTopic } from '@/lib/ai/mathEngineClient';
 import type { SkillMap } from '@/lib/mastery/types';
 import type { Country } from '@/lib/constants';
 
@@ -150,20 +151,59 @@ export async function POST(request: NextRequest) {
     subSkillDirective,
   });
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
-
+  // --- Deterministic routing (Phase 10) ---
+  // Check if the Python maths engine covers this topic. If so, generate
+  // verified question data there and skip the AI entirely — faster, exact,
+  // and costs zero tokens. On engine failure, fall through to the full AI
+  // path so the user never sees an error from a working pipeline.
   let worksheet;
-  try {
-    worksheet = await generateWorksheet(userPrompt, controller.signal, typeOrder);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
+  const questionCount = fundamentalsTarget ? 5 : 10;
+
+  const topicMatch = await matchMathEngineTopic(sanitizedTopic);
+  if (topicMatch.is_deterministic && topicMatch.matched_keys.length > 0 && !fundamentalsTarget) {
+    // Fundamentals routing targets a prerequisite sub-skill that may not
+    // exist in the engine — skip deterministic for now to avoid partial
+    // sets. The AI path handles this reliably.
+    const engineResult = await callMathEngine({
+      curriculum: student.curriculum_level,
+      locale: student.country === 'canada_ontario' ? 'ontario' : student.country === 'united_states' ? 'us' : 'england',
+      difficulty: student.curriculum_level.includes('A-Level') ? 'higher' : 'standard',
+      year_level: student.year_level,
+      topic: sanitizedTopic,
+      question_count: questionCount,
+    });
+
+    if (engineResult && engineResult.questions.length === questionCount) {
+      worksheet = buildWorksheetFromDeterministic(engineResult.questions, {
+        subject: engineResult.subject,
+        topic: engineResult.topic,
+        curriculum: engineResult.curriculum,
+        year_level: engineResult.year_level,
+        difficulty: engineResult.difficulty_overall,
+        alignment_note: engineResult.alignment_note,
+      });
+      console.log(`[deterministic] Routed ${sanitizedTopic} to maths engine (${topicMatch.matched_keys[0]}), ${questionCount} questions`);
+    } else {
+      console.log(`[deterministic] Engine returned ${engineResult?.questions?.length ?? 0}/${questionCount} questions, falling back to AI`);
     }
-    console.error('Worksheet generation failed', error);
-    return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
-  } finally {
-    clearTimeout(timeout);
+  }
+
+  // --- AI fallback (existing path) ---
+  if (!worksheet) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
+
+    try {
+      worksheet = await generateWorksheet(userPrompt, controller.signal, typeOrder);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
+      }
+      console.error('Worksheet generation failed', error);
+      return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // Phase 7 Step 42: pull verified question_bank rows for the AI's own

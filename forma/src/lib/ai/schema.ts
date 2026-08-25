@@ -15,6 +15,7 @@ export const DIAGRAM_TYPES = [
   'circle',
   'table',
   'right_angle',
+  'pie_chart',
 ] as const;
 export type DiagramType = (typeof DIAGRAM_TYPES)[number];
 

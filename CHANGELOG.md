@@ -3338,3 +3338,82 @@ need a doc-scrub pass next session.
 VERIFIED: tsc clean, eslint clean, 136/136 tests, production build clean (/api/pdf
 compiles dynamic). Dev server restarted fresh on localhost:3000 (old one gone);
 landing 200 warm in ~0.5s. Real Download click-through left to the user per workflow.
+
+## 2026-08-25 - Hybrid question-engine architecture approved and documented
+
+DECISION: Forma will adopt a private, Render-hosted Python/FastAPI service using
+SymPy and specialised generators as its deterministic Maths Engine. It is not a
+resurrection of the retired LuaLaTeX/Render PDF compiler. The service returns
+versioned, strict Forma question JSON and diagram data only; Next.js remains the
+public/authenticated orchestrator, and HTML/KaTeX/Chromium remains the one PDF
+renderer for worksheets, mark schemes, and invoices.
+
+QUALITY POLICY: Supported maths routes prefer deterministic generation with
+property-tested answers, acceptable forms, mark schemes, controlled difficulty,
+and compatible diagram specs. OpenAI remains responsible for curriculum
+interpretation, contextual/language-rich content, and unsupported maths. Science
+uses AI plus objective validators where possible; educator-verified question-bank
+content is the preferred source for English and other subjective high-stakes work.
+
+LOCALISATION: One shared policy will enforce UK, US, and Ontario terminology,
+spelling, units, and curriculum conventions across the Python service and OpenAI
+prompt. The documentation now names the service boundary, secret, operational
+controls, routing, test requirements, and Phase 10 rollout. No Python service or
+application integration was implemented in this documentation-only session.
+
+## 2026-08-25 - Phase 10: Python maths engine built + Next.js integration wired
+
+Built the full Python deterministic maths engine and connected it to the
+Next.js generation pipeline. This is the first real code in Phase 10 -
+the previous session only documented the architecture.
+
+### math-engine/ Python service (13 files)
+- `pyproject.toml`: project metadata, Python ≥3.11, all deps (FastAPI, uvicorn, SymPy, NumPy, Pandas, SciPy)
+- `requirements.txt`: pinned deps
+- `Dockerfile`: Python 3.11-slim, uvicorn entrypoint
+- `.env.example`: MATH_ENGINE_SECRET, PORT
+- `app/__init__.py`: empty
+- `app/config.py`: pydantic-settings (math_engine_secret, port, log_level)
+- `app/auth.py`: bearer token verification middleware
+- `app/models.py`: full Pydantic models matching Forma's GeneratedWorksheet schema
+- `app/localisation.py`: locale-aware terminology tables (england/ontario/us), curriculum level validation
+- `app/generators/__init__.py`: empty
+- `app/generators/base.py`: BaseGenerator ABC with difficulty helpers, KaTeX helpers, diagram helpers (make_coordinate_grid, make_table, make_right_angle, make_bar_chart, make_number_line)
+- `app/generators/registry.py`: lazy registry, topic→generator pattern matching, match_topic_to_keys()
+- `app/generators/fractions.py`: FractionsGenerator with 6 sub-skills (adding, subtracting, multiplying, dividing, mixed_numbers, equivalent_fractions)
+- `app/generators/simultaneous.py`: SimultaneousGenerator with 6 sub-skills (elimination, substitution, fractions, decimals, word_problems, graph_based) — graph_based generates coordinate_grid diagrams verified against actual solution points
+- `app/generators/quadratics.py`: QuadraticsGenerator with 5 sub-skills (factorise, quadratic_formula, completing_square, graph_sketching, forming_equations)
+- `app/generators/surds.py`: SurdsGenerator with 4 sub-skills (simplify, rationalise, operations, conjugate)
+- `app/main.py`: FastAPI app with /health, /generate, /generate/multi, /match endpoints
+
+Total: 4 generators, 21 sub-skills covering the priority topics from CLAUDE.md.
+
+### Bug fixed during generator testing
+Simultaneous, quadratics, and surds generators all had the same pattern: internal
+methods (e.g. _decimal_question, _forming_question, _conjugate_question) referenced
+`sub_skill` as a variable but didn't receive it as a parameter. Found and fixed in
+all three generators — every internal method now receives `sub_skill` explicitly.
+
+### Next.js integration (4 new files, 2 modified)
+- NEW `src/lib/ai/mathEngineClient.ts`: bounded HTTP client (20s timeout, bearer auth, AbortController, fallback-on-failure returning null)
+- NEW `src/lib/ai/routeQuestion.ts`: assignSlots() decides deterministic vs AI routing; mergeDeterministicSlots() for partial-set blending (not used yet — current routing is all-or-nothing)
+- MODIFIED `src/lib/ai/generateWorksheet.ts`: added buildWorksheetFromDeterministic() — builds a minimal AI-shaped worksheet object around deterministic questions so the downstream pipeline (DB insert, PDF render, marking) sees a complete GeneratedWorksheet without calling OpenAI
+- MODIFIED `src/lib/ai/schema.ts`: DIAGRAM_TYPES now includes 'pie_chart' (was handled in the renderer via type cast but missing from the Structured Outputs enum — AI could never emit it)
+- MODIFIED `src/lib/ai/systemPrompt.ts`: added deterministic-slot carve-out paragraph telling the AI to skip inventing numerical data for engine-owned slots
+- MODIFIED `src/app/api/generate/route.ts`: deterministic routing inserted before the OpenAI call — matches topic via /match endpoint, calls /generate on the Python engine, uses result directly if question count matches; falls through to AI on any engine failure. Fundamentals routing excluded (prerequisite sub-skills may not exist in engine).
+
+### Verification
+- All 4 generators produce valid questions verified via JSON roundtrip
+- tsc clean (zero TypeScript errors)
+- 136/136 tests pass
+- pie_chart now in both schema enum and renderer — AI can emit it, renderer can draw it
+
+### What's NOT done yet
+- Python service not deployed to Render (needs Docker build + MATH_ENGINE_SECRET in .env)
+- No live end-to-end test with the running Python service
+- renderDiagramSpec.ts still has the redundant `as DiagramType | 'pie_chart'` cast (harmless, can clean up)
+- Free-tier credit still consumed when generation FAILS (DB function change needed)
+- No deterministic questions tested against the PDF renderer end-to-end
+- generators/arithmetic.py, generators/algebra.py, generators/equations.py not yet built (next priority after deployment)
+- No contract/property tests for the Python service (Phase 10 step 54)
+- Billing keys/domain verification remain launch blockers

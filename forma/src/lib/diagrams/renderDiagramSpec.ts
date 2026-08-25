@@ -1,4 +1,4 @@
-import type { DiagramSpec, DiagramType } from '../ai/schema';
+import type { DiagramSpec } from '../ai/schema';
 import {
   drawCoordinateGrid,
   drawTriangle,
@@ -48,7 +48,7 @@ export function renderDiagramSvg(spec: DiagramSpec): string {
     // malformed object always did - render as a gap, not a crash.
     const parsed: unknown = JSON.parse(spec.params);
     const p = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
-    switch (spec.type as DiagramType | 'pie_chart') {
+    switch (spec.type) {
       case 'coordinate_grid':
         return drawCoordinateGrid(
           num(p, 'xMin', -5),
@@ -85,9 +85,6 @@ export function renderDiagramSvg(spec: DiagramSpec): string {
           Array.isArray(p.colours) ? (p.colours as ('primary' | 'secondary')[]) : []
         );
       case 'pie_chart':
-        // Not currently in DIAGRAM_TYPES (src/lib/ai/schema.ts), so the AI
-        // can never actually request this - kept for parity with the
-        // diagram library and in case that enum gap gets fixed later.
         return drawPieChart(
           Array.isArray(p.labels) ? (p.labels as string[]) : [],
           Array.isArray(p.values) ? (p.values as number[]) : []

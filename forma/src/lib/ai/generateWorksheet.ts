@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { WORKSHEET_SYSTEM_PROMPT } from './systemPrompt';
-import { WORKSHEET_JSON_SCHEMA, validateWorksheet, EXPECTED_TYPE_ORDER, type GeneratedWorksheet, type QuestionType } from './schema';
+import { WORKSHEET_JSON_SCHEMA, validateWorksheet, EXPECTED_TYPE_ORDER, type GeneratedWorksheet, type QuestionType, type Question } from './schema';
 import { stripNulCharacters } from './sanitize';
 
 // PROVIDER: OpenAI (gpt-5.6-terra) is the standing default, per the user
@@ -32,6 +32,33 @@ const ANTHROPIC_MODEL = 'claude-haiku-4-5';
 // non-streaming timeout threshold so no need to switch to streaming.
 const MAX_TOKENS = 16000;
 const MAX_ATTEMPTS = 2;
+
+/**
+ * Build a minimal AI-generated worksheet object around deterministic
+ * questions so the downstream pipeline (DB insert, PDF render, marking)
+ * sees a complete GeneratedWorksheet without calling OpenAI.
+ */
+export function buildWorksheetFromDeterministic(
+  deterministicQuestions: Question[],
+  metadata: {
+    subject: string;
+    topic: string;
+    curriculum: string;
+    year_level: string;
+    difficulty: string;
+    alignment_note: string;
+  }
+): GeneratedWorksheet {
+  return {
+    subject: metadata.subject as GeneratedWorksheet['subject'],
+    topic: metadata.topic,
+    curriculum: metadata.curriculum as GeneratedWorksheet['curriculum'],
+    year_level: metadata.year_level,
+    difficulty_overall: metadata.difficulty as GeneratedWorksheet['difficulty_overall'],
+    alignment_note: metadata.alignment_note,
+    questions: deterministicQuestions,
+  };
+}
 
 export async function generateWorksheet(
   userPrompt: string,
