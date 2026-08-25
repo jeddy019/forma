@@ -4,6 +4,7 @@ import type { Browser } from 'puppeteer-core';
 import { existsSync } from 'node:fs';
 
 let browserInstance: Browser | null = null;
+let cachedExecutablePath: string | null = null;
 let activeJobs = 0;
 const MAX_CONCURRENT = 3;
 
@@ -36,11 +37,14 @@ function findLocalExecutablePath(): string {
 
 async function getBrowser(): Promise<Browser> {
   if (browserInstance) return browserInstance;
+  if (!cachedExecutablePath) {
+    cachedExecutablePath = await chromium.executablePath();
+  }
   browserInstance = await puppeteer.launch(
     isServerless
       ? {
           args: chromium.args,
-          executablePath: await chromium.executablePath(),
+          executablePath: cachedExecutablePath,
           headless: true,
         }
       : {
