@@ -48,7 +48,7 @@ class BaseGenerator(ABC):
         """Build the full GenerationResponse wrapping generated questions."""
         questions = self.generate_questions(question_count)
         return GenerationResponse(
-            subject="Mathematics",
+            subject=self.topic_name,
             topic=topic or self.topic_name,
             curriculum=self.curriculum,
             year_level=self.year_level,
