@@ -40,20 +40,38 @@ async function getBrowser(): Promise<Browser> {
   if (!cachedExecutablePath) {
     cachedExecutablePath = await chromium.executablePath();
   }
-  browserInstance = await puppeteer.launch(
-    isServerless
-      ? {
-          args: chromium.args,
-          executablePath: cachedExecutablePath,
-          headless: true,
-        }
-      : {
-          args: ['--no-first-run', '--disable-dev-shm-usage'],
-          executablePath: findLocalExecutablePath(),
-          headless: true,
-        }
-  );
-  return browserInstance;
+  console.log('=== PUPPETEER LAUNCH DEBUG ===');
+  console.log('platform:', process.platform);
+  console.log('arch:', process.arch);
+  console.log('node:', process.version);
+  console.log('chromium path:', cachedExecutablePath);
+  console.log('path exists:', existsSync(cachedExecutablePath));
+  console.log('isServerless:', isServerless);
+  try {
+    browserInstance = await puppeteer.launch(
+      isServerless
+        ? {
+            args: chromium.args,
+            executablePath: cachedExecutablePath,
+            headless: true,
+          }
+        : {
+            args: ['--no-first-run', '--disable-dev-shm-usage'],
+            executablePath: findLocalExecutablePath(),
+            headless: true,
+          }
+    );
+    console.log('=== PUPPETEER LAUNCH SUCCESS ===');
+    return browserInstance;
+  } catch (error) {
+    console.error('=== PUPPETEER LAUNCH FAILED ===');
+    console.error('name:', error instanceof Error ? error.name : undefined);
+    console.error('message:', error instanceof Error ? error.message : String(error));
+    console.error('stack:', error instanceof Error ? error.stack : undefined);
+    console.error('=== END PUPPETEER ERROR ===');
+    browserInstance = null;
+    throw error;
+  }
 }
 
 export interface GeneratePdfOptions {
