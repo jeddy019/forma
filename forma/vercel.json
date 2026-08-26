@@ -1,15 +1,4 @@
 {
-  "functions": {
-    "src/app/api/pdf/route.ts": { "maxDuration": 60 },
-    "src/app/api/generate/route.ts": { "maxDuration": 60 },
-    "src/app/api/generate/group/route.ts": { "maxDuration": 60 },
-    "src/app/api/generate/daily/route.ts": { "maxDuration": 60 },
-    "src/app/api/submit/route.ts": { "maxDuration": 30 },
-    "src/app/api/cron/generate-scheduled/route.ts": { "maxDuration": 60 },
-    "src/app/api/cron/monday-summary/route.ts": { "maxDuration": 60 },
-    "src/app/api/cron/renewal-reminder/route.ts": { "maxDuration": 30 },
-    "src/app/api/cron/delete-inactive-accounts/route.ts": { "maxDuration": 60 }
-  },
   "crons": [
     {
       "path": "/api/cron/monday-summary",
