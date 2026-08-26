@@ -38,22 +38,34 @@ function findLocalExecutablePath(): string {
 async function getBrowser(): Promise<Browser> {
   if (browserInstance) return browserInstance;
   if (!cachedExecutablePath) {
+    console.log('[browser-pool] resolving chromium executable path...');
     cachedExecutablePath = await chromium.executablePath();
+    console.log('[browser-pool] chromium path:', cachedExecutablePath);
   }
-  browserInstance = await puppeteer.launch(
-    isServerless
-      ? {
-          args: chromium.args,
-          executablePath: cachedExecutablePath,
-          headless: true,
-        }
-      : {
-          args: ['--no-first-run', '--disable-dev-shm-usage'],
-          executablePath: findLocalExecutablePath(),
-          headless: true,
-        }
-  );
-  return browserInstance;
+  console.log('[browser-pool] launching puppeteer (isServerless:', isServerless, ')');
+  try {
+    browserInstance = await puppeteer.launch(
+      isServerless
+        ? {
+            args: chromium.args,
+            executablePath: cachedExecutablePath,
+            headless: true,
+          }
+        : {
+            args: ['--no-first-run', '--disable-dev-shm-usage'],
+            executablePath: findLocalExecutablePath(),
+            headless: true,
+          }
+    );
+    console.log('[browser-pool] puppeteer launched successfully');
+    return browserInstance;
+  } catch (error) {
+    console.error('[browser-pool] puppeteer.launch FAILED');
+    console.error('[browser-pool] error name:', error instanceof Error ? error.name : 'unknown');
+    console.error('[browser-pool] error message:', error instanceof Error ? error.message : String(error));
+    browserInstance = null;
+    throw error;
+  }
 }
 
 export interface GeneratePdfOptions {
@@ -142,6 +154,8 @@ export async function generatePdf(
       // The caller aborted on purpose - the warm browser is fine to keep.
       throw abortError();
     }
+    console.error('[browser-pool] generatePdf FAILED at', Date.now() - started, 'ms');
+    console.error('[browser-pool] error:', error instanceof Error ? error.message : String(error));
     browserInstance = null;
     throw error;
   } finally {
