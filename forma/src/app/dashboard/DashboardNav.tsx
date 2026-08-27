@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, FilePlus, Calendar, ClipboardCheck, LayoutTemplate, Settings, LogOut, Lock } from 'lucide-react';
+import { Users, FilePlus, Calendar, ClipboardCheck, LayoutTemplate, BarChart3, Settings, LogOut, Lock } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // Design System v3 (Phase 9, Step 51): rebuilt from a horizontal top bar
@@ -18,6 +18,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; tutorOnly?: bo
   { href: '/dashboard/generate', label: 'New', icon: FilePlus },
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
   { href: '/dashboard/marking', label: 'Marking', icon: ClipboardCheck, tutorOnly: true },
+  { href: '/dashboard/mastery', label: 'Mastery', icon: BarChart3, tutorOnly: true },
   { href: '/dashboard/templates', label: 'Templates', icon: LayoutTemplate, tutorOnly: true },
 ];
 

@@ -3683,3 +3683,68 @@ Render engine get "No worked solution" until that engine emits worked_solution
 
 Files: schema.ts, systemPrompt.ts, splitMarkScheme (implicit), QuizForm.tsx,
 src/app/api/quiz/solution/route.ts.
+
+---
+
+## [2026-08-27] Phase B Wave 1 (B5-B6): Mastery UI — student skill bars + tutor class heat map
+
+Closed B4 (the WIP checkpoint above became code-complete days earlier at the
+prior commit 60b9e3e; this session committed nothing for B4 beyond the doc
+change, then built B5-B6).
+
+**B5 — Student mastery bars (slots into the existing `/student` portal):**
+- NEW `src/lib/mastery/masteryView.ts` — pure shared display logic consumed by
+  both B5 and B6 so levels always agree:
+  - `toMasteryBars(SkillMap)` → sorted `MasteryBar[]` with a `MasteryLevel`
+    classification reused everywhere: `mastered` (sticky 85%-across-2 flag),
+    `weak` (latest < FUNDAMENTALS_THRESHOLD / needsFundamentals),
+    `strong` (latest >= 85 not mastered), else `progressing`. Sorted mastered →
+    weak so a student sees wins first.
+  - `toMasteryBarsAggregated([SkillMap])` for the portal case where one email
+    matches multiple profiles (multiple tutors) — merged by slug key, best
+    mastery state and union of history.
+  - `buildHeatMap` for B6 (below) and `masteryScore`.
+- NEW `src/lib/ui/MasteryBars.tsx` — hand-rolled Tailwind bars (no chart lib,
+  house style), colour-coded per level (green #1A3D2E / #2D6A4F, gold #C8A84B,
+  red #C0392B), each showing latest score %, status label + icon, attempt count,
+  topic.
+- `src/app/student/page.tsx` — selects `skill_map` alongside `id, name`,
+  aggregates across matched profiles, renders a new "Your progress" card with
+  overall average + `MasteryBars`. Security: skill_map is scores/history only
+  (no mark scheme), and the route keeps the verified-email + admin-client
+  pattern.
+
+**B6 — Tutor class mastery heat map (new `/dashboard/mastery` route):**
+- `page.tsx` — tutor+pro gate (same `isActivePro` as marking; Basic and Pro
+  both include zero-to-mastery so this is correct), loads the tutor's
+  `student_profiles` skill_map through the RLS server client, builds the heat
+  map. Deliberately loads the whole class in one aggregate grid (bounded by
+  the Basic/Pro plan caps, capped MAX_STUDENTS=100) — the point is to see
+  everyone at once, a documented exception to Rule 3's pagination.
+- `[studentId]/page.tsx` — per-student drill-down reusing `MasteryBars`.
+- NEW `src/lib/ui/HeatMapGrid.tsx` — rows = students, columns = union of all
+  sub-skills ordered most-practised first, colour-coded cells (green secure /
+  gold progressing / red needs work / neutral no-data), sticky student-name
+  column, horizontally scrollable, legend, per-student average column. Student
+  names link to the drill-down.
+- `DashboardNav.tsx` — added `Mastery` (tutorOnly, BarChart3 icon) to NAV_ITEMS.
+- `loading.tsx` — Skeleton card (Performance Rule 4).
+
+**Verification:**
+- `tsc --noEmit` clean; eslint clean on all 9 changed/new files.
+- 149/149 vitest tests pass (13 new in `src/__tests__/masteryView.test.ts`
+  covering level classification, aggregation, sorting, masteryScore, and
+  buildHeatMap column ordering / per-student fill / overall average).
+- Routes compile and gate correctly in dev (307 auth redirect, no 500).
+- Seed data written to the live DB so the user can see both views in a real
+  browser: Demo Student Aisha (email [demo-account]) + Naeto now have
+  skill_map across 5 sub-skills covering all four levels — appearing on the
+  tutor's heat map (2 rows) and in Aisha's student portal.
+
+Next: B7 (spaced repetition engine) then B8-B9 (student progress dashboard +
+daily streak counter). Question bank extraction continues in parallel.
+Decisions: mastery UI reads the existing student_profiles.skill_map (no new
+column or table — B7's review_schedule is the next new table). Both views share
+one masteryView classification module so a student's bars and the tutor's heat
+map can never disagree. Heat map intentionally breaks Rule 3 in a bounded,
+documented way (whole-class aggregate).

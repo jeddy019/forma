@@ -3,7 +3,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
 import { EmptyState } from '@/lib/ui/EmptyState';
-import { FileText, LogOut } from 'lucide-react';
+import MasteryBars from '@/lib/ui/MasteryBars';
+import { toMasteryBarsAggregated, masteryScore } from '@/lib/mastery/masteryView';
+import type { SkillMap } from '@/lib/mastery/types';
+import { BarChart3, FileText, LogOut } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -11,6 +14,7 @@ const PAGE_SIZE = 20;
 interface StudentProfileMatch {
   id: string;
   name: string;
+  skill_map: SkillMap | null;
 }
 
 interface WorksheetRow {
@@ -68,7 +72,7 @@ export default async function StudentPortalPage({
   const admin = createAdminClient();
   const { data: matchedStudents } = await admin
     .from('student_profiles')
-    .select('id, name')
+    .select('id, name, skill_map')
     .ilike('email', user.email)
     .returns<StudentProfileMatch[]>();
 
@@ -128,6 +132,14 @@ export default async function StudentPortalPage({
   const totalPages = count ? Math.max(1, Math.ceil(count / PAGE_SIZE)) : 1;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
+  // Phase B Wave 1 (B5): aggregate each matched profile's skill_map into one
+  // combined set of mastery bars for the student. skill_map carries only
+  // scores/history - no mark scheme - so it is safe to hand to the student
+  // (see masteryView.ts / Security Rules 1; the route uses the admin client
+  // with verified-email matching, same as the rest of this page).
+  const masteryBars = toMasteryBarsAggregated(matchedStudents.map((s) => s.skill_map));
+  const overallMastery = masteryScore(masteryBars);
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F7F4EF' }}>
       <PortalHeader />
@@ -135,6 +147,21 @@ export default async function StudentPortalPage({
         <div>
           <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Your worksheets</h1>
           <p className="text-sm text-[#5C5849]">{user.email}</p>
+        </div>
+
+        <div className={`${cardClass} flex flex-col gap-4`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-[#1A3D2E]" strokeWidth={2} aria-hidden="true" />
+              <h2 className="text-base font-semibold text-[#1A1A18]">Your progress</h2>
+            </div>
+            {overallMastery != null && (
+              <span className="text-sm text-[#5C5849]">
+                Average <span className="font-medium text-[#1A1A18]">{overallMastery}%</span>
+              </span>
+            )}
+          </div>
+          <MasteryBars bars={masteryBars} />
         </div>
 
         <div className="flex flex-col gap-3">
