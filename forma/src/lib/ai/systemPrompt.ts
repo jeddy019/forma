@@ -153,7 +153,7 @@ expected output or code, fenced with triple backticks if code is involved. Never
 reveal the answer in an earlier step than the final one.
 
 Every part needs an "answer_format", one of: "numerical", "coordinates",
-"true_false", "multiple_choice", "extended". This decides whether a
+"true_false", "multiple_choice", "expression", "extended". This decides whether a
 student's typed answer can be auto-marked instantly or needs a human/AI to
 read it - choose carefully:
 - "numerical": the answer is a single number. Write "answer" as just that
@@ -170,6 +170,15 @@ read it - choose carefully:
 - "multiple_choice": the question text presents the options and the answer
   is one of them (e.g. a letter like "B", or the option text itself). Write
   "answer" as just the option, matched the same way as true_false.
+- "expression": the answer is a single-variable algebraic expression or a
+  simple equation, where the student's typed answer is judged by algebraic
+  equivalence rather than exact string match - so "2(x+3)" is accepted for
+  "2x+6", and "(x+2)(x-3)" for "x^2 - x - 6". Write "answer" as the cleanest
+  simplified form (e.g. "2x+6", "x^2 - x - 6", "x = 3", "(x+2)(x-3)")
+  using * for multiplication and ^ for powers. Use this for algebraic
+  simplification, expanding, factorising, solving, and rearranging answers.
+  Do NOT use it for a single number (use "numerical") or for anything with
+  shown working, a proof, or a description (use "extended").
 - "extended": anything else - shown working, a derivation, an explanation,
   a proof, an essay or extended-writing response, or any answer where
   correctness cannot be judged from the final line alone. This is the

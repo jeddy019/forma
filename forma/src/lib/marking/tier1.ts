@@ -1,4 +1,5 @@
 import type { AnswerFormat } from '@/lib/ai/schema';
+import { algebraicEquivalent } from '@/lib/marking/algebraic';
 
 // Phase 3 Step 16 - Marking Logic (CLAUDE.md), Tier 1: instant auto-mark on
 // submission for numerical, coordinates, true/false, and multiple choice.
@@ -48,6 +49,15 @@ export function markPart(
     case 'multiple_choice': {
       const matched = normalise(correctAnswer) === normalise(studentAnswer);
       return { matched, marks_awarded: matched ? marks : 0 };
+    }
+    // Phase B Wave 1 Step 71 (B12) - algebraic equivalence via mathjs
+    // canonical-form comparison (src/lib/marking/algebraic.ts). Judges
+    // "2(x+3)" and "2x+6" as the same answer. A null result means the input
+    // was not safely comparable, so fall through to Tier 2/3 - never guess.
+    case 'expression': {
+      const equivalent = algebraicEquivalent(correctAnswer, studentAnswer);
+      if (equivalent === null) return null;
+      return { matched: equivalent, marks_awarded: equivalent ? marks : 0 };
     }
     case 'extended':
       return null;

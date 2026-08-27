@@ -65,3 +65,22 @@ describe('markPart - extended', () => {
     expect(markPart('extended', 'any working shown', 'student working', 4)).toBeNull();
   });
 });
+
+describe('markPart - expression', () => {
+  it('matches algebraically equivalent forms (2(x+3) === 2x+6)', () => {
+    expect(markPart('expression', '2x+6', '2(x+3)', 2)).toEqual({ matched: true, marks_awarded: 2 });
+    expect(markPart('expression', '(x+2)(x-3)', 'x^2 - x - 6', 3)).toEqual({ matched: true, marks_awarded: 3 });
+  });
+
+  it('matches an equation written in reverse (x=3 vs 3=x)', () => {
+    expect(markPart('expression', 'x = 3', '3 = x', 2)).toEqual({ matched: true, marks_awarded: 2 });
+  });
+
+  it('rejects a genuinely different expression', () => {
+    expect(markPart('expression', '2x+6', '5x+6', 2)).toEqual({ matched: false, marks_awarded: 0 });
+  });
+
+  it('returns null so genuinely malformed answers fall through to Tier 2/3', () => {
+    expect(markPart('expression', '2x+6', '2x + (', 2)).toBeNull();
+  });
+});

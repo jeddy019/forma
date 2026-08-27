@@ -56,7 +56,7 @@ export interface MarkScheme {
 // (AI-assisted) or Tier 3 (tutor review), neither built yet. Added in Phase
 // 3 Step 16 - the schema had no way to distinguish these before, so Tier 1
 // would have had nothing reliable to key off.
-export const ANSWER_FORMATS = ['numerical', 'coordinates', 'true_false', 'multiple_choice', 'extended'] as const;
+export const ANSWER_FORMATS = ['numerical', 'coordinates', 'true_false', 'multiple_choice', 'expression', 'extended'] as const;
 export type AnswerFormat = (typeof ANSWER_FORMATS)[number];
 
 export interface QuestionPart {
