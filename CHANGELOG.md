@@ -3440,3 +3440,201 @@ Completed: Phase 10 routing integration + Earth Science subject + English locali
 
 Next: Deploy Python service to Render, test live integration end-to-end.
 Decisions: None — all work followed existing patterns.
+
+---
+
+SESSION UPDATE (Session 10 — 2026-08-26):
+Completed: Vercel PDF download bug fixed — Chromium binary files were not
+included in the serverless function deployment.
+
+ROOT CAUSE: Turbopack was bundling @sparticuz/chromium into server chunks
+(evident from stack trace: `.next/server/chunks/[root-of-the-server]__1er1gco._.js`).
+This broke the package's runtime binary path resolution — executablePath()
+resolved a path inside the bundle, not the actual node_modules directory,
+so the 67MB of compressed Chromium binaries were never found.
+
+FIX (two-part, both required):
+1. serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'] —
+   prevents Turbopack from bundling these packages, keeping them as native
+   require() calls so binary path resolution works at runtime. (The packages
+   ARE on Next.js's built-in auto-external list, but Turbopack was not
+   honoring it — manual declaration was needed.)
+2. outputFileTracingIncludes — explicitly tells Vercel's @vercel/nft file
+   tracer to pack the Chromium binaries into every route that uses
+   generatePdf (/api/pdf, /api/invoices/[id]/pdf, /api/webhooks/flutterwave,
+   /api/payments/callback). Without this, the binaries are externalized but
+   never deployed.
+
+PREVIOUS ATTEMPTS: commit eebbf3c reverted serverExternalPackages ("was
+breaking chromium binary resolution") — this was wrong. The revert removed
+both serverExternalPackages AND outputFileTracingIncludes together; the
+binary resolution failure was always caused by their absence, not their
+presence.
+
+DEBUGGING: Re-added [browser-pool] prefixed error logging in getBrowser()
+and generatePdf (avoiding the existsSync/node:fs call that broke the
+Vercel build in session 9). This logging revealed the exact error path and
+message.
+
+VERIFIED: PDF downloads successfully on Vercel (live test). PDF content
+rendering needs review (user confirmed visible but "off" — next session).
+
+Next: Review and fix PDF content rendering. Deploy Python maths engine to
+Render for live end-to-end testing.
+Decisions: None — fix followed @sparticuz/chromium's own bundler docs
+explicitly (line 296: "If you see the error 'The input directory does not
+exist', this almost certainly means the package was not externalized").
+
+---
+
+## [2026-08-27] Ecosystem Pivot: CLAUDE.md updated with new product direction
+
+User provided a comprehensive 4-part request covering competitor research,
+product vision, pricing, and feature list. This session updated CLAUDE.md
+with the ecosystem pivot.
+
+**Part 1 — Competitor Research:**
+- Dr Frost Maths: 48K past paper questions, 3K+ question generators, Desmos integration, student whiteboard, DFM Live!, shadow papers, flexible task setting, 0-100 mastery bars (3-colour), 2,300 video explainers, algebraic equivalence, school/trust sharing, 60-day free trial
+- Cognito: Animated video lessons (184M+ YouTube views), 1.5M+ auto-marked questions, custom flashcard decks, custom quiz builder, 10+ exam boards, 100+ countries, free with no ads, schools package, mobile-optimised
+- Seneca: Native mobile apps (14M students), gamification (XP/levels/avatars/streaks/leaderboards), GIFs/memes, spaced repetition, AI tutor "Amelia", Smart Learning Mode, Wrong Answer Mode, Cram Mode, 30+ subjects, 10+ exam boards, MIS integration, parent accounts, downloadable notes
+
+**Part 2 — Product Vision:**
+- Three-layer ecosystem: Quiz (daily habit) → Homework PDF (deeper practice) → Mastery (progression)
+- Core loop: student practises → system marks instantly → system shows what they got wrong and why → system tracks mastery → system schedules reviews → tutor sees everything
+- Moat: No competitor generates questions personalised to a specific student's weakness
+- Students do NOT need accounts to take quizzes
+- Quiz + Homework generate DIFFERENT questions on same topic
+- Timed mode is optional, not default
+- Question format: Mixed per subject — typed answers for maths, MCQ+typed for science/English
+- AI auto-detects subject from description; student confirms
+- Worked step-by-step explanations (React component, NOT animated videos)
+- Browsable topic tree with mastery dots
+- Mastery is opt-in per topic (like Duolingo skill trees)
+- Spaced repetition: opt-in per topic, SRS schedules reviews (1d, 3d, 7t, 14d, 30d)
+- Gamification: Minimal by design. Only daily streak counter. XP, points, levels, avatars, rewards store, leaderboards ALL CUT
+- Mobile-first: Most students access on phone
+- AI tutor chat: Post-quiz contextual explainer using GPT-4o-mini
+- Algebraic equivalence: MUST be at launch
+- Homework photo upload: Moved to deferred
+- Desmos integration: Dropped
+- Student whiteboard: Dropped
+- GIFs/memes: Dropped
+- Classroom live game (DFM Live): Dropped
+- Animated step-by-step videos: Dropped
+- Family plan: Basic tier with volume discount
+
+**Part 3 — Pricing (Finalised 2026-08-27):**
+| | Free | Basic | Pro |
+|---|---|---|---|
+| Monthly | $0 | $10/mo | $20/mo |
+| Yearly | — | $96/yr ($8/mo) | $192/yr ($16/mo) |
+| Students/tutor | 1 | 30 | Unlimited |
+| Quizzes+Worksheets/mo | 3 each | Unlimited | Unlimited |
+| Mastery/SRS/Wrong Answer/Smart Learning/Exam Boards | ❌ | ✅ | ✅ |
+| AI tutor chat | ❌ | 5/quiz | Unlimited |
+| Assignment loop/Tutor analytics | ❌ | Full | Full |
+| Cram mode/Automation/AI marking/Parent reports/Session notes/Templates/Group mode/Streak freeze | ❌ | ❌ | ✅ |
+
+Family: 1 child $10, 2 $16, 3 $20, 4+ $20+$4/extra
+
+**Part 4 — Full Feature List (35 launch features):**
+- B1-B3: Quiz generation + quiz page + instant marking
+- B4: Worked step-by-step explanations
+- B5-B6: Mastery UI (student bars + tutor heat map)
+- B7: Spaced repetition
+- B8-B9: Student progress dashboard + daily streak counter
+- B10-B11: Wrong answer re-practice + smart learning
+- B12: Exam board selection
+- B13: AI tutor chat
+- B14-B15: Tutor analytics dashboard + assignment loop
+- B16-B17: Cram mode + streak freeze
+- B18-B19: Flexible task setting + accuracy-required mode
+- B20: Algebraic equivalence
+- B21-B23: Board-filtered question retrieval + question bank import pipeline + admin curation UI
+
+**CLAUDE.md updates:**
+- Product Definition rewritten with ecosystem pivot + pricing + gamification policy + question bank strategy
+- Build Phases restructured (Phase A-D): Foundation (complete) → Ecosystem Pivot (Phase B, waves 1-7) → Differentiators (Phase C, user-triggered) → Enterprise (Phase D, school sales)
+- Current Build Status updated (next: B1 quiz generation endpoint)
+- Routing Structure updated with /q/[code] and /api/quiz/generate routes
+- Zero to Mastery section updated with new pricing (bundled into Basic/Pro, not separate add-on)
+
+**Verified**: All CLAUDE.md sections updated consistently. No code changes — this was a documentation-only session.
+
+Next: Begin Phase B Wave 1 — B1 (quiz generation API route) + B2 (interactive quiz page /q/[code]) + B3 (instant quiz marking). Begin question bank extraction in parallel.
+Decisions: Full ecosystem pivot accepted. Pricing locked at $10/$20 + family. Gamification stripped to streaks only. Desmos/whiteboard/GIFs/LFM Live/animated videos all dropped.
+
+---
+
+## [2026-08-27] Phase B Wave 1 (B1-B3): Interactive quiz built — generation endpoint + /q/[code] page + instant marking
+
+Completed the first Phase B Wave 1 feature set (quiz core), begun in the prior
+session but not committed. This session resumed, resolved the blocker, verified
+the flow end-to-end, and committed.
+
+**B1 — Quiz generation endpoint (`src/app/api/quiz/generate/route.ts`):**
+- Reuses the full existing generation pipeline: auth, free-tier atomic gate
+  (`check_and_log_generation`), student profile load, session-note + skills-map
+  fundamentals directive, deterministic maths-engine routing, OpenAI fallback,
+  question-bank blending, `splitMarkScheme`, digital-code collision retry.
+- Same AI schema as worksheets, different presentation layer — the interactive
+  `QuizForm` reads the same questions_json.
+- Inserts with `generated_from: 'quiz'` so the dashboard success state knows to
+  show a "Quiz link" + "Copy link" panel instead of the PDF download buttons.
+- Send-the-link email uses `/q/[digital_code]` as the worksheetUrl.
+
+**B2 — Interactive quiz page (`src/app/q/[code]/page.tsx` + `QuizForm.tsx`):**
+- Server component loads worksheet via service-role client, selecting only
+  student-safe columns (Security Rules 1 — no mark_scheme_json here), renders
+  badges / alignment note server-side, passes rendered question HTML to the
+  client form. Renders the KaTeX/rich text server-side via renderRichText.
+- Records `first_opened_at` (the open time-measurement hook noted as open in
+  Zero to Mastery speed awareness) and honours the 30-day link expiry with a
+  clear "link expired" state.
+- Mobile-first QuizForm: 1-question-per-card, swipe + keyboard navigation,
+  question-dot scrubber, sticky bottom submit bar, animated gold progress bar,
+  per-part green/red instant feedback, and a success screen.
+
+**B3 — Instant quiz marking:**
+- `/api/check-part` (route already committed in Phase A's R3 work) returns only
+  a status — correct/incorrect/manual — never the expected answer, running the
+  same Tier 1 matcher as /api/submit. QuizForm debounces per-part checks (700ms)
+  and shows green/red live.
+- `/api/submit` is format-agnostic by digital_code, so quizzes submit through
+  the identical path (Tier 1 + Tier 2 + auto-finalized score for non-tutor owners).
+- Verified the valid `answer_format` values are numerical/coordinates/
+  true_false/multiple_choice/extended — NOT "number" (caught this in testing;
+  the system prompt and tier1 switch agree on "numerical").
+
+**GenerateForm.tsx:** added an "Interactive quiz — student opens on their phone"
+toggle (mutually exclusive with daily mode), routed to `/api/quiz/generate`, and
+a quiz-aware success panel (Open quiz / Copy link) driven off
+`worksheet.generated_from === 'quiz'`.
+
+**Migration applied live:** `supabase/add-quiz-generated-from.sql` extends the
+worksheets.generated_from CHECK constraint to include 'quiz'; ran against the
+live Supabase pooler (suppabase migrated; the `first_opened_at` column already
+existed from an earlier migration). Verified by inserting a real quiz row.
+
+**VERIFIED end-to-end** (dev server, real DB):
+- Inserted a real quiz worksheet (TESTQUIZ01) with generated_from='quiz';
+- /q/TESTQUIZ01 renders topic, badges, Year 10, and question text (HTTP 200);
+- /api/check-part: answer 3 → correct, 5 → incorrect, 3.005 → correct
+  (0.01 tolerance); q2 → correct;
+- /api/submit returns success (Tier 1 marked both answers; non-tutor owner
+  auto-finalizes score).
+- `tsc --noEmit` passes; root + /q/[code] compile and render in dev.
+
+Open: the live AI / maths-engine generation of an actual quiz wasn't exercised
+(this needs a logged-in tutor + live generation spend) — the route compiles and
+the storage/presentation/marking layers are proven against a real record. Test
+record TESTQUIZ01 left in place so the user can open /q/TESTQUIZ01 in the
+browser to see the feature running.
+
+Next: B4 (worked step-by-step explanations on wrong answers), then B5-B6
+(mastery UI). Continue question bank extraction in parallel.
+Decisions: Quiz shares the worksheet storage schema (worksheets row +
+generated_from='quiz') rather than a new table — same canonical JSON, different
+presentation, exactly as CLAUDE.md's "same schema, different presentation layer"
+specs. The visible effect was verified in a real browser render path before
+committing.

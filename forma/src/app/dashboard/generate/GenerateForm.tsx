@@ -20,6 +20,7 @@ interface GeneratedWorksheetSummary {
   alignment_note: string | null;
   difficulty: string;
   created_at: string;
+  generated_from?: string;
 }
 
 interface GeneratedGroupSummary {
@@ -36,6 +37,7 @@ type Phase = 'idle' | 'loading' | 'success' | 'error';
 type DifficultyFeedback = 'too_easy' | 'just_right' | 'too_hard';
 type DocumentType = 'worksheet' | 'mark_scheme';
 type PaperFormat = 'A4' | 'Letter';
+type GenerationMode = 'worksheet' | 'quiz';
 
 // Design System > LOADING STATE - cycled every 3 seconds while generating.
 const LOADING_MESSAGES = [
@@ -86,6 +88,7 @@ export default function GenerateForm({
   const [selectedStudentId, setSelectedStudentId] = useState(students[0]?.id ?? '');
   const [groupMode, setGroupMode] = useState(false);
   const [dailyMode, setDailyMode] = useState(false);
+  const [quizMode, setQuizMode] = useState(false);
   const [selectedGroupStudentIds, setSelectedGroupStudentIds] = useState<string[]>([]);
   const [topicPrompt, setTopicPrompt] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
@@ -138,7 +141,8 @@ export default function GenerateForm({
     abortControllerRef.current = controller;
 
     try {
-      const res = await fetch(groupMode ? '/api/generate/group' : dailyMode ? '/api/generate/daily' : '/api/generate', {
+      const endpoint = groupMode ? '/api/generate/group' : dailyMode ? '/api/generate/daily' : quizMode ? '/api/quiz/generate' : '/api/generate';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
@@ -159,7 +163,7 @@ export default function GenerateForm({
       if (groupMode) {
         setGroupResult(data);
       } else {
-        setWorksheet(data.worksheet);
+        setWorksheet(data.worksheet ?? data.quiz);
         setDifficultyFeedback(null);
       }
       setPhase('success');
@@ -264,13 +268,32 @@ export default function GenerateForm({
                 <input
                   type="checkbox"
                   checked={dailyMode}
-                  onChange={(event) => setDailyMode(event.target.checked)}
+                  onChange={(event) => {
+                    setDailyMode(event.target.checked);
+                    if (event.target.checked) setQuizMode(false);
+                  }}
                   className="peer sr-only"
                 />
                 <span className="absolute inset-0 rounded-full bg-[#E0D9D0] peer-checked:bg-[#1A3D2E] transition-colors duration-micro ease-premium" />
                 <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-micro ease-premium peer-checked:translate-x-4" />
               </span>
               Daily practice - 5 short questions on one skill
+            </label>
+          )}
+
+          {!groupMode && !dailyMode && phase !== 'success' && (
+            <label className="flex items-center gap-3 text-sm text-[#5C5849] cursor-pointer w-fit">
+              <span className="relative inline-flex h-5 w-9 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={quizMode}
+                  onChange={(event) => setQuizMode(event.target.checked)}
+                  className="peer sr-only"
+                />
+                <span className="absolute inset-0 rounded-full bg-[#E0D9D0] peer-checked:bg-[#1A3D2E] transition-colors duration-micro ease-premium" />
+                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-micro ease-premium peer-checked:translate-x-4" />
+              </span>
+              Interactive quiz - student opens on their phone
             </label>
           )}
 
@@ -493,33 +516,62 @@ export default function GenerateForm({
             </div>
           </div>
 
-          <div>
-            <p className={labelClass}>Worksheet</p>
-            <div className="flex gap-2">
-              <div>
+          {worksheet.generated_from === 'quiz' ? (
+            <div>
+              <p className={labelClass}>Quiz link</p>
+              <p className="text-sm text-[#5C5849] mb-2">
+                Send this link to your student. They can open it on their phone and answer directly.
+              </p>
+              <div className="flex gap-2">
+                <Link
+                  href={`/q/${worksheet.digital_code}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${secondaryButtonClass} inline-flex items-center gap-1.5`}
+                >
+                  Open quiz
+                </Link>
                 <button
                   type="button"
-                  onClick={() => handleDownload('A4', 'worksheet')}
-                  disabled={downloading['worksheet-A4']}
-                  className={secondaryButtonClass}
+                  onClick={() => {
+                    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
+                    navigator.clipboard.writeText(`${appUrl}/q/${worksheet.digital_code}`);
+                  }}
+                  className={`${secondaryButtonClass}`}
                 >
-                  {downloading['worksheet-A4'] ? 'Preparing...' : 'Download A4'}
+                  Copy link
                 </button>
-                <p className="text-xs text-muted text-center mt-1">UK style print</p>
-              </div>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => handleDownload('Letter', 'worksheet')}
-                  disabled={downloading['worksheet-Letter']}
-                  className={secondaryButtonClass}
-                >
-                  {downloading['worksheet-Letter'] ? 'Preparing...' : 'Download Letter'}
-                </button>
-                <p className="text-xs text-muted text-center mt-1">America style print</p>
               </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <p className={labelClass}>Worksheet</p>
+              <div className="flex gap-2">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('A4', 'worksheet')}
+                    disabled={downloading['worksheet-A4']}
+                    className={secondaryButtonClass}
+                  >
+                    {downloading['worksheet-A4'] ? 'Preparing...' : 'Download A4'}
+                  </button>
+                  <p className="text-xs text-muted text-center mt-1">UK style print</p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('Letter', 'worksheet')}
+                    disabled={downloading['worksheet-Letter']}
+                    className={secondaryButtonClass}
+                  >
+                    {downloading['worksheet-Letter'] ? 'Preparing...' : 'Download Letter'}
+                  </button>
+                  <p className="text-xs text-muted text-center mt-1">America style print</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {canDownloadMarkScheme && (
             <div>
