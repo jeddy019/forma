@@ -3908,3 +3908,62 @@ Decisions: student-facing generation reuses the service-role client + explicit
 owner resolution because a student has no RLS-visible owner row; free-tier is
 still gated per-OWNER (the tutor's quota) via the atomic RPC; focus mode always
 skips the deterministic engine so exact sub-skill names are honoured.
+
+## [2026-08-28] Phase B Wave 1 (B12): algebraic equivalence for Tier 1 marking
+
+Fast-forward marker: B12 was parked at the top of Session 15 and picked up here
+as part of Wave 1's wrap-up before moving to Wave 2.
+
+B12 makes Tier 1 auto-marking understand algebra, not just exact strings: a
+student who writes "2(x+3)" against a stored answer "2x+6" is now marked
+correct, and "(x+2)(x-3)" against "x^2 - x - 6", without forcing the answer to
+be typed in the exact form the AI stored.
+
+**New answer_format: "expression"** (src/lib/ai/schema.ts)
+- Added to ANSWER_FORMATS: ['numerical','coordinates','true_false','multiple_choice','expression','extended'].
+- The AI picks this for single-variable expand/factorise/solve/rearrange
+  answers. Numeric answers stay "numerical" (fast value compare, no mathjs);
+  work/proof stays "extended" (Tier 2/3).
+- systemPrompt.ts guidance extended with the expression bullet and the rule to
+  write answers as clean simplified forms using * and ^.
+
+**Canonical-form comparison** (src/lib/marking/algebraic.ts)
+- mathjs (v15.2.0, added to dependencies) rationalize() is the canonicaliser:
+  it expands a parseable expression into its polynomial ratio, so the difference
+  of two rationalized forms simplifies to zero iff they are algebraically equal.
+  Verified empirically before committing: 2(x+3)=2x+6, (x+2)(x-3)=x^2-x-6,
+  (x-2)^2=x^2-4x+4, x/2=0.5x all reduce to zero; 2x+6 vs 5x+6 correctly rejects.
+- Plain expressions: match iff rationalize(a) - rationalize(b) == 0 (so the
+  negated form is NOT accepted: x+3 != -x-3).
+- Equations ("x = 3"): each side is reduced to LHS-RHS first, then compared;
+  the negated sum is also accepted ONLY for equations, so "3 = x" == "x = 3"
+  while a plain expression still rejects its negative.
+- SAFETY (the reason this is an exact check, not a guess): blank -> false;
+  prose that happens to parse as implicit-variable multiplication (e.g. "I think
+  it is six") -> false (it IS wrong - recorded, not a confusing silent wrong);
+  genuinely malformed maths ("2x + (", "x^") -> null so the caller falls through
+  to Tier 2/3; oversize input (>80 chars) -> null to avoid a slow mathjs run.
+  Any rationalize()/simplify() throw is caught and returns null.
+
+**markPart** (src/lib/marking/tier1.ts)
+- case 'expression' delegates to algebraicEquivalent and returns null on a
+  null result (route to Tier 2/3), else matched/not with full marks.
+
+**Tests:** src/__tests__/algebraic.test.ts (dedicated suite) + an expression
+describe block in tier1.test.ts. 4 tests deliberately assert the negotiation
+with mathjs's permissive parser (prose -> false, malformed -> null).
+
+**Verification:** tsc + eslint clean; 187/187 tests pass (25 files, +6 new tests).
+mathjs behaviour probed live with node before writing the module (default
+simplify() does NOT expand products, rationalize() does; no standalone expand()
+exists in v15) - the design was confirmed against the real lib, not assumed.
+
+Next: Wave 2 begins. After Wave 1 completes, the next meaningful Wave 2 item is
+B62 (daily streak counter) plus the remaining mastery/progress dashboard work
+(B59-B61), then B12's sibling - B71 was folded here - B13+ follows. Continue
+question bank extraction in parallel as ever.
+Decisions: added a new answer_format rather than silently algebraic-equality-
+checking the existing "numerical" regime, so numeric answers keep their fast
+0.01 tolerance path and the equivalence cost only applies where the AI chose an
+algebraic answer. mathjs is imported via named imports (rationalize/simplify/
+parse) per the bundle-size rule.
