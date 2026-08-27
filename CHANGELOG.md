@@ -3638,3 +3638,38 @@ generated_from='quiz') rather than a new table — same canonical JSON, differen
 presentation, exactly as CLAUDE.md's "same schema, different presentation layer"
 specs. The visible effect was verified in a real browser render path before
 committing.
+
+---
+
+## [2026-08-27] WIP checkpoint: Phase B Wave 1 (B4) — worked step-by-step solutions (not yet browser-E2E'd)
+
+B4 started and functionally complete at code + endpoint level, but NOT yet fully
+browser-verified or shipped as a finished feature. Stopped cleanly at the
+~30-minute session cap mid-way; the pieces below are committed as a working
+checkpoint so work resumes without loss.
+
+**What landed:**
+- `schema.ts`: `MarkScheme` gains `worked_solution?: string[]` (optional in TS,
+  REQUIRED in WORKSHEET_JSON_SCHEMA so new AI output always authors steps;
+  older records simply lack it and degrade to "no worked solution").
+- `systemPrompt.ts`: authoring rules for worked_solution — ordered array of
+  line-by-line steps in inline LaTeX, never pad, never reveal answer early,
+  CS subjects get explanation + fenced output.
+- `splitMarkScheme.ts`: `...part.mark_scheme` already carries worked_solution
+  into mark_scheme_json only (never questions_json — Security Rules 1 held).
+- NEW `src/app/api/quiz/solution`: POST {digitalCode, questionId, partIndex}
+  → `{steps}`. Service-role only. GATED on an existing submission (won't reveal
+  steps before the student attempts). Returns [] for missing/invalid → UI omits.
+- `QuizForm.tsx`: post-submit `review` phase. Inputs read-only; per-part "Show
+  solution" button fetches steps and reveals them one-by-one (700ms/step,
+  chained timeouts, cleaned up on unmount) via client-safe renderRichText.
+
+**Verified:** tsc --noEmit clean; /q/TESTQUIZ01 renders 200 with new QuizForm;
+/api/quiz/solution returns the authored steps for q1 and [] for an invalid part;
+the submission-gate and backward-compat (empty steps) paths both exercised.
+
+**Not yet done (next session):** full in-browser E2E of the sequential reveal
+animation on a real answer, then ship/close B4.
+
+Files: schema.ts, systemPrompt.ts, splitMarkScheme (implicit), QuizForm.tsx,
+src/app/api/quiz/solution/route.ts.

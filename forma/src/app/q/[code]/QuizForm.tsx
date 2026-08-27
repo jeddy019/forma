@@ -1,17 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import { renderDiagramSvg } from '@/lib/diagrams/renderDiagramSpec';
+import { renderRichText } from '@/lib/render/richText';
 import type { QuizQuestion } from './page';
 
-type Phase = 'idle' | 'submitting' | 'success' | 'error';
+type Phase = 'idle' | 'submitting' | 'success' | 'review' | 'error';
 type CheckStatus = 'correct' | 'incorrect' | 'manual';
 
 interface PartCheck {
   value: string;
   status: CheckStatus;
+}
+
+interface PartSolution {
+  steps: string[];
+  state: 'loading' | 'loaded';
+  revealed: number;
 }
 
 const inputClass =
@@ -45,6 +52,8 @@ export default function QuizForm({
   const [checks, setChecks] = useState<Record<string, PartCheck>>({});
   const [phase, setPhase] = useState<Phase>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [solutions, setSolutions] = useState<Record<string, PartSolution>>({});
+  const revealTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const answersRef = useRef(answers);
   useEffect(() => {
@@ -54,11 +63,61 @@ export default function QuizForm({
 
   useEffect(() => {
     const timers = timersRef.current;
+    const revealTimers = revealTimersRef.current;
     return () => {
       timers.forEach((timer) => clearTimeout(timer));
       timers.clear();
+      revealTimers.forEach((timer) => clearTimeout(timer));
+      revealTimers.clear();
     };
   }, []);
+
+  async function loadSolution(key: string, questionId: string, partIndex: number) {
+    if (solutions[key]?.state === 'loaded') return;
+    setSolutions((prev) => ({ ...prev, [key]: { steps: [], state: 'loading', revealed: 0 } }));
+    let steps: string[] = [];
+    try {
+      const res = await fetch('/api/quiz/solution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digitalCode, questionId, partIndex }),
+      });
+      const data = (await res.json()) as { steps?: string[] };
+      if (res.ok && Array.isArray(data.steps)) steps = data.steps;
+    } catch {
+      // fall through with empty steps
+    }
+    setSolutions((prev) => ({ ...prev, [key]: { steps, state: 'loaded', revealed: 0 } }));
+    if (steps.length > 0) revealSequence(key, steps.length);
+  }
+
+  // Reveals a step-by-step solution line by line: the first line appears
+  // immediately, then each following line after a short pause, so the working
+  // reads as an animated sequence rather than a wall of text.
+  function revealSequence(key: string, total: number) {
+    const existing = revealTimersRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    let line = 1;
+    setSolutions((prev) => ({ ...prev, [key]: { state: 'loaded', steps: prev[key]?.steps ?? [], revealed: 1 } }));
+    const tick = () => {
+      line += 1;
+      setSolutions((prev) => {
+        const sol = prev[key];
+        if (!sol || sol.state !== 'loaded') return prev;
+        return { ...prev, [key]: { ...sol, revealed: Math.min(sol.revealed + 1, sol.steps.length) } };
+      });
+      if (line < total) {
+        const timer = setTimeout(tick, 700);
+        revealTimersRef.current.set(key, timer);
+      } else {
+        revealTimersRef.current.delete(key);
+      }
+    };
+    if (total > 1) {
+      const timer = setTimeout(tick, 700);
+      revealTimersRef.current.set(key, timer);
+    }
+  }
 
   const currentQuestion = questions[currentIndex];
   const isFirst = currentIndex === 0;
@@ -207,25 +266,11 @@ export default function QuizForm({
         setPhase('error');
         return;
       }
-      setPhase('success');
+      setPhase('review');
     } catch {
       setErrorMessage('Connection lost. Your progress is saved.');
       setPhase('error');
     }
-  }
-
-  if (phase === 'success') {
-    return (
-      <div className={`${cardClass} text-center animate-fade-up`}>
-        <CheckCircle2 className="w-8 h-8 text-[#1A3D2E] mx-auto mb-3" strokeWidth={1.5} aria-hidden="true" />
-        <h2 className="text-lg font-semibold text-[#1A1A18] mb-1" style={{ fontFamily: 'var(--font-fira)' }}>
-          Quiz submitted
-        </h2>
-        <p className="text-sm text-[#5C5849]">
-          You got {answeredCount} of {questions.length} questions answered.
-        </p>
-      </div>
-    );
   }
 
   if (!currentQuestion) return null;
@@ -234,6 +279,7 @@ export default function QuizForm({
   const questionAnswered = isQuestionAnswered(currentQuestion);
   const typeLabel = currentQuestion.type === 'warm-up' ? 'Warm-up' : currentQuestion.type === 'challenge' ? 'Challenge' : null;
   const typeColor = currentQuestion.type === 'warm-up' ? 'text-[#C8A84B]' : currentQuestion.type === 'challenge' ? 'text-[#1A3D2E]' : 'text-[#9A9080]';
+  const inReview = phase === 'review';
 
   return (
     <div
@@ -241,6 +287,17 @@ export default function QuizForm({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {inReview && (
+        <div className={`${cardClass} text-center animate-fade-up !p-5`}>
+          <CheckCircle2 className="w-8 h-8 text-[#1A3D2E] mx-auto mb-2" strokeWidth={1.5} aria-hidden="true" />
+          <h2 className="text-lg font-semibold text-[#1A1A18] mb-1" style={{ fontFamily: 'var(--font-fira)' }}>
+            Quiz submitted
+          </h2>
+          <p className="text-sm text-[#5C5849] mb-3">
+            You reached {answeredCount} of {questions.length} questions. Review your answers and tap Show solution on any you got stuck on.
+          </p>
+        </div>
+      )}
       {/* Progress bar */}
       <div className="flex items-center justify-between text-xs text-[#5C5849] px-1">
         <span>
@@ -322,7 +379,8 @@ export default function QuizForm({
                     value={answers[currentQuestion.id]?.[partIndex] ?? ''}
                     onChange={(event) => setAnswer(currentQuestion.id, partIndex, event.target.value)}
                     onBlur={() => flushCheck(currentQuestion.id, partIndex)}
-                    disabled={phase === 'submitting'}
+                    disabled={phase === 'submitting' || inReview}
+                    readOnly={inReview}
                     aria-describedby={showFeedback ? `${key}-feedback` : undefined}
                   />
                   <div aria-live="polite">
@@ -344,6 +402,37 @@ export default function QuizForm({
                       </p>
                     )}
                   </div>
+                  {inReview && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => loadSolution(key, currentQuestion.id, partIndex)}
+                        disabled={solutions[key]?.state === 'loading'}
+                        className="flex items-center gap-1.5 text-xs font-medium text-[#1A3D2E] hover:text-[#152F23] transition-colors duration-micro ease-premium disabled:opacity-60"
+                      >
+                        <Lightbulb className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
+                        {solutions[key]?.state === 'loading'
+                          ? 'Loading solution...'
+                          : solutions[key]?.state === 'loaded'
+                            ? 'Solution shown'
+                            : 'Show solution'}
+                      </button>
+                      {solutions[key]?.state === 'loaded' && (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          {solutions[key]?.steps.slice(0, solutions[key]?.revealed ?? 0).map((step, i) => (
+                            <div
+                              key={i}
+                              className="animate-fade-up rounded-[8px] bg-[#E8F2ED]/60 border border-[#E0D9D0] px-3 py-2 text-sm text-[#1A1A18] rich-text"
+                              dangerouslySetInnerHTML={{ __html: renderRichText(step) }}
+                            />
+                          ))}
+                          {solutions[key]?.steps.length === 0 && (
+                            <p className="text-xs italic text-[#9A9080]">No worked solution for this part.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -371,7 +460,7 @@ export default function QuizForm({
             Next
             <ChevronRight className="w-4 h-4" />
           </button>
-        ) : (
+        ) : !inReview ? (
           <button
             type="button"
             onClick={handleSubmit}
@@ -380,7 +469,7 @@ export default function QuizForm({
           >
             {phase === 'submitting' ? 'Submitting...' : 'Submit quiz'}
           </button>
-        )}
+        ) : null}
       </div>
 
       {phase === 'error' && errorMessage && (
@@ -391,11 +480,13 @@ export default function QuizForm({
       <div className="fixed bottom-0 left-0 right-0 bg-[#F7F4EF]/95 backdrop-blur-sm border-t border-[#E0D9D0] px-4 py-3 sm:px-6">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <span className="text-xs text-[#9A9080]">
-            {answeredCount === questions.length
-              ? 'All questions answered.'
-              : `${questions.length - answeredCount} left`}
+            {inReview
+              ? 'Reviewing your answers'
+              : answeredCount === questions.length
+                ? 'All questions answered.'
+                : `${questions.length - answeredCount} left`}
           </span>
-          {isLast && (
+          {isLast && !inReview && (
             <button
               type="button"
               onClick={handleSubmit}

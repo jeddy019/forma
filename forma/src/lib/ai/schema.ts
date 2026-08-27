@@ -32,6 +32,19 @@ export interface MarkScheme {
   A1: string;
   common_error: string;
   allow: string;
+  // Phase B Wave 1 (B4): the the worked step-by-step solution shown to a
+  // student when they get a part wrong, as an ordered array of line-by-line
+  // steps (each in inline-LaTeX like question text). This is the "pure CSS/
+  // JS animation showing each algebraic step appearing in sequence" anchor -
+  // it lives inside mark_scheme so splitMarkScheme carries it into
+  // mark_scheme_json only, never questions_json (Security Rules 1).
+  //
+  // Required in WORKSHEET_JSON_SCHEMA (the AI must author it for every new
+  // generation) but OPTIONAL in this TS interface: older worksheets authored
+  // before B4 have it absent, and so do engine/math-engine-sourced fixtures,
+  // so every consumer reads it defensively as worked_solution?: string[] and
+  // falls back to "no steps" when it's missing.
+  worked_solution?: string[];
 }
 
 // Marking Logic (CLAUDE.md): Tier 1 auto-marks numerical, coordinates,
@@ -160,8 +173,12 @@ export const WORKSHEET_JSON_SCHEMA = {
                     A1: { type: 'string' },
                     common_error: { type: 'string' },
                     allow: { type: 'string' },
+                    worked_solution: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
                   },
-                  required: ['M1', 'A1', 'common_error', 'allow'],
+                  required: ['M1', 'A1', 'common_error', 'allow', 'worked_solution'],
                   additionalProperties: false,
                 },
               },

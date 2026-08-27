@@ -138,6 +138,20 @@ to escape LaTeX special characters yourself (a backslash, %, &, #, _, ~, or
 ^ in ordinary prose); that escaping is handled deterministically downstream,
 and hand-escaping it yourself would corrupt the output.
 
+Every part's "mark_scheme" object must include a "worked_solution" field: an
+ordered array of strings showing the correct method line by line, from the
+first step a student should take to the final answer. Number each step as a
+single self-contained line of working, in inline LaTeX like the question text
+(e.g. ["$x + 2 - 2 = 5 - 2$", "$x = 3$"]), so each line can be revealed on its
+own. Write as few or as many steps as the working genuinely needs - never merge
+distinct operations into one line, and never pad a one-step answer with fake
+steps (a simple "2 + 3" has a single step "$5$"). For "extended" parts (shown
+working, derivations, proofs) prefer \\begin{align*}...\\end{align*} inside a
+step for multi-line working where it reads better. For the four Computer
+Science subjects, write each step as a short line of explanation plus the exact
+expected output or code, fenced with triple backticks if code is involved. Never
+reveal the answer in an earlier step than the final one.
+
 Every part needs an "answer_format", one of: "numerical", "coordinates",
 "true_false", "multiple_choice", "extended". This decides whether a
 student's typed answer can be auto-marked instantly or needs a human/AI to
