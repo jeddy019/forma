@@ -1,11 +1,12 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
+import { cardClass, interactiveCardClass, accentCardClass } from '@/lib/ui/formStyles';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import MasteryBars from '@/lib/ui/MasteryBars';
 import SrsSection, { type ReviewInfo } from '@/lib/ui/SrsSection';
 import ScoresChart, { type ScorePoint } from '@/lib/ui/ScoresChart';
+import StudyNow from '@/lib/ui/StudyNow';
 import { toMasteryBarsAggregated, masteryScore } from '@/lib/mastery/masteryView';
 import { isDue, nextDueLabel } from '@/lib/srs/engine';
 import { currentStreak } from '@/lib/streak/streak';
@@ -231,6 +232,16 @@ export default async function StudentPortalPage({
         <div>
           <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Your worksheets</h1>
           <p className="text-sm text-[#5C5849]">{user.email}</p>
+        </div>
+
+        <div className={`${accentCardClass} flex items-center justify-between gap-4`}>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-base font-semibold text-[#1A1A18]">Smart study</h2>
+            <p className="text-sm text-[#5C5849]">
+              We pick what to work on - a topic due for review, or your weakest skill - and start a short quiz.
+            </p>
+          </div>
+          <StudyNow />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

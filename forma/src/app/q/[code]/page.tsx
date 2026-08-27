@@ -14,6 +14,10 @@ export interface QuizQuestionPart {
 export interface QuizQuestion {
   id: string;
   type: 'warm-up' | 'core' | 'challenge';
+  // Phase B Wave 1 (B10): the canonical sub-skill this question targets,
+  // needed client-side so the review phase can map which sub-skills were got
+  // wrong and drive "Re-practice wrong answers". Not answer-revealing.
+  sub_skill: string;
   parts: QuizQuestionPart[];
 }
 
@@ -31,6 +35,7 @@ interface WorksheetRow {
     questions: Array<{
       id: string;
       type: 'warm-up' | 'core' | 'challenge';
+      sub_skill: string;
       parts: Array<{
         part_label: string | null;
         text: string;
@@ -93,6 +98,7 @@ export default async function QuizPage({
   const quizQuestions: QuizQuestion[] = questions.map((question) => ({
     id: question.id,
     type: question.type,
+    sub_skill: question.sub_skill ?? '',
     parts: question.parts.map((part) => ({
       part_label: part.part_label,
       marks: part.marks,

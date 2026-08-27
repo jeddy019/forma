@@ -21,18 +21,41 @@ export interface WorksheetPromptParams {
   // for this same field, never both at once (see the two generation
   // routes).
   subSkillDirective?: string;
+  // Phase B Wave 1 (B10 re-practice / B11 smart learning): when present,
+  // overrides the free topic decomposition and forces every question onto
+  // exactly these specific canonical sub-skill names (from the submission
+  // data / mastery map), giving a short focused 5-question set. Mutually
+  // exclusive with subSkillDirective - callers must never set both.
+  focusSubSkills?: string[];
 }
 
 export function buildUserPrompt(params: WorksheetPromptParams): string {
   const subjectHint = params.subjectHint.length > 0 ? params.subjectHint.join(', ') : 'not specified';
   const questionCount = params.questionCount ?? 10;
 
+  // B10/B11 focused re-practice / smart-learning sets bypass the free topic
+  // decomposition entirely and pin every question to the caller-supplied
+  // canonical sub-skill names (taken from submission data / the mastery map),
+  // keeping sub_skill naming stable for mastery tracking.
+  const focusText = params.focusSubSkills?.length
+    ? `Question structure:
+5 questions, each on ONE of these exact sub-skills only (a short focused
+set, not a full topic decomposition):
+- ${params.focusSubSkills.join('\n- ')}
+Write every question on one of the exact sub-skill names listed above and set
+that question's sub_skill to that exact name - do not rename them and do not
+decompose into any sub-skill not listed. Together cover all of the listed
+sub-skills.`
+    : undefined;
+
   const questionStructure =
-    questionCount === 5
-      ? `Question structure:
+    params.focusSubSkills?.length
+      ? focusText ?? ''
+      : questionCount === 5
+        ? `Question structure:
 5 core questions, all targeting the same single sub-skill - a short,
 focused daily practice set, not a full topic decomposition.`
-      : `Question structure:
+        : `Question structure:
 2 warm-up (slightly below level - builds confidence)
 6 core (at level - targets the described weakness directly)
 2 challenge (above level - clearly labelled, students expect it to be harder)`;

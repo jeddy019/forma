@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb, RefreshCw } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import { renderDiagramSvg } from '@/lib/diagrams/renderDiagramSpec';
 import { renderRichText } from '@/lib/render/richText';
@@ -54,6 +55,57 @@ export default function QuizForm({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [solutions, setSolutions] = useState<Record<string, PartSolution>>({});
   const revealTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const router = useRouter();
+
+  // Phase B Wave 1 (B10): re-practice of the questions the student got wrong.
+  // Loading + error live here so the button can report its own state without
+  // disturbing the (already submitted) quiz below it.
+  const [rePractising, setRePractising] = useState(false);
+  const [rePracticeError, setRePracticeError] = useState<string | null>(null);
+
+  // The sub-skills the student got wrong, derived from the review-phase checks
+  // (a question counts if any of its parts was marked incorrect). Deduplicated
+  // so repeated misses on the same sub-skill only generate one focused set.
+  const wrongSubSkills = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { subSkill: string; label: string }[] = [];
+    for (const question of questions) {
+      if (!question.sub_skill) continue;
+      const anyWrong = question.parts.some((_, partIndex) => {
+        const status = checks[partKey(question.id, partIndex)]?.status;
+        return status === 'incorrect';
+      });
+      if (anyWrong && !seen.has(question.sub_skill)) {
+        seen.add(question.sub_skill);
+        result.push({ subSkill: question.sub_skill, label: question.sub_skill });
+      }
+    }
+    return result;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checks, questions]);
+
+  async function handleRePractice() {
+    if (wrongSubSkills.length === 0 || rePractising) return;
+    setRePractising(true);
+    setRePracticeError(null);
+    try {
+      const res = await fetch('/api/quiz/re-practice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digitalCode, wrongSubSkills }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRePracticeError(data.error ?? 'Could not start re-practice - please try again.');
+        return;
+      }
+      router.push(`/q/${data.quiz?.digital_code}`);
+    } catch {
+      setRePracticeError('Connection lost. Your progress is saved.');
+    } finally {
+      setRePractising(false);
+    }
+  }
 
   const answersRef = useRef(answers);
   useEffect(() => {
@@ -296,6 +348,20 @@ export default function QuizForm({
           <p className="text-sm text-[#5C5849] mb-3">
             You reached {answeredCount} of {questions.length} questions. Review your answers and tap Show solution on any you got stuck on.
           </p>
+          {wrongSubSkills.length > 0 && (
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRePractice}
+                disabled={rePractising}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-sm font-medium bg-[#1A3D2E] text-white hover:bg-[#152F23] active:scale-[0.98] transition-all duration-micro ease-premium disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-4 h-4 ${rePractising ? 'animate-spin' : ''}`} strokeWidth={2} aria-hidden="true" />
+                {rePractising ? 'Building your re-practice quiz...' : 'Re-practice wrong answers'}
+              </button>
+              {rePracticeError && <p className="text-xs text-[#C0392B] animate-fade-up">{rePracticeError}</p>}
+            </div>
+          )}
         </div>
       )}
       {/* Progress bar */}
