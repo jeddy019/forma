@@ -3797,3 +3797,23 @@ question bank extraction in parallel.
 Decisions: ladder (not full SM-2) to match the documented 1/3/7/14/30 exactly
 with no new dependency. New `review_schedule` table is B7's planned new table.
 SRS tracks per sub-skill (slug), consistent with skill_map granularity.
+
+---
+
+## [2026-08-27] Student portal: password login option added
+
+The student portal login was magic-link OTP only, which the user couldn't use
+for testing (the demo address has no real inbox). Added a password mode to
+`src/app/student/login/page.tsx`: a toggle between "email me a link" (unchanged,
+the passwordless model for minor students) and "log in with a password"
+(`signInWithPassword`), both ending in the same /student portal.
+
+Set up a real, confirmed Supabase Auth account for the demo student so the
+password path is testable without any email:
+- Email: [demo-account]
+- Password: [REDACTED-PASSWORD]
+(Created via auth.admin.createUser with email_confirm:true; verified live with
+signInWithPassword against the anon key.)
+
+Verified: tsc + eslint clean, login page renders 200, password sign-in succeeds.
+Commit: 66eaeb4.
