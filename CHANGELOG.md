@@ -3748,3 +3748,52 @@ column or table — B7's review_schedule is the next new table). Both views shar
 one masteryView classification module so a student's bars and the tutor's heat
 map can never disagree. Heat map intentionally breaks Rule 3 in a bounded,
 documented way (whole-class aggregate).
+
+---
+
+## [2026-08-27] Phase B Wave 1 (B7): Spaced repetition engine — opt-in schedule, due-today + track UI on the student portal
+
+B7's first coherent slice, built and migrated live.
+
+**Core engine (`src/lib/srs/engine.ts`)** — pure, no I/O, 8 unit tests:
+- `REVIEW_INTERVALS = [1, 3, 7, 14, 30]` — the exact ladder CLAUDE.md's B7
+  documents. Chose a lightweight interval-ladder over pulling in ts-fsrs
+  (Performance Rule 8: minimal deps) — it expresses the documented ladder
+  directly and is simpler to reason about with the mastery model.
+- `initialReview` (opt-in starts due tomorrow), `scheduleNextReview`
+  (pass → next rung, capped at 30; fail → reset to day 1, echoing RETURN TO
+  FUNDAMENTALS), `isDue`/`dueReviews` (the due-today driver), `nextDueLabel`.
+- `sub_skill` is the slug key so SRS rows share one identity with skill_map.
+
+**Migration (`supabase/add-review-schedule.sql`) — applied live:**
+- New `review_schedule` table: id, student_id (FK cascade), sub_skill (+label),
+  topic, next_review_at, interval_days, ladder_step, last_reviewed_at,
+  created_at; UNIQUE (student_id, sub_skill) so opt-in is one row per pair.
+- RLS enabled with an owner policy via the joined student profile (tutor/parent
+  server client); student portal reads via the service-role admin client, so no
+  anon policy (same pattern as skill_map). Verified live: columns + RLS present.
+
+**API routes (verified-email auth, never trust client-asserted identity):**
+- `POST /api/srs/track` — opt in (upsert with `initialReview`), 401 unauth.
+- `POST /api/srs/reviewed` — record pass/fail, advance/reset via
+  `scheduleNextReview`, returns the new next/interval/step.
+
+**Portal UI (`src/lib/ui/SrsSection.tsx` + `/student` page):**
+- "Spaced review" card: "Due for review today" list with Got it (pass) /
+  Struggled (fail) buttons, and a "Track" toggle on every untracked mastery
+  bar. Multi-profile case: actions apply to the first matched profile
+  (documented simplification).
+- `/student` RSC fetches review_schedule for all matched profiles via the admin
+  client (no mark scheme / raw answers in these rows) and builds a reviewMap
+  with `isDue`/`nextDueLabel`.
+
+**Verification:** tsc clean; eslint clean; 157/157 tests pass (8 new SRS engine
+tests); both API routes 401 unauth (compiled, no 500); dev server healthy.
+Seed data: Aisha has elimination-method due now (Pass/Fail buttons) and
+angles-in-triangles tracked-but-not-due; other sub-skills show Track buttons.
+
+Next: B8-B9 (student progress dashboard + daily streak counter). Continue
+question bank extraction in parallel.
+Decisions: ladder (not full SM-2) to match the documented 1/3/7/14/30 exactly
+with no new dependency. New `review_schedule` table is B7's planned new table.
+SRS tracks per sub-skill (slug), consistent with skill_map granularity.

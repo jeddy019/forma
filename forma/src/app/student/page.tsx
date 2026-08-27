@@ -4,7 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import MasteryBars from '@/lib/ui/MasteryBars';
+import SrsSection, { type ReviewInfo } from '@/lib/ui/SrsSection';
 import { toMasteryBarsAggregated, masteryScore } from '@/lib/mastery/masteryView';
+import { isDue, nextDueLabel } from '@/lib/srs/engine';
 import type { SkillMap } from '@/lib/mastery/types';
 import { BarChart3, FileText, LogOut } from 'lucide-react';
 
@@ -30,6 +32,13 @@ interface SubmissionRow {
   worksheet_id: string;
   score_percentage: number | null;
   submitted_at: string;
+}
+
+interface ReviewScheduleRow {
+  student_id: string;
+  sub_skill: string;
+  sub_skill_label: string;
+  next_review_at: string;
 }
 
 async function signOutAction() {
@@ -140,6 +149,35 @@ export default async function StudentPortalPage({
   const masteryBars = toMasteryBarsAggregated(matchedStudents.map((s) => s.skill_map));
   const overallMastery = masteryScore(masteryBars);
 
+  // Phase B Wave 1 (B7): load the student's spaced-review schedule across all
+  // matched profiles. buildHes consumed by SrsSection for the "due today"
+  // list + Track toggle. Rows carry no mark scheme and no raw answers -
+  // safe for the student (admin client + verified-email matching, as above).
+  const { data: reviewSchedules } = studentIds.length
+    ? await admin
+        .from('review_schedule')
+        .select('student_id, sub_skill, sub_skill_label, next_review_at')
+        .in('student_id', studentIds)
+        .returns<ReviewScheduleRow[]>()
+    : { data: [] as ReviewScheduleRow[] };
+
+  const reviewMap: Record<string, ReviewInfo> = {};
+  const now = new Date();
+  for (const row of reviewSchedules ?? []) {
+    const existing = reviewMap[row.sub_skill];
+    const entry = { nextReviewAt: row.next_review_at };
+    if (!existing) {
+      reviewMap[row.sub_skill] = {
+        tracked: true,
+        due: isDue(entry, now),
+        nextIn: nextDueLabel(entry, now),
+      };
+    } else {
+      existing.due = existing.due || isDue(entry, now);
+      if (!existing.nextIn || isDue(entry, now)) existing.nextIn = nextDueLabel(entry, now);
+    }
+  }
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F7F4EF' }}>
       <PortalHeader />
@@ -163,6 +201,8 @@ export default async function StudentPortalPage({
           </div>
           <MasteryBars bars={masteryBars} />
         </div>
+
+        <SrsSection studentIds={studentIds} bars={masteryBars} reviewMap={reviewMap} />
 
         <div className="flex flex-col gap-3">
           {worksheetsError && <p className="text-sm text-[#C0392B]">Could not load your worksheets - please refresh.</p>}
