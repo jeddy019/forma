@@ -3817,3 +3817,38 @@ signInWithPassword against the anon key.)
 
 Verified: tsc + eslint clean, login page renders 200, password sign-in succeeds.
 Commit: 66eaeb4.
+
+---
+
+## [2026-08-27] Phase B Wave 1 (B8-B9): student progress dashboard + daily streak counter
+
+Added to the existing /student portal (which already carries B5 mastery bars and
+B7 spaced review).
+
+**B9 — Daily streak (`src/lib/streak/streak.ts`, pure, 8 tests):**
+- `currentStreak(activityAt, now)` — consecutive active days ending today;
+  a day counts if there is any quiz/worksheet submission that calendar day
+  (UTC day boundaries, documented default since the student's timezone isn't
+  stored). Grace: no activity today yet does not break the streak if yesterday
+  had activity. Deliberately a bare integer (gamification policy: simple
+  number, no complexity).
+
+**B8 — Progress dashboard on the portal:**
+- New `ScoresChart` (hand-rolled Tailwind bars, mastery palette, no chart dep).
+- `/student` RSC now fetches EVERY submission across the student's worksheets
+  (independent of the list's pagination) via the admin client (scores +
+  timestamps only - no answers/mark scheme), computes the streak and a
+  recent-scores chart, and renders "Daily streak" + "Recent scores" cards above
+  the mastery section. SRS "due today" (B7) still serves the topics-to-review
+  list.
+
+**Verification:** tsc + eslint clean; 165/165 tests pass (8 new streak tests);
+dev server healthy. Seed: 8 submissions for Aisha across 8 consecutive days
+(2026-08-21..28, ending today) - portal shows streak = 8 days and the
+45→88% trending chart.
+
+Next: B10-B11 (wrong answer re-practice + smart learning). Continue question
+bank extraction in parallel.
+Decisions: streak derives activity from submissions.submitted_at (the only
+reliable activity event today); UTC day boundaries documented; chart is a
+simple homegrown bar rather than a dependency (Performance Rule 8).
