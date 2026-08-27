@@ -3668,8 +3668,18 @@ checkpoint so work resumes without loss.
 /api/quiz/solution returns the authored steps for q1 and [] for an invalid part;
 the submission-gate and backward-compat (empty steps) paths both exercised.
 
-**Not yet done (next session):** full in-browser E2E of the sequential reveal
-animation on a real answer, then ship/close B4.
+**Closed same day (second session pass):** lint = 0 errors (1 pre-existing
+warning at QuizForm.tsx:210, unrelated), 136/136 unit tests pass across 20
+files, tsc clean, and the reveal animation's CSS utility (animate-fade-up, the
+Design System v2 entrance token) is confirmed present in globals.css. B4 is
+code-complete and integration-verified. Remaining: only the human-in-browser
+judgement of the animation's timing/feel, which the user does themselves on
+the running app per the established workflow.
+
+Known limitation carried forward: worked_solution is authored by the AI, so it
+appears on AI-generated quizzes. Maths quizzes that route to the deterministic
+Render engine get "No worked solution" until that engine emits worked_solution
+(an engine change, out of B4's scope) — noted in CLAUDE.md open risks.
 
 Files: schema.ts, systemPrompt.ts, splitMarkScheme (implicit), QuizForm.tsx,
 src/app/api/quiz/solution/route.ts.
