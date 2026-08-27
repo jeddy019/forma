@@ -5,10 +5,12 @@ import { cardClass, interactiveCardClass } from '@/lib/ui/formStyles';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import MasteryBars from '@/lib/ui/MasteryBars';
 import SrsSection, { type ReviewInfo } from '@/lib/ui/SrsSection';
+import ScoresChart, { type ScorePoint } from '@/lib/ui/ScoresChart';
 import { toMasteryBarsAggregated, masteryScore } from '@/lib/mastery/masteryView';
 import { isDue, nextDueLabel } from '@/lib/srs/engine';
+import { currentStreak } from '@/lib/streak/streak';
 import type { SkillMap } from '@/lib/mastery/types';
-import { BarChart3, FileText, LogOut } from 'lucide-react';
+import { BarChart3, FileText, Flame, LogOut, TrendingUp } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -39,6 +41,16 @@ interface ReviewScheduleRow {
   sub_skill: string;
   sub_skill_label: string;
   next_review_at: string;
+}
+
+// Phase B Wave 1 (B8-B9): every submission across ALL of the student's
+// worksheets (not just the paginated page) - the source of the daily streak
+// and the recent-scores chart. No raw answers, no mark scheme - just scores
+// and timestamps, safe for the student.
+interface ActivitySubmissionRow {
+  worksheet_id: string;
+  score_percentage: number | null;
+  submitted_at: string;
 }
 
 async function signOutAction() {
@@ -178,6 +190,40 @@ export default async function StudentPortalPage({
     }
   }
 
+  // Phase B Wave 1 (B8-B9): load every submission across the student's
+  // worksheets to compute the daily streak and the recent-scores chart -
+  // independent of this page's pagination so the numbers are complete.
+  const { data: activityWorksheets } = await admin
+    .from('worksheets')
+    .select('id')
+    .in('student_id', studentIds)
+    .range(0, 999)
+    .returns<{ id: string }[]>();
+  const allWorksheetIds = (activityWorksheets ?? []).map((w) => w.id);
+  const { data: allSubmissions } = allWorksheetIds.length
+    ? await admin
+        .from('submissions')
+        .select('worksheet_id, score_percentage, submitted_at')
+        .in('worksheet_id', allWorksheetIds)
+        .order('submitted_at', { ascending: false })
+        .returns<ActivitySubmissionRow[]>()
+    : { data: [] as ActivitySubmissionRow[] };
+
+  const activitySubmissions = allSubmissions ?? [];
+  const streak = currentStreak(
+    activitySubmissions.map((s) => s.submitted_at),
+    now
+  );
+  // Most recent ~10 scored submissions, oldest-first for the chart.
+  const chartScores: ScorePoint[] = activitySubmissions
+    .filter((s): s is ActivitySubmissionRow & { score_percentage: number } => s.score_percentage != null)
+    .slice(0, 10)
+    .reverse()
+    .map((s) => ({
+      dateLabel: new Date(s.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+      score: s.score_percentage,
+    }));
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F7F4EF' }}>
       <PortalHeader />
@@ -185,6 +231,25 @@ export default async function StudentPortalPage({
         <div>
           <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Your worksheets</h1>
           <p className="text-sm text-[#5C5849]">{user.email}</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className={`${cardClass} flex items-center justify-between`}>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.06em] text-[#9A9080]">Daily streak</p>
+              <p className="text-2xl font-semibold text-[#1A1A18]">{streak} day{streak === 1 ? '' : 's'}</p>
+              <p className="text-xs text-[#5C5849]">Keep it going - practise every day.</p>
+            </div>
+            <Flame className={`w-8 h-8 ${streak > 0 ? 'text-[#C8A84B]' : 'text-[#E0D9D0]'}`} strokeWidth={1.5} aria-hidden="true" />
+          </div>
+
+          <div className={`${cardClass} flex flex-col gap-2`}>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-[#1A3D2E]" strokeWidth={2} aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-[#1A1A18]">Recent scores</h2>
+            </div>
+            <ScoresChart scores={chartScores} />
+          </div>
         </div>
 
         <div className={`${cardClass} flex flex-col gap-4`}>
