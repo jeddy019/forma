@@ -3852,3 +3852,59 @@ bank extraction in parallel.
 Decisions: streak derives activity from submissions.submitted_at (the only
 reliable activity event today); UTC day boundaries documented; chart is a
 simple homegrown bar rather than a dependency (Performance Rule 8).
+
+---
+
+## [2026-08-28] Phase B Wave 1 (B10-B11): wrong-answer re-practice + smart learning
+
+Completed the quiz-core wave's engagement loop: a student can re-practice what
+they got wrong and one-tap a smart "study now" session.
+
+**Shared generate core (`src/lib/quiz/generateQuiz.ts`)**
+- The tutor route's full generate+persist pipeline (per-owner free-tier gate,
+  prompt build, deterministic maths routing, AI fallback, question-bank blend,
+  schema split, storage, fire-and-forget email) factored into one function used
+  by ALL three entry points, always via the service-role client:
+  - `/api/quiz/generate` (tutor/parent, now a thin wrapper keeping auth, owner,
+    and the mastery fundamentals-targeting branch)
+  - `/api/quiz/re-practice` (B10, public)
+  - `/api/quiz/study` (B11, student-auth)
+- `buildUserPrompt` gained a `focusSubSkills` mode: a 5-question set pinned to
+  exact canonical sub-skill names (feeding stable mastery tracking), mutually
+  exclusive with the single-sub-skill `subSkillDirective`.
+
+**B10 - re-practice (after a quiz)**
+- Public `/api/quiz/re-practice` resolves the generating context (student
+  profile + owning tutor) SERVER-SIDE from the worksheet's stored student_id -
+  no auth, no client-asserted identity (same "never trust the client" rule as
+  /api/submit). This also fixes the localisation seam: an anonymous re-practiser
+  gets the student's real country/curriculum/year from the profile.
+- `QuizForm` now receives each question's `sub_skill` (`q/[code]/page.tsx`) and,
+  in the review phase, computes the wrong sub-skills from the per-part check
+  statuses and shows a "Re-practice wrong answers" button that generates a
+  fresh quiz (new variant, new code) and navigates to it.
+
+**B11 - smart learning (Study now)**
+- Student-auth `/api/quiz/study` (verified email -> matched profile, same as the
+  portal) auto-recommends: a spaced-review-due sub-skill (earliest
+  next_review_at) else the lowest-mastery sub-skill (aggregated bars, weakest
+  last); an explicit target may also be passed. 409 if there's nothing to study
+  yet.
+- "Smart study" accent-rail card on the student portal with a one-tap `StudyNow`
+  client component that calls the route and navigates straight into the quiz.
+
+**Verification:** tsc + eslint clean; 169/169 tests pass (24 files, 4 new
+buildUserPrompt tests). Endpoints live-checked: generate/study -> 401 unauth,
+re-practice -> 400 on empty body, /q/TESTQUIZ01 -> 200 (sub_skill mapped). A
+real end-to-end re-practice/study generation wasn't exercised - it needs a live
+AI spend and (for study) a logged-in student; recommended under a real browser
+session. Committed 5f867fa.
+
+Next: Wave 1 is complete (B1-B11). Move to Wave 2 - B12 (algebraic equivalence
+via mathjs normalisation for auto-marking), then B13+/Wave 2 mastery/streak/deep
+dashboard items that remain from the original plan (B59-B62). Continue question
+bank extraction in parallel.
+Decisions: student-facing generation reuses the service-role client + explicit
+owner resolution because a student has no RLS-visible owner row; free-tier is
+still gated per-OWNER (the tutor's quota) via the atomic RPC; focus mode always
+skips the deterministic engine so exact sub-skill names are honoured.
