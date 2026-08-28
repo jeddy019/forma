@@ -4168,3 +4168,85 @@ landing unverified, because Wave 6 pre-reviews content - if that changes, drop
 the verified_at/verified_by from the insert instead of adding a second review
 pass. Dedupe is in-memory text matching scoped per (country, subject); fine at
 launch-scale, revisit with a fingerprint column if the bank grows large.
+
+## [2026-08-28] Phase B Wave 4 B72 - AI tutor chat (post-quiz "Why was this wrong?")
+
+**What:** the interactive, contextual post-quiz explanation feature from the
+pricing table ("AI tutor chat"). After submitting a quiz, the review phase now
+offers an inline chat per question part the student got wrong (or that has no
+correct verdict): tap "Ask the AI tutor why this was wrong", get a contextual
+explanation, then keep asking follow-ups.
+
+**Design - the context never leaves the server (Security Rules 1):**
+The chat needs the question text, the student's actual answer, the accepted
+answer, and the mark scheme. All four are loaded inside
+`/api/quiz/explain/route.ts` via the service-role admin client and are never
+returned to the browser - the client sends only `{ digitalCode, questionId,
+partIndex, history }` and receives only the reply text. The student's answer
+is read from the STORED submission (`submissions.answers_json`), not trusted
+from the client, so a caller cannot smuggle a different "student answer" to
+steer the model. Gates, in order: valid code/question/part/history shape;
+worksheet exists and not expired; a submission already exists (posta-quiz only
+- the AI tutor is a reward for attempting, not a mid-quiz answer machine);
+owner plan entitlement; per-quiz usage cap; then assemble context, call the
+model, log usage, return reply.
+
+**Entitlement (`aiTutorAllowance` in src/lib/payments/planStatus.ts):**
+Pro = Infinity (unlimited), Basic = AI_TUTOR_BASIC_QUOTA of 5 per quiz, Free =
+0. Because the quiz page student is usually anonymous, the gate is the
+WORKSHEET OWNER's plan resolved server-side from `worksheets.owner_id`, never
+client-asserted. The /q/[code] server component resolves the same allowance to
+set `aiTutorEnabled` so the button only renders for owners who can actually
+get an answer, and the route re-enforces the cap independently - the two
+cannot drift. Note: `users.plan`'s CHECK constraint still only admits
+"free"/"pro", so the Basic branch is currently dead code written ahead of the
+billing workstream (documented in code + CLAUDE.md).
+
+**Cap mechanics:** finite allowances (Basic, once it exists) count prior
+`usage_log` rows `WHERE action = 'ai_tutor' AND metadata->>worksheet_id = X`
+before answering; overflow returns 429 with a clear message. The count-then-
+insert is non-atomic (a racing Basic student could sneak one extra message) -
+acceptable for a soft cap, unlike the revenue-critical free-tier monthly
+check, and flagged in the route comment. 15s AbortSignal timeout matches the
+Marking-AI budget in Performance Rule 10; timeout returns a clean 504 message.
+
+**Rendering:** the reply goes through the quiz page's existing rich-text path
+(renderRichText) so `$...$` math from the model renders via KaTeX like
+everywhere else, and HTML is escaped (no markdown injection). The chat panel
+is appearance-gated to parts whose check status is not 'correct'. First open
+auto-asks "Why was this wrong?"; follow-ups maintain a per-part history array
+in client state. Limit/error states show inline.
+
+**Model:** OpenAI gpt-5.6-terra (the standing default that also drives
+generation, marking, and parent reports) with `reasoning_effort: 'low'` for a
+sub-second-to-seconds reply, a fourth OpenAI-only call site with no inactive
+Anthropic copy (matches generateParentReport.ts's precedent - the Tech Stack
+entry enumerating three inactive-Anthropic call sites is now four lines, see
+update). The stale "GPT-4o-mini" name in the old Build Phases step was
+catalogued in the file header.
+
+**Files:** src/lib/quiz/aiTutor.ts (new - SYSTEM_PROMPT, pure
+buildAiTutorMessages exported for tests, getAiTutorReply); planStatus.ts
+(+aiTutorAllowance, AI_TUTOR_BASIC_QUOTA); api/quiz/explain/route.ts (new);
+q/[code]/page.tsx (owner-plan resolution, passes aiTutorEnabled); q/[code]/
+QuizForm.tsx (TutorMessage/TutorChat state, openTutorChat/sendTutorQuestion,
+review-phase panel).
+
+**Tests:** +6 (aiTutor.test.ts: buildAiTutorMessages context+history+blank-
+answer, getAiTutorReply mock success/refusal/no-text via the tier2-style
+hoisted openai mock; aiTutorAllowance.test.ts: free/null/lapsed/active-pro/
+basic quota/lapsed-basic). 213/213 pass (29 files).
+
+**Verification:** tsc clean; eslint 0 errors (QuizForm's 2 pre-existing
+warnings unchanged). Dev server left running for the manual check; live-test
+requires a Pro-owned quiz with a submitted wrong answer (fallback: the demo
+tutor account is Pro) - set the owner's plan to basic temporarily if the cap
+path needs an eyeball. Committed with the "Changelog:" step.
+
+Next: Wave 5 (B73-B78) - assignment loop, tutor analytics, cram mode,
+flexible task setting, accuracy-required mode, streak freeze. Wave 6 import
+continues in parallel through /admin/question-bank/import. Decisions: AI tutor
+is gated at the encoding level by the worksheet owner's plan, not the student
+(a student portal identity doesn't exist yet); the per-quiz cap is relative to
+the worksheet id, so re-practice quizzes each get their own fresh 5 (Basic) -
+matches "per quiz" wording.
