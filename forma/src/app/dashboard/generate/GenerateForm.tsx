@@ -24,6 +24,7 @@ interface GeneratedWorksheetSummary {
 }
 
 interface GeneratedGroupSummary {
+  assignmentId: string;
   groupId: string;
   subject: string;
   topic: string;
@@ -469,8 +470,8 @@ export default function GenerateForm({
             </p>
             <p className="text-xs text-[#9A9080] mt-1">Created for {groupResult.studentCount} students.</p>
           </div>
-          <Link href={`/dashboard/generate/group/${groupResult.groupId}`} className={`${primaryButtonClass} self-start`}>
-            View group results
+          <Link href={`/dashboard/assignments/${groupResult.assignmentId}`} className={`${primaryButtonClass} self-start`}>
+            View assignment
           </Link>
           <button type="button" onClick={handleReset} className={`${secondaryButtonClass} self-start`}>
             Start another

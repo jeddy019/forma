@@ -40,6 +40,25 @@ CREATE TABLE student_profiles (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Phase B Wave 5 (B73): Assignment loop - the persistent tracking wrapper
+-- around group generation ("one worksheet, multiple students"). One row per
+-- batch; group/route creates it and stamps every worksheet in the batch
+-- with assignment_id (which doubles as that batch's group_id, so the
+-- pre-B73 group comparison page resolves the same rows). Per-student status
+-- (assigned / in_progress / submitted / reviewed) is derived at read time in
+-- /dashboard/assignments/[id] from first_opened_at + latest submission -
+-- nothing is stored proactively. See supabase/add-assignments.sql.
+-- Defined here before worksheets because worksheets.assignment_id references
+-- it (FOREIGN KEY) - the file must stay safe to run top to bottom.
+CREATE TABLE assignments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  subject TEXT,
+  topic TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE worksheets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id UUID REFERENCES users(id),
@@ -72,7 +91,11 @@ CREATE TABLE worksheets (
   -- is opened for this worksheet - captures a real "started working on
   -- it" event that created_at (generation time) can't. Null until then.
   -- See supabase/add-worksheet-first-opened-at.sql.
-  first_opened_at TIMESTAMPTZ
+  first_opened_at TIMESTAMPTZ,
+  -- Phase B Wave 5 (B73): the assignment this worksheet belongs to, set by
+  -- /api/generate/group (doubles as that batch's group_id). Null outside
+  -- group mode. See supabase/add-assignments.sql.
+  assignment_id UUID REFERENCES assignments(id) ON DELETE SET NULL
 );
 
 CREATE TABLE submissions (
@@ -168,6 +191,8 @@ CREATE INDEX idx_worksheets_student ON worksheets(student_id);
 CREATE INDEX idx_worksheets_code ON worksheets(digital_code);
 CREATE INDEX idx_worksheets_expires_at ON worksheets(expires_at);
 CREATE INDEX idx_worksheets_group ON worksheets(group_id);
+CREATE INDEX idx_worksheets_assignment ON worksheets(assignment_id);
+CREATE INDEX idx_assignments_owner ON assignments(owner_id);
 CREATE INDEX idx_profiles_owner ON student_profiles(owner_id);
 CREATE INDEX idx_submissions_worksheet ON submissions(worksheet_id);
 CREATE INDEX idx_schedules_owner ON schedules(owner_id);
@@ -185,6 +210,7 @@ ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE question_bank ENABLE ROW LEVEL SECURITY;
 
@@ -195,6 +221,7 @@ CREATE POLICY worksheets_own ON worksheets FOR ALL USING (auth.uid() = owner_id)
 CREATE POLICY schedules_own ON schedules FOR ALL USING (auth.uid() = owner_id);
 CREATE POLICY notes_own ON session_notes FOR ALL USING (auth.uid() = tutor_id);
 CREATE POLICY templates_own ON templates FOR ALL USING (auth.uid() = tutor_id);
+CREATE POLICY assignments_own ON assignments FOR ALL USING (auth.uid() = owner_id);
 CREATE POLICY submissions_owner ON submissions FOR ALL USING (
   EXISTS (
     SELECT 1 FROM worksheets

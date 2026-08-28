@@ -171,7 +171,33 @@ export async function POST(request: NextRequest) {
   }
 
   const { questionsJson, markSchemeJson } = splitMarkScheme(worksheet);
-  const groupId = crypto.randomUUID();
+
+  // Phase B Wave 5 (B73): group generation IS an assignment. One named row
+  // in the new assignments table; every worksheet below is stamped with its
+  // id, which doubles as the group_id so the pre-B73 group comparison page
+  // (/dashboard/generate/group/[groupId]) keeps resolving the same rows.
+  // The assignment is the persistent tracking wrapper; per-student status
+  // is derived at read time, never stored.
+  const assignmentId = crypto.randomUUID();
+  const { error: assignmentInsertError } = await supabase
+    .from('assignments')
+    .insert({
+      id: assignmentId,
+      owner_id: user.id,
+      title: `${worksheet.subject} - ${worksheet.topic}`,
+      subject: worksheet.subject,
+      topic: worksheet.topic,
+    })
+    .select('id')
+    .single();
+
+  // The assignment row is the tracking layer only - if its insert fails,
+  // fail the whole request rather than silently returning worksheets that
+  // the tutor then can't see aggregated in /dashboard/assignments.
+  if (assignmentInsertError) {
+    console.error('Failed to create assignment row', assignmentInsertError);
+    return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+  }
 
   const DIGITAL_CODE_UNIQUE_VIOLATION = '23505';
   const MAX_INSERT_ATTEMPTS = 3;
@@ -186,7 +212,8 @@ export async function POST(request: NextRequest) {
         .insert({
           owner_id: user.id,
           student_id: student.id,
-          group_id: groupId,
+          group_id: assignmentId,
+          assignment_id: assignmentId,
           prompt_used: sanitizedTopic,
           questions_json: questionsJson,
           mark_scheme_json: markSchemeJson,
@@ -236,7 +263,13 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { groupId, subject: worksheet.subject, topic: worksheet.topic, studentCount: inserted.length },
+    {
+      assignmentId,
+      groupId: assignmentId,
+      subject: worksheet.subject,
+      topic: worksheet.topic,
+      studentCount: inserted.length,
+    },
     { status: 201 }
   );
 }
