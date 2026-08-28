@@ -4097,3 +4097,74 @@ sub_skill slug matching in blendWithBank already does the "right question"
 work; a strict topic equality would risk rejecting valid matches because the
 AI's freeform topic string and the bank's curated topic string rarely match
 verbatim.
+
+## [2026-08-28] Phase B Wave 4 (B69): question bank bulk import pipeline
+
+Third piece of the Wave 4 exam-board run in one session (B67 + B68 already
+committed). B69 is the admin bulk-import tool the Wave 6 extraction pipeline
+feeds: a pasted/uploaded JSON array is validated row by row, deduplicated
+against the bank, and inserted already marked verified.
+
+**The contract (`question-bank-import.example.json`, repo root):** a flat
+array of records shaped close to the DB row, with the question payload nested
+under `question`:
+
+```
+{ country, curriculum_level, subject, topic,
+  sub_skill?, exam_board?,
+  question: { text, marks, answer_format, answer,
+              mark_scheme: { M1, A1, common_error?, allow?, worked_solution? } } }
+```
+
+`sub_skill` and `exam_board` are optional; `exam_board` must belong to the
+record's country. `worked_solution` is tolerated (filtered to non-empty
+strings) so older extracted/SAT content that carries step-by-step solutions
+keeps them.
+
+**Shared validation (`src/lib/questionBank/importValidation.ts`):**
+- `validateBankRecord(raw, index)` - pure, unit-tested, the single gate every
+  import row passes: country/subject against the static catalogues, marks as a
+  whole number 1-20, answer_format against ANSWER_FORMATS, M1/A1 required,
+  2000-char question-text cap (Security Rule 4), length caps on
+  topic/sub_skill/curriculum_level. Returns a normalized `{ ok, record }`.
+- `normalizeQuestionText(text)` - trim/collapse/lowercase text, the dedupe key
+  shared between the action's DB check and the module's tests.
+- Constants: MAX_IMPORT_ROWS 1000, IMPORT_BATCH_SIZE 100, text cap 1.5MB.
+
+**The action (`admin/question-bank/import/actions.ts`):**
+- Same requireAdmin gate as every other question-bank action.
+- Reads the uploaded File if present, else the `json` textarea; JSON.parse with
+  a clear error, array-only, 1000-row cap.
+- Per-row validate; collects failures as human-readable "row N: ..." messages.
+- Dedupe: one query per distinct (country, subject) pair returns existing
+  question_json text, normalized into a Set; matching incoming rows are
+  skipped (existingTexts), never double-inserted.
+- Batched inserts (100/insert) with verified_by = the importing admin's email
+  and verified_at = now - imported content is pre-reviewed by extraction, so
+  the welcome state is "verified and blendable", not "needs a second pass".
+- Returns a summary { total, inserted, skippedExisting, failed, failures }.
+
+**Admin UI:** new `/admin/question-bank/import` page (auth-gated like the
+bank page) with a file input + paste textarea, inline summary showing what was
+inserted/skipped/failed after import. "Bulk import" link added to the bank
+page's header. Also fixed a stale header line on the bank page that claimed
+the bank was "not yet wired into generation" - it has blended since Phase 7,
+and now board-filters via B68.
+
+**Tests:** 8 cases in src/__tests__/importValidation.test.ts (valid row,
+board-belongs-to-country accept/reject, row-numbered errors, invalid
+subject/answer_format, marks range, missing answer, M1/A1 required, optional
+mark-scheme fields incl. worked_solution filtering, whitespace/case dedupe).
+
+**Verification:** tsc clean; eslint 0 errors (same 5 pre-existing warnings);
+201/201 tests pass (27 files, +8). Committed 70ca322.
+
+Next: B72 AI tutor chat (Wave 4), then Wave 5 (B73-B78). B70 (admin curation
+UI) was already effectively built during Phase A and extended by B68/B69.
+Wave 6 extraction continues in parallel - each extracted batch imports through
+this page, and board-tagged batches are what make B68's filter match.
+Decisions: imports are trusted-verified (the importer marks them) rather than
+landing unverified, because Wave 6 pre-reviews content - if that changes, drop
+the verified_at/verified_by from the insert instead of adding a second review
+pass. Dedupe is in-memory text matching scoped per (country, subject); fine at
+launch-scale, revisit with a fingerprint column if the bank grows large.
