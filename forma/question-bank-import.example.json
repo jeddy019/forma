@@ -1,0 +1,60 @@
+[
+  {
+    "country": "england",
+    "curriculum_level": "GCSE",
+    "subject": "Mathematics",
+    "topic": "Simultaneous Equations",
+    "sub_skill": "elimination method",
+    "exam_board": "AQA",
+    "question": {
+      "text": "Solve the simultaneous equations $2x + 3y = 12$ and $4x - y = 10$.",
+      "marks": 3,
+      "answer_format": "extended",
+      "answer": "$x = 3$, $y = 2$",
+      "mark_scheme": {
+        "M1": "Eliminates a variable (e.g. multiplies the second equation by 3 and adds to eliminate $y$).",
+        "A1": "$x = 3$, $y = 2$",
+        "common_error": "Substitutes back into the rearranged equation instead of the original, carrying an earlier slip.",
+        "allow": "Equivalent forms such as a fully correct substitution method."
+      }
+    }
+  },
+  {
+    "country": "united_states",
+    "curriculum_level": "US Grade 8",
+    "subject": "Mathematics",
+    "topic": "Systems of Equations",
+    "sub_skill": "substitution method",
+    "exam_board": "SAT",
+    "question": {
+      "text": "If $y = 2x + 1$ and $y = 3x - 4$, what is the value of $x$?",
+      "marks": 1,
+      "answer_format": "numerical",
+      "answer": "5",
+      "mark_scheme": {
+        "M1": "Equates the two expressions for $y$.",
+        "A1": "5",
+        "common_error": "Solves for $y$ instead of $x$.",
+        "allow": "None needed - single numeric answer."
+      }
+    }
+  },
+  {
+    "country": "united_states",
+    "curriculum_level": "US Grade 7",
+    "subject": "English Language",
+    "topic": "Reading Comprehension",
+    "sub_skill": "main idea",
+    "question": {
+      "text": "A passage describes two friends' contrasting approaches to planning a school trip. What is the main idea of the passage?",
+      "marks": 2,
+      "answer_format": "extended",
+      "answer": "Different planning styles can complement each other to produce a better outcome.",
+      "mark_scheme": {
+        "M1": "Identifies both characters' approaches and the relationship between them.",
+        "A1": "States a main idea that synthesizes both approaches.",
+        "common_error": "Answers with a detail from one paragraph rather than the whole passage."
+      }
+    }
+  }
+]

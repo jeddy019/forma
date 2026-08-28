@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAdminEmail } from '@/lib/admin/isAdminEmail';
@@ -6,7 +7,7 @@ import { cardClass } from '@/lib/ui/formStyles';
 import QuestionForm from './QuestionForm';
 import QuestionRowActions from './QuestionRowActions';
 import { EmptyState } from '@/lib/ui/EmptyState';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Upload } from 'lucide-react';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -72,12 +73,22 @@ export default async function QuestionBankPage({
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F7F4EF' }}>
       <main className="px-6 py-8 max-w-3xl mx-auto flex flex-col gap-8">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Question bank</h1>
-          <p className="text-sm text-[#5C5849]">
-            Phase 7 Step 42 - human-verified questions, submitted or reviewed by educators. Not yet wired into
-            generation (that half of Step 42 needs the Anthropic account back).
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Question bank</h1>
+            <p className="text-sm text-[#5C5849]">
+              Phase 7 Step 42 + Phase B Wave 4 - human-verified questions. Blended into worksheet, daily, and quiz
+              generation by sub-skill (best-effort, admin-client only), and filtered to the student&apos;s pinned exam board
+              when they have one (B68).
+            </p>
+          </div>
+          <Link
+            href="/admin/question-bank/import"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1A3D2E] hover:text-[#152F23] transition-colors duration-micro ease-premium shrink-0"
+          >
+            <Upload className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+            Bulk import
+          </Link>
         </div>
 
         <QuestionForm />
