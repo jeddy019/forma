@@ -34,6 +34,7 @@ interface ProfileRow {
   subjects: string[] | null;
   owner_id: string | null;
   skill_map: SkillMap | null;
+  exam_board: string | null;
 }
 
 interface ReviewScheduleRow {
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   const { data: matched } = await admin
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, owner_id, skill_map')
+    .select('id, name, email, country, curriculum_level, year_level, subjects, owner_id, skill_map, exam_board')
     .ilike('email', user.email)
     .returns<ProfileRow[]>();
 
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
     curriculum_level: owningProfile.curriculum_level,
     year_level: owningProfile.year_level,
     subjects: owningProfile.subjects,
+    exam_board: owningProfile.exam_board ?? null,
   };
 
   let inserted;

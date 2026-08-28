@@ -3,7 +3,7 @@
 import { useActionState, useState } from 'react';
 import { UserPlus } from 'lucide-react';
 import { createStudentAction, type CreateStudentResult } from './actions';
-import { CORE_SUBJECTS, CODING_SUBJECTS, COMING_SOON_SUBJECTS } from '@/lib/constants';
+import { CORE_SUBJECTS, CODING_SUBJECTS, COMING_SOON_SUBJECTS, EXAM_BOARDS_BY_COUNTRY, type Country } from '@/lib/constants';
 import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
 import { FormHeader } from '@/lib/ui/FormHeader';
 
@@ -22,7 +22,7 @@ const initialState: CreateStudentResult = {};
 
 export default function StudentForm({ isTutor }: { isTutor: boolean }) {
   const [state, formAction, pending] = useActionState(createStudentAction, initialState);
-  const [country, setCountry] = useState('england');
+  const [country, setCountry] = useState<Country>('england');
 
   return (
     <form action={formAction} className={`${accentCardClass} flex flex-col gap-4`}>
@@ -44,7 +44,7 @@ export default function StudentForm({ isTutor }: { isTutor: boolean }) {
           name="country"
           className={inputClass}
           value={country}
-          onChange={(event) => setCountry(event.target.value)}
+          onChange={(event) => setCountry(event.target.value as Country)}
         >
           <option value="england">England</option>
           <option value="canada_ontario">Canada (Ontario)</option>
@@ -69,6 +69,27 @@ export default function StudentForm({ isTutor }: { isTutor: boolean }) {
           ))}
         </select>
       </div>
+
+      {/* B67 (exam board selection): only shown for countries that actually
+          have exam boards in this sense (England AQA/Edexcel/OCR/CIE, US
+          SAT/ACT). Ontario has no single awarding body, so it gets no picker
+          and no value. Optional - "No specific board" stores a NULL, which is
+          a valid choice for a student not prepping for one. */}
+      {EXAM_BOARDS_BY_COUNTRY[country].length > 0 && (
+        <div>
+          <label className={labelClass} htmlFor="examBoard">
+            Exam board (optional)
+          </label>
+          <select id="examBoard" name="examBoard" defaultValue="" className={inputClass}>
+            <option value="">No specific board</option>
+            {EXAM_BOARDS_BY_COUNTRY[country].map((board) => (
+              <option key={board} value={board}>
+                {board}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div>
         <label className={labelClass} htmlFor="yearLevel">

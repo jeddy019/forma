@@ -43,6 +43,7 @@ interface ProfileRow {
   year_level: string;
   subjects: string[] | null;
   owner_id: string | null;
+  exam_board: string | null;
 }
 
 interface UserRow {
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await admin
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, owner_id')
+    .select('id, name, email, country, curriculum_level, year_level, subjects, owner_id, exam_board')
     .eq('id', worksheet.student_id)
     .single<ProfileRow>();
 
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
     curriculum_level: profile.curriculum_level,
     year_level: profile.year_level,
     subjects: profile.subjects,
+    exam_board: profile.exam_board ?? null,
   };
 
   let inserted;

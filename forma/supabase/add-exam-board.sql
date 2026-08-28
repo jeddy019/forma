@@ -1,0 +1,13 @@
+-- Standalone addition, run manually in Supabase SQL Editor (same pattern as
+-- the other add-*.sql files).
+--
+-- Phase B Wave 4 Step 67 (exam board selection): lets a student/tutor/parent
+-- optionally pin which exam board a student is studying toward, so
+-- generation matches the board's style and difficulty. Values are the
+-- England GCSE/A-Level boards (AQA, Edexcel, OCR, CIE) and the US
+-- SAT/ACT. Stored as an unconstrained TEXT column, same as
+-- curriculum_level - "not an exam board" (Ontario, or a US student not
+-- prepping for a specific board) is simply a NULL. Only ever fed into the
+-- generation prompt (England/US only); never shown to a student in a way
+-- that claims a guarantee.
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS exam_board TEXT;

@@ -24,6 +24,9 @@ CREATE TABLE student_profiles (
   country TEXT CHECK (country IN ('england', 'canada_ontario', 'united_states')),
   curriculum_level TEXT,
   year_level TEXT,
+  -- Optional exam board (England AQA/Edexcel/OCR/CIE, US SAT/ACT) so
+  -- generation matches board style - see supabase/add-exam-board.sql.
+  exam_board TEXT,
   subjects TEXT[],
   weaknesses TEXT,
   current_difficulty TEXT DEFAULT 'standard',

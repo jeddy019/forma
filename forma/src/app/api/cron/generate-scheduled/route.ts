@@ -59,12 +59,13 @@ interface StudentRow {
   curriculum_level: string;
   year_level: string;
   subjects: string[] | null;
+  exam_board: string | null;
 }
 
 async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Promise<void> {
   const { data: student } = await admin
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects')
+    .select('id, name, email, country, curriculum_level, year_level, subjects, exam_board')
     .eq('id', schedule.student_id)
     .single<StudentRow>();
   if (!student) throw new Error(`Student ${schedule.student_id} not found`);
@@ -96,6 +97,7 @@ async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Pr
     subjectHint: student.subjects ?? [],
     sessionNotes: latestNote?.content ?? 'none',
     topicPrompt,
+    examBoard: student.exam_board ?? undefined,
   });
 
   // --- Deterministic routing (Phase 10) ---

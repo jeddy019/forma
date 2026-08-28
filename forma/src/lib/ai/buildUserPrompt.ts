@@ -27,6 +27,11 @@ export interface WorksheetPromptParams {
   // data / mastery map), giving a short focused 5-question set. Mutually
   // exclusive with subSkillDirective - callers must never set both.
   focusSubSkills?: string[];
+  // Phase B Wave 4 (B67): optional pinned exam board (AQA/Edexcel/OCR/CIE/
+  // SAT/ACT) so generation matches that board's style and difficulty. Only
+  // present for England/US students who chose a board - left out entirely
+  // otherwise (Ontario has no board, and "no board" is a valid choice).
+  examBoard?: string;
 }
 
 export function buildUserPrompt(params: WorksheetPromptParams): string {
@@ -62,11 +67,17 @@ focused daily practice set, not a full topic decomposition.`
 
   const subSkillDirectiveText = params.subSkillDirective ? `\n${params.subSkillDirective}` : '';
 
+  // B67: only emit the exam-board line when a board was actually picked -
+  // Ontario has no board and "no board" is a valid England/US choice, so an
+  // absent value is left out entirely rather than prompting across an empty
+  // string. The model's own board-style guidance lives in systemPrompt.ts.
+  const examBoardLine = params.examBoard ? `Exam board: ${params.examBoard}\n` : '';
+
   return `Student name: ${params.studentName}
 Country: ${params.country}
 Curriculum level: ${params.curriculumLevel}
 Year or grade: ${params.yearLevel}
-Subject hint: ${subjectHint}
+${examBoardLine}Subject hint: ${subjectHint}
 Recent session notes: ${params.sessionNotes}
 Topic to practice: ${params.topicPrompt}
 ${questionStructure}

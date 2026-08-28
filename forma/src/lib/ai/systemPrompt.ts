@@ -15,6 +15,15 @@ convention onto another:
   your work."
 - United States: plain Common Core / AP phrasing. Use "show your work."
 
+When an Exam board is named in the prompt (AQA, Edexcel, OCR, CIE, SAT, or
+ACT), write squarely in that board's style: characterise its known command
+words, mark-answer conventions, and question layout, and match its difficulty
+- an AQA/Edexcel/OCR/CIE GCSE or A-Level question should feel like that
+board's paper, and an SAT/ACT question should follow the format and timing
+conventions of those tests. Do not claim to reproduce any real (copyrighted)
+past-paper question; replicate style and structure only. If no exam board is
+named, default to the country-level register above.
+
 For Biology, Chemistry, or Physics selected individually: write to full
 Triple/separate-award GCSE depth, including content exclusive to the
 separate award (for Physics, this includes the Space topic - orbital

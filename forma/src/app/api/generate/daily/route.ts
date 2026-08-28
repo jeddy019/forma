@@ -50,6 +50,7 @@ interface StudentProfileRow {
   year_level: string;
   subjects: string[] | null;
   skill_map: SkillMap | null;
+  exam_board: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
 
   const { data: student, error: studentError } = await supabase
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, skill_map')
+    .select('id, name, email, country, curriculum_level, year_level, subjects, skill_map, exam_board')
     .eq('id', studentId)
     .single<StudentProfileRow>();
 
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest) {
     topicPrompt: sanitizedTopic,
     questionCount: 5,
     subSkillDirective,
+    examBoard: student.exam_board ?? undefined,
   });
 
   // --- Deterministic routing (Phase 10) ---

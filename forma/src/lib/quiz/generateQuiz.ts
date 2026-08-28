@@ -42,6 +42,7 @@ export interface GenerateQuizProfile {
   curriculum_level: string;
   year_level: string;
   subjects: string[] | null;
+  exam_board: string | null;
 }
 
 export interface RePracticeTarget {
@@ -130,6 +131,7 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
     questionCount: isFocus ? 5 : 10,
     subSkillDirective,
     focusSubSkills: isFocus ? focusSubSkills : undefined,
+    examBoard: profile.exam_board ?? undefined,
   });
 
   // --- Deterministic routing (only for free-topic prompts - a sub-skill focus

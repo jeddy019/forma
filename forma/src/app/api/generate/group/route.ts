@@ -42,6 +42,7 @@ interface StudentProfileRow {
   curriculum_level: string;
   year_level: string;
   subjects: string[] | null;
+  exam_board: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
 
   const { data: students, error: studentsError } = await supabase
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects')
+    .select('id, name, email, country, curriculum_level, year_level, subjects, exam_board')
     .in('id', studentIds)
     .returns<StudentProfileRow[]>();
 
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
     // as not using any one student's name.
     sessionNotes: 'none',
     topicPrompt: sanitizedTopic,
+    examBoard: first.exam_board ?? undefined,
   });
 
   // --- Deterministic routing (Phase 10) ---

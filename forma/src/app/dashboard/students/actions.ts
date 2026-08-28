@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { COUNTRIES, SUBJECTS, type Country, type Subject } from '@/lib/constants';
+import { COUNTRIES, SUBJECTS, EXAM_BOARDS_BY_COUNTRY, type Country, type Subject } from '@/lib/constants';
 
 // Security Rule 4: reject student name over 100 characters, server side.
 const NAME_MAX_LENGTH = 100;
@@ -32,6 +32,7 @@ export async function createStudentAction(
   const country = String(formData.get('country') ?? '');
   const curriculumLevel = String(formData.get('curriculumLevel') ?? '').trim();
   const yearLevel = String(formData.get('yearLevel') ?? '').trim();
+  const examBoard = String(formData.get('examBoard') ?? '').trim();
   const email = String(formData.get('email') ?? '').trim();
   const parentEmail = String(formData.get('parentEmail') ?? '').trim();
   const weaknesses = String(formData.get('weaknesses') ?? '').trim();
@@ -51,6 +52,12 @@ export async function createStudentAction(
   }
   if (!yearLevel) {
     return { error: 'Please enter a year or grade.' };
+  }
+  // B67 exam board: optional, but if a board is supplied it must be one that
+  // actually belongs to the selected country (SAT on an England student is
+  // nonsense). The empty string (no board) is always allowed.
+  if (examBoard && !(EXAM_BOARDS_BY_COUNTRY[country as Country] as readonly string[]).includes(examBoard)) {
+    return { error: 'Please select a valid exam board for this country.' };
   }
   // Optional - see CLAUDE.md's Student Accounts and Data Processor Status.
   if (email && (email.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(email))) {
@@ -73,6 +80,7 @@ export async function createStudentAction(
     country,
     curriculum_level: curriculumLevel,
     year_level: yearLevel,
+    exam_board: examBoard || null,
     subjects: validSubjects,
     email: email || null,
     parent_email: parentEmail || null,

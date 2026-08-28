@@ -49,4 +49,15 @@ describe('buildUserPrompt', () => {
     });
     expect(prompt).toContain('Write every question on the prerequisite for "elimination method".');
   });
+
+  it('emits the exam board line when examBoard is set (B67)', () => {
+    const prompt = buildUserPrompt({ ...base, examBoard: 'AQA' });
+    expect(prompt).toContain('Exam board: AQA');
+    expect(prompt.indexOf('Exam board: AQA')).toBeLessThan(prompt.indexOf('Subject hint:'));
+  });
+
+  it('omits any exam board line when none is picked', () => {
+    const prompt = buildUserPrompt({ ...base, examBoard: undefined });
+    expect(prompt).not.toContain('Exam board');
+  });
 });
