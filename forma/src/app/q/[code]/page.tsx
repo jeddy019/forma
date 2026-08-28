@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { DiagramSpec } from '@/lib/ai/schema';
 import { renderRichText } from '@/lib/render/richText';
+import { aiTutorAllowance } from '@/lib/payments/planStatus';
 import QuizForm from './QuizForm';
 
 export interface QuizQuestionPart {
@@ -29,6 +30,7 @@ interface WorksheetRow {
   alignment_note: string | null;
   expires_at: string | null;
   first_opened_at: string | null;
+  owner_id: string | null;
   questions_json: {
     curriculum: string;
     year_level: string;
@@ -58,7 +60,7 @@ export default async function QuizPage({
   const admin = createAdminClient();
   const { data: worksheet } = await admin
     .from('worksheets')
-    .select('id, digital_code, subject, topic, alignment_note, expires_at, first_opened_at, questions_json')
+    .select('id, digital_code, subject, topic, alignment_note, expires_at, first_opened_at, owner_id, questions_json')
     .eq('digital_code', code)
     .single<WorksheetRow>();
 
@@ -94,6 +96,19 @@ export default async function QuizPage({
   const { curriculum, year_level, questions } = worksheet.questions_json;
   const alignmentNoteText =
     worksheet.alignment_note ?? `Questions are appropriate for ${curriculum} ${worksheet.subject}.`;
+
+  // Phase B Wave 4 (B72): AI tutor entitlement is the WORKSHEET OWNER's plan
+  // (Pro unlimited, Basic 5/quiz, Free none), resolved server-side the same
+  // way the /api/quiz/explain route re-verifies it - never from the browser.
+  // The UI shows the chat affordance only when the owner can actually get an
+  // answer; the route independently enforces the same gate and the per-quiz
+  // cap, so the two cannot drift.
+  const { data: ownerRow } = await admin
+    .from('users')
+    .select('plan, plan_expires_at')
+    .eq('id', worksheet.owner_id ?? '')
+    .maybeSingle<{ plan: string | null; plan_expires_at: string | null | undefined }>();
+  const aiTutorEnabled = aiTutorAllowance(ownerRow?.plan, ownerRow?.plan_expires_at) > 0;
 
   const quizQuestions: QuizQuestion[] = questions.map((question) => ({
     id: question.id,
@@ -131,7 +146,7 @@ export default async function QuizPage({
           <p className="text-sm text-[#5C5849]">{worksheet.topic}</p>
         </div>
 
-        <QuizForm digitalCode={worksheet.digital_code} questions={quizQuestions} />
+        <QuizForm digitalCode={worksheet.digital_code} questions={quizQuestions} aiTutorEnabled={aiTutorEnabled} />
       </div>
     </div>
   );

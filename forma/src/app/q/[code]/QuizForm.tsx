@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb, RefreshCw } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb, RefreshCw, MessageCircle, Send, Bot } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import { renderDiagramSvg } from '@/lib/diagrams/renderDiagramSpec';
 import { renderRichText } from '@/lib/render/richText';
@@ -20,6 +20,17 @@ interface PartSolution {
   steps: string[];
   state: 'loading' | 'loaded';
   revealed: number;
+}
+
+interface TutorMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface TutorChat {
+  messages: TutorMessage[];
+  state: 'idle' | 'sending' | 'done' | 'limit' | 'error';
+  error: string;
 }
 
 const inputClass =
@@ -44,9 +55,11 @@ const CHECK_DEBOUNCE_MS = 700;
 export default function QuizForm({
   digitalCode,
   questions,
+  aiTutorEnabled,
 }: {
   digitalCode: string;
   questions: QuizQuestion[];
+  aiTutorEnabled: boolean;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
@@ -169,6 +182,58 @@ export default function QuizForm({
       const timer = setTimeout(tick, 700);
       revealTimersRef.current.set(key, timer);
     }
+  }
+
+  // Phase B Wave 4 (B72): AI tutor chat threads per question part. Keyed by
+  // the same `${questionId}:${partIndex}` string as checks/solutions, so each
+  // part owns its own conversation. Only reachable in the review phase (the
+  // chat button only renders there), and gated client-side on aiTutorEnabled
+  // plus re-verified server-side by /api/quiz/explain.
+  const [tutorChats, setTutorChats] = useState<Record<string, TutorChat>>({});
+  const [tutorDrafts, setTutorDrafts] = useState<Record<string, string>>({});
+
+  async function sendTutorQuestion(key: string, questionId: string, partIndex: number, content: string) {
+    if (!content.trim()) return;
+    const existing = tutorChats[key]?.messages ?? [];
+    const nextMessages = [...existing, { role: 'user' as const, content: content.trim() }];
+    setTutorChats((prev) => ({ ...prev, [key]: { messages: nextMessages, state: 'sending', error: '' } }));
+    setTutorDrafts((prev) => ({ ...prev, [key]: '' }));
+    try {
+      const res = await fetch('/api/quiz/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digitalCode, questionId, partIndex, history: nextMessages }),
+      });
+      const data = (await res.json()) as { reply?: string; error?: string };
+      if (res.status === 429) {
+        setTutorChats((prev) => ({
+          ...prev,
+          [key]: { messages: nextMessages, state: 'limit', error: data.error ?? 'AI tutor limit reached for this quiz.' },
+        }));
+        return;
+      }
+      if (!res.ok) {
+        setTutorChats((prev) => ({
+          ...prev,
+          [key]: { messages: nextMessages, state: 'error', error: data.error ?? 'Could not get an answer - please try again.' },
+        }));
+        return;
+      }
+      setTutorChats((prev) => ({
+        ...prev,
+        [key]: { messages: [...nextMessages, { role: 'assistant' as const, content: data.reply ?? '' }], state: 'done', error: '' },
+      }));
+    } catch {
+      setTutorChats((prev) => ({
+        ...prev,
+        [key]: { messages: nextMessages, state: 'error', error: 'Connection lost. Your chat is saved.' },
+      }));
+    }
+  }
+
+  function openTutorChat(key: string, questionId: string, partIndex: number) {
+    if (tutorChats[key]) return;
+    sendTutorQuestion(key, questionId, partIndex, 'Why was this wrong?');
   }
 
   const currentQuestion = questions[currentIndex];
@@ -494,6 +559,87 @@ export default function QuizForm({
                           ))}
                           {solutions[key]?.steps.length === 0 && (
                             <p className="text-xs italic text-[#9A9080]">No worked solution for this part.</p>
+                          )}
+                        </div>
+                      )}
+
+                      {aiTutorEnabled && check?.status !== 'correct' && (
+                        <div className="mt-3 border-t border-[#E0D9D0] pt-3">
+                          {!tutorChats[key] ? (
+                            <button
+                              type="button"
+                              onClick={() => openTutorChat(key, currentQuestion.id, partIndex)}
+                              className="flex items-center gap-1.5 text-xs font-medium text-[#C8A84B] hover:text-[#B8963C] transition-colors duration-micro ease-premium"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
+                              Ask the AI tutor why this was wrong
+                            </button>
+                          ) : (
+                            <div className="flex flex-col gap-2 animate-fade-up">
+                              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#9A9080]">
+                                <Bot className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
+                                AI tutor
+                              </div>
+                              <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                                {tutorChats[key]?.messages.map((msg, i) => (
+                                  <div
+                                    key={i}
+                                    className={`rounded-[10px] px-3 py-2 text-sm ${
+                                      msg.role === 'user'
+                                        ? 'self-end bg-[#1A3D2E] text-white max-w-[85%]'
+                                        : 'self-start bg-[#E8F2ED]/60 border border-[#E0D9D0] text-[#1A1A18] max-w-[90%] rich-text'
+                                    }`}
+                                    dangerouslySetInnerHTML={
+                                      msg.role === 'assistant' ? { __html: renderRichText(msg.content) } : undefined
+                                    }
+                                  >
+                                    {msg.role === 'user' ? msg.content : null}
+                                  </div>
+                                ))}
+                                {tutorChats[key]?.state === 'sending' && (
+                                  <div className="self-start rounded-[10px] bg-[#E8F2ED]/60 border border-[#E0D9D0] px-3 py-2 text-sm text-[#9A9080]">
+                                    Thinking...
+                                  </div>
+                                )}
+                              </div>
+                              {tutorChats[key]?.state === 'limit' && (
+                                <p className="text-xs text-[#C0392B]">{tutorChats[key]?.error}</p>
+                              )}
+                              {tutorChats[key]?.state === 'error' && (
+                                <p className="text-xs text-[#C0392B]">{tutorChats[key]?.error}</p>
+                              )}
+                              {(tutorChats[key]?.state === 'done' ||
+                                tutorChats[key]?.state === 'error' ||
+                                tutorChats[key]?.state === 'idle') && (
+                                <form
+                                  className="flex items-center gap-2"
+                                  onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const draft = tutorDrafts[key] ?? '';
+                                    if (draft.trim()) {
+                                      sendTutorQuestion(key, currentQuestion.id, partIndex, draft);
+                                    }
+                                  }}
+                                >
+                                  <input
+                                    type="text"
+                                    className={`${inputClass} py-2 text-xs`}
+                                    placeholder="Ask a follow-up..."
+                                    value={tutorDrafts[key] ?? ''}
+                                    onChange={(event) =>
+                                      setTutorDrafts((prev) => ({ ...prev, [key]: event.target.value }))
+                                    }
+                                  />
+                                  <button
+                                    type="submit"
+                                    aria-label="Send message"
+                                    className="shrink-0 w-9 h-9 rounded-[10px] bg-[#1A3D2E] text-white hover:bg-[#152F23] active:scale-[0.98] transition-all duration-micro ease-premium disabled:opacity-60 flex items-center justify-center"
+                                  >
+                                    <Send className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                                  </button>
+                                </form>
+                              )}
+                            </div>
                           )}
                         </div>
                       )}
