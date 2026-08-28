@@ -4032,3 +4032,68 @@ handled); group mode inherits the first student's board rather than adding a
 per-student board matrix; deterministic-engine maths is curriculum-driven so the
 board line only shapes AI-sourced questions - expected behaviour, noted in open
 risks.
+
+## [2026-08-28] Phase B Wave 4 (B68): board-filtered question bank retrieval
+
+Follows B67 (exam board selection, committed 3e99956) in the same session.
+B68 makes the verified question bank generate in the style of a student's
+pinned board, not just in their country/curriculum.
+
+**schema (question_bank gets an exam_board tag):**
+- `supabase/add-question-bank-exam-board.sql`: `ADD COLUMN IF NOT EXISTS
+  exam_board TEXT` + `CREATE INDEX IF NOT EXISTS idx_question_bank_board`. Run
+  in the SQL editor alongside B67's add-exam-board.sql. schema.sql column +
+  index synced with the same comment.
+- Column is unconstrained TEXT, same pattern as student_profiles.exam_board;
+  NULL means "board-agnostic" (no particular style), never "invalid".
+
+**pull side (the filter):**
+- `pullVerifiedQuestions.ts`: optional 5th arg `examBoard?: string | null`.
+  When set, appends PostgREST `.or('exam_board.is.null,exam_board.eq.<board>')`
+  on top of the existing country/curriculum/subject/verified filter: a
+  board-agnostic (NULL) row stays eligible for a board-pinned student, a row
+  from a different board is excluded outright. When unset (no pinned board),
+  the query is unchanged - pre-B68 catch-all behaviour, so a board-tagged row
+  is still usable by a student with no board.
+- New exported pure helper `bankRowUsableForBoard(rowExamBoard, pinnedBoard)`
+  is the single source of truth for the eligibility rule; the SQL `.or()`
+  mirrors it line-for-line so the filter and the rule can't drift. Unit-tested
+  (see below).
+
+**wiring (3 of the 4 blending call sites are profile-backed):**
+- worksheet `/api/generate`, daily `/api/generate/daily`: pass
+  `student.exam_board`. quiz `generateQuiz.ts`: pass `profile.exam_board`.
+  (The group route blends no bank rows - it has no per-student profile; the
+  scheduled cron keeps its existing generate-and-deliver path which uses the
+  worksheet route's logic. Not changed.)
+
+**admin curation (so board-tagged content can actually be created):**
+- `QuestionForm.tsx`: exam board select, rendered only when the chosen country
+  has boards (England/US); "No specific board" stores NULL. Uses
+  EXAM_BOARDS_BY_COUNTRY from constants with a new country useState.
+- `actions.ts` createQuestionAction: parses `examBoard`, validates it belongs
+  to the selected country (SAT on an England question rejected), inserts
+  `exam_board: examBoard || null`.
+- `page.tsx` listing: select + interface extended for exam_board; a board tag
+  now shows in the row's curriculum line ("... - AQA").
+
+**Tests:** src/__tests__/bankRowUsableForBoard.test.ts - 4 cases covering
+no-board-pinned (accept all), board-agnostic row for pinned student (accept),
+exact board match (accept), different board (reject).
+
+**Verification:** tsc clean; eslint 0 errors (same 5 pre-existing warnings);
+193/193 tests pass (26 files, +4). Committed 81e3108.
+
+Next: B69 question bank import pipeline (bulk import from extracted PDF JSON),
+then B72 AI tutor chat, then Wave 5 (B73-B78). B70 (admin curation UI) was
+already effectively built during Phase A as /admin/question-bank - it needed
+only the board tag B68 added. Wave 6 extraction continues in parallel.
+Decisions: the board filter keeps NULL (board-agnostic) rows eligible for
+board-pinned students rather than requiring an exact board match, so the sparse
+pre-launch bank never silently stops blending; the SQL .or() and the pure
+helper are kept in lockstep so the behaviour is testable without a live
+Supabase instance. No topic-level SQL filter added - the existing post-hoc
+sub_skill slug matching in blendWithBank already does the "right question"
+work; a strict topic equality would risk rejecting valid matches because the
+AI's freeform topic string and the bank's curated topic string rarely match
+verbatim.
