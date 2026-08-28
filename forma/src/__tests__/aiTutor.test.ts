@@ -9,7 +9,7 @@ vi.mock('openai', () => ({
   }),
 }));
 
-const { buildAiTutorMessages, getAiTutorReply } = await import('@/lib/quiz/aiTutor');
+const { buildAiTutorMessages, getAiTutorReply, AI_TUTOR_MODEL } = await import('@/lib/quiz/aiTutor');
 
 function sampleContext(): AiTutorContext {
   return {
@@ -67,6 +67,10 @@ describe('buildAiTutorMessages (B72 AI tutor chat)', () => {
 });
 
 describe('getAiTutorReply', () => {
+  it('uses the cost-optimised luna model (not the flagship default)', () => {
+    expect(AI_TUTOR_MODEL).toBe('gpt-5.6-luna');
+  });
+
   it('returns the reply text from a successful chat completion', async () => {
     mockCreate.mockResolvedValueOnce({
       choices: [{ message: { content: 'You added 3 instead of subtracting it.' } }],
@@ -74,6 +78,7 @@ describe('getAiTutorReply', () => {
     const reply = await getAiTutorReply(sampleContext(), [], new AbortController().signal);
     expect(reply).toBe('You added 3 instead of subtracting it.');
     expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockCreate.mock.calls[0][0].model).toBe('gpt-5.6-luna');
   });
 
   it('throws a clear error when the model declines', async () => {

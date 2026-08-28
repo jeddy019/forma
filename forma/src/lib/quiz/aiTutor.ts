@@ -5,15 +5,18 @@ import OpenAI from 'openai';
 // they got wrong, and the AI tutor explains against the REAL question, the
 // student's OWN submitted answer, the accepted answer, and the mark scheme.
 //
-// PROVIDER: OpenAI (gpt-5.6-terra), the standing default - same as
-// generateWorksheet.ts, generateParentReport.ts, and tier2.ts. The original
-// B72 draft in CLAUDE.md named gpt-4o-mini; that model reference predates
-// the standing-default decision (2026-08-22) and is stale, so this uses the
-// same model as every other AI call in the product. No inactive Anthropic
-// path here: generateParentReport.ts set the precedent that newer call sites
-// are built OpenAI-only (the CLAUDE.md Tech Stack entry enumerates exactly
-// the three files that carry the inactive Anthropic copies: generateWorksheet,
-// tier2, generateParentReport - adding a fourth here would only mislead).
+// PROVIDER: OpenAI gpt-5.6-luna, the cost-optimised tier - deliberately NOT
+// the standing default (gpt-5.6-terra). The B72 route is a four-feature split
+// by design (user decision 2026-08-28): the AI tutor's job - read the
+// server-assembled context, write a few short conversational paragraphs of
+// explanation with inline $...$ math - is nano-tier work, so it runs on the
+// $0.20/$1.20 per 1M token luna model instead of terra's $2/$12. The smarter
+// model stays on the heavy lifting: PDF generation, quiz generation, and the
+// curriculum interpretation those need. No inactive Anthropic path here:
+// generateParentReport.ts set the precedent that newer call sites are built
+// OpenAI-only (the CLAUDE.md Tech Stack entry enumerates exactly the three
+// files that carry the inactive Anthropic copies: generateWorksheet, tier2,
+// generateParentReport - adding a fourth here would only mislead).
 //
 // SECURITY: this module never touches the browser directly. The route
 // (/api/quiz/explain) assembles the student-answer + mark-scheme context
@@ -25,7 +28,7 @@ import type { MarkScheme } from '@/lib/ai/schema';
 
 const openaiClient = new OpenAI();
 
-export const AI_TUTOR_MODEL = 'gpt-5.6-terra';
+export const AI_TUTOR_MODEL = 'gpt-5.6-luna';
 const MAX_TOKENS = 600;
 
 export interface AiTutorMessage {
