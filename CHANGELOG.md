@@ -4250,3 +4250,43 @@ is gated at the encoding level by the worksheet owner's plan, not the student
 (a student portal identity doesn't exist yet); the per-quiz cap is relative to
 the worksheet id, so re-practice quizzes each get their own fresh 5 (Basic) -
 matches "per quiz" wording.
+
+## [2026-08-28] B72 follow-up - AI tutor moved to gpt-5.6-luna (cost-optimised tier)
+
+**What:** the AI tutor's model flipped from gpt-5.6-terra ($2/$12 per 1M tokens)
+to gpt-5.6-luna ($0.20/$1.20) - OpenAI's cost-sensitive, high-volume tier, 10x
+cheaper in and out. Same session as B72 after the user asked "is the AI tutor
+the most economic choice?" The user's intent was explicit: a very-low-cost
+model for this job, with the smarter model reserved for PDF + quiz generation.
+
+**Why the split is correct for this call site:** the AI tutor's entire job is
+read the server-assembled question/student-answer/accept-answer/mark-scheme
+context and write a few short conversational explanation paragraphs with
+inline $...$ math. That is textbook nano-tier work - classification + short
+generation, no multi-step reasoning, no curriculum interpretation, no schema
+conformance. The heavy lifting (PDF rendering, full quiz generation, board-
+accurate question drafting) stays on terra exactly as before; nothing else in
+the product changed.
+
+**Verified live (2026-08-28):** OpenAI's pricing page still shows luna at
+$0.20/$1.20 short-context, supports reasoning_effort low (documented "none,
+low, medium (default), high, xhigh, max"), 128K context. reasoning_effort 'low'
+stayed in place from terra - still right for a ~paragraph reply that should
+land sub-second-to-seconds.
+
+**Files:** src/lib/quiz/aiTutor.ts (AI_TUTOR_MODEL constant + header comment
+rewritten to document the deliberate split, not the standing default). Test
+updated to pin the model ($ assert mockCreate called with 'gpt-5.6-luna').
+
+**Verification:** tsc clean; aiTutor.test.ts 7/7 pass. Committed alongside the
+changelog step.
+
+Decisions: this is a deliberate two-model product (MODEL SPLIT recorded in
+CLAUDE.md Tech Stack), NOT a regression to the "same model everywhere" rule -
+the AI tutor was a fourth call site built after that rule was settled for the
+three generation/marking features, and the user made the cost call directly.
+Open check: the cheaper model is the one place reply quality could differ, so
+eyeball one luna reply on a real submitted wrong answer before Wave 5.
+
+Next: Wave 5 (B73-B78) - assignment loop, tutor analytics, cram mode,
+flexible task setting, accuracy-required mode, streak freeze.
