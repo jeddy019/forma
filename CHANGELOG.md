@@ -3967,3 +3967,68 @@ checking the existing "numerical" regime, so numeric answers keep their fast
 0.01 tolerance path and the equivalence cost only applies where the AI chose an
 algebraic answer. mathjs is imported via named imports (rationalize/simplify/
 parse) per the bundle-size rule.
+
+## [2026-08-28] Phase B Wave 4 (B67): exam board selection — style-matched generation
+
+Picked up as a mid-task resume: the previous session's B67 changes were in the
+working tree uncommitted (schema migration, constants, form, actions, prompts,
+and generation routes). This session verified the wiring end to end, added the
+missing prompt tests, synced CLAUDE.md, and committed.
+
+B67 lets a tutor/parent pin which exam board a student is studying toward at
+profile creation, so generation matches that board's style and difficulty:
+England gets AQA/Edexcel/OCR/CIE, the US gets SAT/ACT (the two college-admission
+tests on the US curriculum list), Ontario has no single awarding body in this
+sense and gets no picker and no value. This is style/difficulty guidance only -
+never shown to a student as a guarantee.
+
+**form/catalog:**
+- `src/lib/constants.ts`: `EXAM_BOARDS_BY_COUNTRY` (england/united_states arrays,
+  canada_ontario empty) + derived `EXAM_BOARDS`/`ExamBoard`.
+- `StudentForm.tsx`: "Exam board (optional)" select, rendered only when
+  `EXAM_BOARDS_BY_COUNTRY[country].length > 0`. "No specific board" = empty
+  value (NULL).
+- `actions.ts` (createStudentAction): server-side validation - a supplied board
+  must belong to the selected country (SAT on an England student rejected);
+  empty string stores NULL. Also validated at DB level? No - unconstrained TEXT
+  column, enforcement lives in this action, same pattern as country.
+
+**prompt wiring:**
+- `buildUserPrompt.ts`: optional `examBoard` param; emits a standalone
+  "Exam board: AQA" line immediately before "Subject hint:" but ONLY when a
+  board was actually picked - never prompts across an empty string. Empty/absent
+  is left out entirely (the Ontario/no-board case).
+- `systemPrompt.ts`: board-style guidance paragraph (write squarely in the named
+  board's style, replicate style/structure only, never real past-paper
+  questions, fall back to country register when none named). CLAUDE.md's verbatim
+  AI System Prompt section synced to the identical text.
+- Wired through all 7 generation paths: worksheet (`/api/generate`), daily
+  (`/api/generate/daily`), group (`/api/generate/group` - uses the first selected
+  student's board, acceptable for a mixed-board group), scheduled cron
+  (`/api/cron/generate-scheduled`), quiz (`/api/quiz/generate`), re-practice
+  (`/api/quiz/re-practice`), study (`/api/quiz/study`).
+
+**schema:**
+- `supabase/add-exam-board.sql`: `ALTER TABLE student_profiles ADD COLUMN IF NOT
+  EXISTS exam_board TEXT;` - standalone migration, run manually in the SQL
+  editor like the other add-*.sql files. schema.sql column + comment synced.
+- Select statements on student_profiles across the generation routes extended
+  to fetch `exam_board`, and the quiz/re-practice/study profiles now carry it.
+
+**Tests:** 2 new cases in buildUserPrompt.test.ts - exam board line emitted when
+set (and before Subject hint), and never emitted when unset.
+
+**Verification:** tsc clean; eslint 0 errors (5 pre-existing warnings untouched);
+189/189 tests pass (25 files, +2). Full suite run twice this session.
+Committed 3e99956.
+
+Next: Wave 4 continues - B68 board-filtered question retrieval (gated on
+question_bank having curated content - Wave 6 extraction continues in
+parallel), then B69-B70 import pipeline + admin curation UI, B72 AI tutor chat,
+then Wave 5 (B73-B78). Google login remains parked further down the tree.
+Decisions: no DB CHECK constraint on exam_board (unconstrained TEXT, NULL = no
+board, validation in the server action - matches how curriculum_level is
+handled); group mode inherits the first student's board rather than adding a
+per-student board matrix; deterministic-engine maths is curriculum-driven so the
+board line only shapes AI-sourced questions - expected behaviour, noted in open
+risks.
