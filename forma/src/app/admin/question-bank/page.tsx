@@ -18,6 +18,7 @@ interface QuestionBankRow {
   subject: string;
   topic: string;
   sub_skill: string | null;
+  exam_board: string | null;
   question_json: { text: string; marks: number } | null;
   verified_by: string | null;
   verified_at: string | null;
@@ -61,7 +62,7 @@ export default async function QuestionBankPage({
     error,
   } = await admin
     .from('question_bank')
-    .select('id, country, curriculum_level, subject, topic, sub_skill, question_json, verified_by, verified_at', { count: 'exact' })
+    .select('id, country, curriculum_level, subject, topic, sub_skill, exam_board, question_json, verified_by, verified_at', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(from, to)
     .returns<QuestionBankRow[]>();
@@ -94,6 +95,7 @@ export default async function QuestionBankPage({
                 <p className="text-xs text-[#9A9080] mt-1">
                   {q.country} - {q.curriculum_level} - {q.question_json?.marks ?? '?'} mark
                   {q.question_json?.marks === 1 ? '' : 's'}
+                  {q.exam_board && ` - ${q.exam_board}`}
                 </p>
                 {q.question_json?.text && <p className="text-xs text-[#5C5849] mt-2 max-w-lg">{q.question_json.text}</p>}
                 <span

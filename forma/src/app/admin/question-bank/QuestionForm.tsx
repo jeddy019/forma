@@ -1,8 +1,8 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { createQuestionAction, type QuestionBankActionResult } from './actions';
-import { COUNTRIES, CORE_SUBJECTS, CODING_SUBJECTS } from '@/lib/constants';
+import { COUNTRIES, CORE_SUBJECTS, CODING_SUBJECTS, EXAM_BOARDS_BY_COUNTRY, type Country } from '@/lib/constants';
 import { ANSWER_FORMATS } from '@/lib/ai/schema';
 import { inputClass, labelClass, primaryButtonClass, cardClass } from '@/lib/ui/formStyles';
 
@@ -16,6 +16,7 @@ const COUNTRY_LABELS: Record<string, string> = {
 
 export default function QuestionForm() {
   const [state, formAction, pending] = useActionState(createQuestionAction, initialState);
+  const [country, setCountry] = useState('');
 
   return (
     <form action={formAction} className={`${cardClass} flex flex-col gap-4`}>
@@ -26,7 +27,7 @@ export default function QuestionForm() {
           <label className={labelClass} htmlFor="country">
             Country
           </label>
-          <select id="country" name="country" required defaultValue="" className={inputClass}>
+          <select id="country" name="country" required defaultValue="" className={inputClass} onChange={(e) => setCountry(e.target.value)}>
             <option value="" disabled>
               Select...
             </option>
@@ -44,6 +45,29 @@ export default function QuestionForm() {
           <input id="curriculumLevel" name="curriculumLevel" required className={inputClass} placeholder="e.g. GCSE" />
         </div>
       </div>
+
+      {/* B68: optional board tag, shown only when the country has boards in
+          this sense (England/US). "No specific board" stores NULL - the
+          board-agnostic row both board-pinned students and students without a
+          board can use. */}
+      {country && EXAM_BOARDS_BY_COUNTRY[country as Country]?.length > 0 && (
+        <div>
+          <label className={labelClass} htmlFor="examBoard">
+            Exam board (optional)
+          </label>
+          <select id="examBoard" name="examBoard" defaultValue="" className={inputClass}>
+            <option value="">No specific board</option>
+            {EXAM_BOARDS_BY_COUNTRY[country as Country].map((board) => (
+              <option key={board} value={board}>
+                {board}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[#9A9080] mt-1">
+            Tag a question with the board whose style it matches - generation then prefers it for students pinned to that board.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div>

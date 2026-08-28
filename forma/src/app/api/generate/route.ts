@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
   // route - best-effort, a bank lookup failure must not block generation.
   try {
     const admin = createAdminClient();
-    const bankRows = await pullVerifiedQuestions(admin, student.country, student.curriculum_level, worksheet.subject);
+    const bankRows = await pullVerifiedQuestions(admin, student.country, student.curriculum_level, worksheet.subject, student.exam_board);
     worksheet = blendWithBank(worksheet, bankRows).worksheet;
   } catch (error) {
     console.error('Failed to blend question_bank rows', error);

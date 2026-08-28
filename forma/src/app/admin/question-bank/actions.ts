@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAdminEmail } from '@/lib/admin/isAdminEmail';
-import { COUNTRIES, SUBJECTS, type Country, type Subject } from '@/lib/constants';
+import { COUNTRIES, SUBJECTS, EXAM_BOARDS_BY_COUNTRY, type Country, type Subject } from '@/lib/constants';
 import { ANSWER_FORMATS, type AnswerFormat } from '@/lib/ai/schema';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,6 +45,7 @@ export async function createQuestionAction(
   const subject = String(formData.get('subject') ?? '');
   const topic = String(formData.get('topic') ?? '').trim();
   const subSkill = String(formData.get('subSkill') ?? '').trim();
+  const examBoard = String(formData.get('examBoard') ?? '').trim();
   const text = String(formData.get('text') ?? '').trim();
   const marksRaw = String(formData.get('marks') ?? '');
   const answerFormat = String(formData.get('answerFormat') ?? '');
@@ -58,6 +59,13 @@ export async function createQuestionAction(
   if (!curriculumLevel) return { error: 'Curriculum level is required.' };
   if (!SUBJECTS.includes(subject as Subject)) return { error: 'Please select a valid subject.' };
   if (!topic) return { error: 'Topic is required.' };
+  // B68 exam board tag: optional, but if supplied it must belong to the
+  // selected country (SAT on an England question is nonsense). Empty string
+  // (no board tag) always allowed - board-agnostic rows are eligible for any
+  // student, pinned or not.
+  if (examBoard && !(EXAM_BOARDS_BY_COUNTRY[country as Country] as readonly string[]).includes(examBoard)) {
+    return { error: 'Please select a valid exam board for this country.' };
+  }
   if (!text || text.length > TEXT_MAX_LENGTH) return { error: `Question text is required and must be ${TEXT_MAX_LENGTH} characters or fewer.` };
   const marks = Number(marksRaw);
   if (!Number.isInteger(marks) || marks < 1 || marks > 20) return { error: 'Marks must be a whole number between 1 and 20.' };
@@ -74,6 +82,7 @@ export async function createQuestionAction(
     subject,
     topic,
     sub_skill: subSkill || null,
+    exam_board: examBoard || null,
     question_json: {
       text,
       marks,

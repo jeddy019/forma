@@ -152,6 +152,11 @@ CREATE TABLE question_bank (
   topic TEXT,
   sub_skill TEXT,
   question_json JSONB,
+  -- Phase B Wave 4 Step 68 (B68): optional exam-board tag (AQA/Edexcel/OCR/CIE/
+  -- SAT/ACT) so generation can prefer bank questions written in the style of
+  -- a student's pinned board. NULL = board-agnostic (eligible for any board).
+  -- See supabase/add-question-bank-exam-board.sql.
+  exam_board TEXT,
   verified_by TEXT,
   verified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -170,6 +175,7 @@ CREATE INDEX idx_schedules_paused ON schedules(is_paused);
 CREATE INDEX idx_notes_student ON session_notes(student_id);
 CREATE INDEX idx_usage_user_action ON usage_log(user_id, action);
 CREATE INDEX idx_question_bank_lookup ON question_bank(country, curriculum_level, subject, sub_skill);
+CREATE INDEX idx_question_bank_board ON question_bank(exam_board);
 
 -- Enable RLS
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
