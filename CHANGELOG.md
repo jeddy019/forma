@@ -4290,3 +4290,64 @@ eyeball one luna reply on a real submitted wrong answer before Wave 5.
 
 Next: Wave 5 (B73-B78) - assignment loop, tutor analytics, cram mode,
 flexible task setting, accuracy-required mode, streak freeze.
+
+## [2026-08-28] Phase B Wave 5 B73 - Assignment loop
+
+**What:** group generation is now a tracked "assignment" end-to-end. The
+existing loop (generate → /s/[code] → submit → auto-mark → tutor reviews) was
+already functional; B73 adds the grouping/tracking layer on top of it that
+Wave 5 is built around.
+
+**New schema** (supabase/add-assignments.sql, NOT yet applied live):
+`assignments` table (id, owner_id FK→users ON DELETE CASCADE, title, subject,
+topic, created_at) + `worksheets.assignment_id UUID REFERENCES assignments(id)
+ON DELETE SET NULL`. RLS policy `assignments_own` (auth.uid() = owner_id),
+mirroring every other dashboard-owned table. schema.sql updated to stay the
+run-top-to-bottom source of truth (assignments defined before worksheets so
+the FK resolves).
+
+**Data path:** `/api/generate/group/route.ts` now creates one `assignments`
+row per group run, keyed by a fresh UUID that is ALSO written as the group's
+`group_id` (preserving the pre-B73 comparison page at
+/dashboard/generate/group/[groupId] - both columns point at the same value).
+Each student's worksheet insert carries `assignment_id`. Returns assignmentId
+in the response. Deliberate sizing decision: one assignment row per GROUP, not
+per worksheet - an assignment is the batch wrapper, not a ping-pong between
+tables. Also deliberate: an assignment insert failure fails the whole request,
+since a tilde-less group (worksheets without their tracking row) would be
+invisible in the new dashboard and silently lose the feature's value.
+
+**Status model** (src/lib/assignments/status.ts, pure + unit tested):
+`deriveAssignmentStudentStatus(worksheet, latestSubmission)` →
+assigned | in_progress | submitted | reviewed. Reuses the marking dashboard's
+own "reviewed" definition (tutor_marks_json !== null) rather than inventing a
+second one. 5 new tests cover each branch.
+
+**Views (both tutor-pro gated, both paginated/skeletoned):**
+- /dashboard/assignments - list of assignments, newest first, 20/page, showing
+  title, subject-topic, date, submitted/N count, and Complete/In progress pill.
+- /dashboard/assignments/[id] - one row per student: name, status pill, score
+  once reviewed, "Open worksheet link" (the surviving /s/[code] for resend) and
+  "Review submission" into the existing /dashboard/marking/[submissionId] when
+  submitted. Marking itself is NOT rebuilt - it deep-links to the existing flow.
+
+**Wiring:** Assignments nav item added to the sidebar (CalendarRange icon,
+tutor-only, between Marking and Mastery). GenerateForm group success card now
+links "View assignment" → /dashboard/assignments/[assignmentId] instead of the
+old group-results page (the old page still resolves via group_id for anything
+generated before this change - the two columns share the value going forward).
+
+**Verification:** tsc clean; full vitest 219/219 across 30 files (was 214 +
+5 new status tests); eslint 0 errors (1 pre-existing unused-var warning in
+GenerateForm untouched by this change).
+
+**Decisions recorded:** assignments are tutor-pro only (same gate as group
+mode / marking). Single-student worksheets are NOT assignments - the marking
+queue already handles them; B73 deliberately covers the multi-student batch
+case the loop description implies. No assignment deletion UI yet (Phase C
+tutor-tools territory); ON DELETE SET NULL already protects worksheets if an
+assignment were ever removed.
+
+**Next:** B74 tutor analytics dashboard (extends the assignment status views
+upward), B75 cram mode, B76 flexible task setting, B77 accuracy-required mode,
+B78 streak freeze. Wave 6 extraction continues in parallel.
