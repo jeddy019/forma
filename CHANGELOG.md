@@ -4484,3 +4484,72 @@ session, so branded surfaces are now live against the real DB.
 **Next:** W2 - weekly branded proof report (per-student practice/submission
 summary in the founder's voice, buildable from existing submissions + the
 founder's own session-note text, delivered as premium branded PDF + email).
+
+## [2026-08-29] W2 - weekly branded proof report (the founder model's parent-facing deliverable)
+
+**What:** the offer's "weekly report to the parent, in the founder's voice" is
+now built: a branded PDF (hard data + the founder's own words) emailed to
+each student's parent. Both triggers from the user's call: an automatic weekly
+cron AND a per-student manual button.
+
+**User decisions this session (asked directly):** trigger = BOTH auto cron +
+manual button; voice = founder-comment field + data (NO AI prose anywhere -
+the report's words are the founder's own, verbatim per the anti-swallow
+invariant).
+
+**Schema** (supabase/add-report-note.sql, NOT yet applied live): two nullable
+columns on student_profiles - report_note (the standing "founder's voice"
+line used on auto-sent reports; NULL falls back to a graceful non-claiming
+default framing line) and last_report_sent_at (guards the cron against
+double-sends within the same 7-day window, the same guard the generation
+cron uses on schedules.last_generated_at).
+
+**New libs:**
+- src/lib/report/buildWeeklyReport.ts (pure, tested): weekly aggregation on
+  top of the existing computeWeeklySummary - adds the per-worksheet practice
+  log (date/topic/score, most-recent-first) and the period range label.
+- src/lib/report/generateWeeklyReport.ts: the ONE shared assembly used by
+  both the manual action and the cron - scores-only query (no mark scheme,
+  no raw answers, safe for a parent), report build, branded PDF render via
+  the existing browser pool + embedded print fonts, and a
+  [FirstName]-WeeklyReport-DDMMMYYYY.pdf filename (Performance Rule 11).
+- src/lib/pdf/report-template.ts: the premium document. Brand wordmark +
+  rule, student name in Playfair, big summary numerals (worksheets completed,
+  average score), strongest topic / area to work on, the practice log table,
+  and the founder's note in a gold-left-edge block signed with the brand
+  name. COLOUR FLOOR respected; brand accent defaults #1A3D2E, gold stays
+  the section-accent colour.
+- src/emails/WeeklyReport.tsx + sendWeeklyReportEmail wrapper: light email
+  body (two data points + dashboard link) with the branded PDF attached
+  (same attachment mechanism EMAIL 6 uses for the invoice); List-Unsubscribe
+  included - it is a recurring summary, the same category as EMAILs 3/4/5.
+
+**Manual UI (students/[id]/page.tsx):** new "Weekly report" accent card
+above the existing AI parent-report card. One textarea does two jobs: "Send
+this week's report" (note typed now is used for THIS send; blank falls back
+to the standing note) and "Save as standing note" (persists for the cron).
+Shows whether a parent email is set and the last-sent date. Server actions:
+saveReportNoteAction (caps 2000 chars, strips HTML - Security Rules 4/7) and
+sendWeeklyReportAction (RLS ownership check first, then admin-client
+assembly, stamps last_report_sent_at on success).
+
+**Cron** (src/app/api/cron/weekly-report/route.ts + vercel.json entry
+"0 8 * * 1" - Mondays 08:00, same timing as EMAIL 4): targets tutor-role
+accounts (the founder; parent-role accounts keep monday-summary), one
+try/catch per student so a single failure never stops the rest, skips
+anyone already reported within the last 7 days. CRON_SECRET-protected.
+
+**Verification:** tsc clean; eslint 0 errors on all touched files; vitest
+236 -> 244/244 (33 files; 8 new tests covering the aggregator, the filename
+rule, and the template's brand/escaping). A sample report was rendered
+through the real browser pool to forma/weekly-report-sample.png (148KB) and
+the PDF to weekly-report-sample.pdf - left on disk for the founder's visual
+review, not committed. The cron route returns 401 without CRON_SECRET as
+intended.
+
+**NOTE FOR FOUNDER:** supabase/add-report-note.sql MUST be run in Supabase
+SQL Editor before the student page's new Weekly report card works (the page
+now selects report_note/last_report_sent_at) or the page errors.
+
+**Next:** W3 - session brief (before-session prep document in the founder's
+voice, likely sharing this same branded-PDF pipeline).

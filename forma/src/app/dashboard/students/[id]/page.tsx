@@ -8,6 +8,7 @@ import { EmptyState } from '@/lib/ui/EmptyState';
 import { BookOpen, StickyNote, ChevronLeft } from 'lucide-react';
 import SessionNotesForm from './SessionNotesForm';
 import ParentReportForm from './ParentReportForm';
+import WeeklyReportForm from './WeeklyReportForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -25,6 +26,8 @@ interface StudentRow {
   year_level: string | null;
   subjects: string[] | null;
   parent_email: string | null;
+  report_note: string | null;
+  last_report_sent_at: string | null;
 }
 
 interface SessionNoteRow {
@@ -67,7 +70,7 @@ export default async function StudentDetailPage({
   // covers both "doesn't exist" and "isn't yours" without distinguishing them.
   const { data: student } = await supabase
     .from('student_profiles')
-    .select('id, name, curriculum_level, year_level, subjects, parent_email')
+    .select('id, name, curriculum_level, year_level, subjects, parent_email, report_note, last_report_sent_at')
     .eq('id', studentId)
     .single<StudentRow>();
 
@@ -156,6 +159,13 @@ export default async function StudentDetailPage({
         </div>
       ) : (
         <>
+          <WeeklyReportForm
+            studentId={student.id}
+            hasParentEmail={Boolean(student.parent_email)}
+            reportNote={student.report_note}
+            lastReportSentAt={student.last_report_sent_at}
+          />
+
           <ParentReportForm studentId={student.id} hasParentEmail={Boolean(student.parent_email)} />
 
           <SessionNotesForm studentId={student.id} />

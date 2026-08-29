@@ -5,6 +5,7 @@ import WorksheetReadyEmail, { type WorksheetReadyEmailProps } from '@/emails/Wor
 import WeeklyDeliveryEmail, { type WeeklyDeliveryEmailProps } from '@/emails/WeeklyDelivery';
 import MondayParentSummaryEmail, { type MondayParentSummaryEmailProps } from '@/emails/MondayParentSummary';
 import TutorParentReportEmail, { type TutorParentReportEmailProps } from '@/emails/TutorParentReport';
+import WeeklyReportEmail, { type WeeklyReportEmailProps } from '@/emails/WeeklyReport';
 import PaymentConfirmedEmail, { type PaymentConfirmedEmailProps } from '@/emails/PaymentConfirmed';
 import RenewalReminderEmail, { type RenewalReminderEmailProps } from '@/emails/RenewalReminder';
 import PaymentFailedEmail, { type PaymentFailedEmailProps } from '@/emails/PaymentFailed';
@@ -131,6 +132,25 @@ export function sendPaymentFailedEmail(to: string, props: PaymentFailedEmailProp
     subject: 'Payment could not be processed',
     brandName: props.brandName,
     react: <PaymentFailedEmail {...props} />,
+  });
+}
+
+// Phase B W2 (weekly branded proof report): subject deliberately mirrors the
+// other weekly emails' "[name]'s ..." shape; the branded PDF rides along as
+// an attachment, the own attachment mechanism EMAIL 6 already uses for the
+// invoice PDF.
+export function sendWeeklyReportEmail(
+  to: string,
+  props: WeeklyReportEmailProps,
+  reportPdf: { filename: string; content: Buffer }
+): Promise<boolean> {
+  return send({
+    to,
+    subject: `This week's report for ${props.studentName}`,
+    brandName: props.brandName,
+    react: <WeeklyReportEmail {...props} />,
+    headers: unsubscribeHeaders(),
+    attachments: [reportPdf],
   });
 }
 

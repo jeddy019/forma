@@ -5,8 +5,10 @@ import { createClient } from '@/lib/supabase/server';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { generateParentReport } from '@/lib/ai/generateParentReport';
-import { sendTutorParentReportEmail } from '@/lib/email/send';
+import { sendTutorParentReportEmail, sendWeeklyReportEmail } from '@/lib/email/send';
 import { resolveBranding } from '@/lib/branding';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { generateWeeklyReport, type StudentReportRow } from '@/lib/report/generateWeeklyReport';
 
 const RECENT_SESSION_NOTES_LIMIT = 5;
 const RECENT_SUBMISSIONS_LIMIT = 10;
@@ -23,7 +25,7 @@ export interface AddSessionNoteResult {
 
 // Permissions Summary: session notes are a tutor-pro entitlement, same gate
 // as the marking dashboard and mark scheme PDFs.
-async function requireTutorPro(): Promise<{ error?: string; userId?: string; brand?: { name: string } }> {
+async function requireTutorPro(): Promise<{ error?: string; userId?: string; brand?: { name: string }; ownerBrand?: { brand_name: string | null; brand_accent: string | null } }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -38,7 +40,11 @@ async function requireTutorPro(): Promise<{ error?: string; userId?: string; bra
   if (!ownerRow || ownerRow.role !== 'tutor' || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return { error: 'Session notes are available on the Tutor plan.' };
   }
-  return { userId: user.id, brand: resolveBranding(ownerRow) };
+  return {
+    userId: user.id,
+    brand: resolveBranding(ownerRow),
+    ownerBrand: { brand_name: ownerRow.brand_name, brand_accent: ownerRow.brand_accent },
+  };
 }
 
 export async function addSessionNoteAction(
@@ -207,4 +213,120 @@ export async function sendParentReportAction(studentId: string, paragraphs: stri
   }
 
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Phase B W2 - weekly branded proof report
+// ---------------------------------------------------------------------------
+
+const REPORT_NOTE_MAX_LENGTH = 2000;
+
+export interface SaveReportNoteResult {
+  error?: string;
+  success?: boolean;
+}
+
+// The standing note used on every AUTO-sent weekly report (the weekly cron).
+// The manual send can also pass a fresher one typed at send time without
+// persisting it - this action is only for saving/permanently updating the
+// standing note. RLS (profiles_own: auth.uid() = owner_id) blocks saving to
+// another tutor's student, so "not yours" and "gone" collapse together.
+export async function saveReportNoteAction(studentId: string, note: string): Promise<SaveReportNoteResult> {
+  const auth = await requireTutorPro();
+  if (auth.error || !auth.userId) {
+    return { error: auth.error };
+  }
+  if (!UUID_PATTERN.test(studentId)) {
+    return { error: 'Invalid student.' };
+  }
+
+  const clean = stripHtmlTags(note).trim();
+  if (clean.length > REPORT_NOTE_MAX_LENGTH) {
+    return { error: `The note must be ${REPORT_NOTE_MAX_LENGTH} characters or fewer.` };
+  }
+
+  const supabase = await createClient();
+  const { error: updateError } = await supabase.from('student_profiles').update({ report_note: clean || null }).eq('id', studentId);
+  if (updateError) {
+    console.error('Failed to save report note', updateError);
+    return { error: 'Could not save this note - please try again.' };
+  }
+
+  revalidatePath(`/dashboard/students/${studentId}`);
+  return { success: true };
+}
+
+export interface SendWeeklyReportResult {
+  error?: string;
+  success?: boolean;
+}
+
+// Sends this week's branded proof report to the student's parent_email as a
+// PDF - the founder model's weekly deliverable. The note passed here is
+// whatever the founder has in front of them at send time; it is used for
+// THIS send, falling back to the standing saved note. Names are NEVER
+// altered server-side (same principle as sendParentReportAction).
+export async function sendWeeklyReportAction(studentId: string, note: string): Promise<SendWeeklyReportResult> {
+  const auth = await requireTutorPro();
+  if (auth.error || !auth.userId) {
+    return { error: auth.error };
+  }
+  if (!UUID_PATTERN.test(studentId)) {
+    return { error: 'Invalid student.' };
+  }
+
+  // Ownership check via RLS first (this returns nothing for someone else's
+  // student), then the admin client is safe for the assembly queries.
+  const supabase = await createClient();
+  const { data: student } = await supabase
+    .from('student_profiles')
+    .select('id, name, parent_email, report_note')
+    .eq('id', studentId)
+    .single<StudentReportRow>();
+  if (!student) {
+    return { error: 'Student not found.' };
+  }
+  if (!student.parent_email) {
+    return { error: 'No parent email is set for this student - add one from the student list first.' };
+  }
+
+  const typedNote = stripHtmlTags(note).trim();
+  if (typedNote.length > REPORT_NOTE_MAX_LENGTH) {
+    return { error: `The note must be ${REPORT_NOTE_MAX_LENGTH} characters or fewer.` };
+  }
+  const effectiveNote = typedNote || (student.report_note ?? '');
+
+  try {
+    const { data, pdfBuffer, filename } = await generateWeeklyReport(createAdminClient(), { ...student, report_note: effectiveNote }, auth.ownerBrand ?? { brand_name: null, brand_accent: null });
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    const sent = await sendWeeklyReportEmail(
+      student.parent_email,
+      {
+        studentName: student.name,
+        worksheetsCompleted: data.worksheetsCompleted,
+        averageScorePercentage: data.averageScorePercentage,
+        strongestTopic: data.strongestTopic,
+        areaToImprove: data.areaToImprove,
+        dashboardUrl: `${appUrl}/dashboard/students`,
+        brandName: auth.brand?.name,
+      },
+      { filename, content: pdfBuffer }
+    );
+
+    if (!sent) {
+      return { error: 'Could not send the report - please try again.' };
+    }
+
+    const { error: stampError } = await supabase.from('student_profiles').update({ last_report_sent_at: new Date().toISOString() }).eq('id', studentId);
+    if (stampError) {
+      console.error('Failed to stamp last_report_sent_at', stampError);
+    }
+
+    revalidatePath(`/dashboard/students/${studentId}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send weekly report', error);
+    return { error: 'Could not build the report - please try again.' };
+  }
 }
