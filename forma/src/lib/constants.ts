@@ -62,6 +62,18 @@ export type DifficultyLevel = (typeof DIFFICULTY_LEVELS)[number];
 // student_profiles.exam_board; only meaningful for the England/US countries
 // and only fed into generation as style/difficulty guidance, never shown as a
 // guarantee. "No board picked" is simply a NULL.
+// Choice lists per country for the student profile form (create + edit).
+// student_profiles.curriculum_level is unconstrained TEXT (no DB CHECK), so
+// both forms follow the Country and Curriculum Catalogue's labels directly,
+// including AP/SAT/ACT (which the narrower CurriculumLevel enum in
+// src/lib/ai/schema.ts deliberately omits - it only scopes the AI-generated
+// worksheet's own `curriculum` field).
+export const CURRICULUM_LEVELS_BY_COUNTRY: Record<Country, readonly string[]> = {
+  england: ['KS2', 'KS3', 'GCSE', 'A-Level'],
+  canada_ontario: ['Ontario Elementary', 'Ontario Secondary'],
+  united_states: ['US Common Core', 'AP', 'SAT', 'ACT'],
+};
+
 export const EXAM_BOARDS_BY_COUNTRY: Record<Country, readonly string[]> = {
   england: ['AQA', 'Edexcel', 'OCR', 'CIE'],
   canada_ontario: [],

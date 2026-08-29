@@ -9,6 +9,7 @@ import { BookOpen, StickyNote, ChevronLeft } from 'lucide-react';
 import SessionNotesForm from './SessionNotesForm';
 import ParentReportForm from './ParentReportForm';
 import WeeklyReportForm from './WeeklyReportForm';
+import EditStudentForm, { type EditableStudent } from './EditStudentForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -19,13 +20,7 @@ const PAGE_SIZE = 20;
 // years, not expected to ever actually bind in practice.
 const WORKSHEET_HISTORY_LIMIT = 500;
 
-interface StudentRow {
-  id: string;
-  name: string;
-  curriculum_level: string | null;
-  year_level: string | null;
-  subjects: string[] | null;
-  parent_email: string | null;
+interface StudentRow extends EditableStudent {
   report_note: string | null;
   last_report_sent_at: string | null;
 }
@@ -70,7 +65,7 @@ export default async function StudentDetailPage({
   // covers both "doesn't exist" and "isn't yours" without distinguishing them.
   const { data: student } = await supabase
     .from('student_profiles')
-    .select('id, name, curriculum_level, year_level, subjects, parent_email, report_note, last_report_sent_at')
+    .select('id, name, country, curriculum_level, year_level, exam_board, subjects, email, parent_email, weaknesses, report_note, last_report_sent_at')
     .eq('id', studentId)
     .single<StudentRow>();
 
@@ -200,6 +195,16 @@ export default async function StudentDetailPage({
           )}
         </>
       )}
+
+      <EditStudentForm
+        student={{
+          ...student,
+          country: ['england', 'canada_ontario', 'united_states'].includes(student.country)
+            ? (student.country as 'england' | 'canada_ontario' | 'united_states')
+            : 'england',
+        }}
+        isTutor={ownerRow?.role === 'tutor'}
+      />
     </div>
   );
 }

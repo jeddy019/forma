@@ -11,23 +11,30 @@ const EMAIL_MAX_LENGTH = 200;
 // typos before Resend's own delivery attempt does, not be a full validator.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export interface CreateStudentResult {
+export interface StudentFormResult {
   error?: string;
+  success?: boolean;
 }
 
-export async function createStudentAction(
-  _prevState: CreateStudentResult,
-  formData: FormData
-): Promise<CreateStudentResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+interface ParsedStudentForm {
+  error?: string;
+  values?: {
+    name: string;
+    country: string;
+    curriculumLevel: string;
+    yearLevel: string;
+    examBoard: string;
+    email: string;
+    parentEmail: string;
+    weaknesses: string;
+    subjects: string[];
+  };
+}
 
-  if (!user) {
-    return { error: 'You must be signed in to add a student.' };
-  }
-
+// Shared by create and update so both enforce identical rules. The error
+// strings match what the create form already surfaced - same limits, same
+// wording, one source of truth for the fields the two forms have in common.
+function parseStudentForm(formData: FormData): ParsedStudentForm {
   const name = String(formData.get('name') ?? '').trim();
   const country = String(formData.get('country') ?? '');
   const curriculumLevel = String(formData.get('curriculumLevel') ?? '').trim();
@@ -74,6 +81,31 @@ export async function createStudentAction(
     (SUBJECTS as readonly string[]).includes(subject)
   );
 
+  return {
+    values: { name, country, curriculumLevel, yearLevel, examBoard, email, parentEmail, weaknesses, subjects: validSubjects },
+  };
+}
+
+export async function createStudentAction(
+  _prevState: StudentFormResult,
+  formData: FormData
+): Promise<StudentFormResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: 'You must be signed in to add a student.' };
+  }
+
+  const parsed = parseStudentForm(formData);
+  if (parsed.error || !parsed.values) {
+    return { error: parsed.error };
+  }
+  const { name, country, curriculumLevel, yearLevel, examBoard, email, parentEmail, weaknesses, subjects } =
+    parsed.values;
+
   const { error: insertError } = await supabase.from('student_profiles').insert({
     owner_id: user.id,
     name,
@@ -81,7 +113,7 @@ export async function createStudentAction(
     curriculum_level: curriculumLevel,
     year_level: yearLevel,
     exam_board: examBoard || null,
-    subjects: validSubjects,
+    subjects: subjects,
     email: email || null,
     parent_email: parentEmail || null,
     weaknesses: weaknesses || null,
@@ -93,5 +125,65 @@ export async function createStudentAction(
   }
 
   revalidatePath('/dashboard/students');
-  return {};
+  return { success: true };
+}
+
+export async function updateStudentAction(
+  studentId: string,
+  _prevState: StudentFormResult,
+  formData: FormData
+): Promise<StudentFormResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: 'You must be signed in to edit a student.' };
+  }
+
+  // RLS (profiles_own: auth.uid() = owner_id) means this select returns no
+  // row for a studentId belonging to someone else, so "not found" quietly
+  // covers "isn't yours" without distinguishing them - same as the page.
+  const { data: existing } = await supabase
+    .from('student_profiles')
+    .select('id')
+    .eq('id', studentId)
+    .eq('owner_id', user.id)
+    .single();
+
+  if (!existing) {
+    return { error: 'Student not found.' };
+  }
+
+  const parsed = parseStudentForm(formData);
+  if (parsed.error || !parsed.values) {
+    return { error: parsed.error };
+  }
+  const { name, country, curriculumLevel, yearLevel, examBoard, email, parentEmail, weaknesses, subjects } =
+    parsed.values;
+
+  const { error: updateError } = await supabase
+    .from('student_profiles')
+    .update({
+      name,
+      country,
+      curriculum_level: curriculumLevel,
+      year_level: yearLevel,
+      exam_board: examBoard || null,
+      subjects: subjects,
+      email: email || null,
+      parent_email: parentEmail || null,
+      weaknesses: weaknesses || null,
+    })
+    .eq('id', studentId);
+
+  if (updateError) {
+    console.error('Failed to update student profile', updateError);
+    return { error: 'Could not save this student profile - please try again.' };
+  }
+
+  revalidatePath('/dashboard/students');
+  revalidatePath(`/dashboard/students/${studentId}`);
+  return { success: true };
 }

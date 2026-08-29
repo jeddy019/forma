@@ -4553,3 +4553,30 @@ now selects report_note/last_report_sent_at) or the page errors.
 
 **Next:** W3 - session brief (before-session prep document in the founder's
 voice, likely sharing this same branded-PDF pipeline).
+
+## [2026-08-29] Student profile editing + the Resend testing-tier discovery
+
+**Edit feature:** student_profiles previously had NO edit path - parent_email
+(and every other profile field) could only be set at creation. The drill for
+the W2 weekly report surfaced it immediately: no way to add/change a parent
+email on an existing student. Added a full "Edit student details" card at the
+bottom of /dashboard/students/[id] (plain cardClass - the weekly report keeps
+the page's single gold rail). Edits ALL profile fields: name, country, level,
+year, exam board, subjects, student email, parent email, weaknesses. Shared
+server-side validation: parseStudentForm() extracted from createStudentAction
+so create + update enforce the exact same rules; updateStudentAction runs an
+RLS ownership select first ("not found" = "not yours", same collapse as the
+page) before updating. Success shows a green "Saved." line; the page
+revalidates both the list and the detail route. CURRICULUM_LEVELS_BY_COUNTRY
+moved into src/lib/constants.ts (was a local in StudentForm) so both forms
+share it. 244/244 tests, tsc + eslint clean.
+
+**Resend discovery (deferred open risk):** replaying the exact weekly-report
+send surfaced the real error Resend was swallowing - 403 validation_error,
+"only send testing emails to your own email address ([founder-inbox])".
+Root cause of "Could not send the report": the test student's parent email
+was jeje[founder-inbox], which the free/testing Resend tier refuses. That
+same 403 hits EVERY parent email until a domain is verified at resend.com/
+domains and EMAIL_FROM moves onto it - a genuine pre-launch blocker for the
+founder model's weekly report reaching real parents. Deferred at the user's
+choice; the drill works with the verified address only.

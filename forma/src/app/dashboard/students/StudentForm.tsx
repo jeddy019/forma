@@ -2,23 +2,12 @@
 
 import { useActionState, useState } from 'react';
 import { UserPlus } from 'lucide-react';
-import { createStudentAction, type CreateStudentResult } from './actions';
-import { CORE_SUBJECTS, CODING_SUBJECTS, COMING_SOON_SUBJECTS, EXAM_BOARDS_BY_COUNTRY, type Country } from '@/lib/constants';
+import { createStudentAction, type StudentFormResult } from './actions';
+import { CORE_SUBJECTS, CODING_SUBJECTS, COMING_SOON_SUBJECTS, EXAM_BOARDS_BY_COUNTRY, CURRICULUM_LEVELS_BY_COUNTRY, type Country } from '@/lib/constants';
 import { inputClass, labelClass, primaryButtonClass, accentCardClass } from '@/lib/ui/formStyles';
 import { FormHeader } from '@/lib/ui/FormHeader';
 
-// student_profiles.curriculum_level is unconstrained TEXT (no DB CHECK), so
-// this can follow the Country and Curriculum Catalogue's labels directly
-// rather than the narrower CurriculumLevel enum in src/lib/ai/schema.ts,
-// which scopes only the AI-generated worksheet's own `curriculum` field and
-// omits AP/SAT/ACT.
-const CURRICULUM_LEVELS_BY_COUNTRY: Record<string, string[]> = {
-  england: ['KS2', 'KS3', 'GCSE', 'A-Level'],
-  canada_ontario: ['Ontario Elementary', 'Ontario Secondary'],
-  united_states: ['US Common Core', 'AP', 'SAT', 'ACT'],
-};
-
-const initialState: CreateStudentResult = {};
+const initialState: StudentFormResult = {};
 
 export default function StudentForm({ isTutor }: { isTutor: boolean }) {
   const [state, formAction, pending] = useActionState(createStudentAction, initialState);
