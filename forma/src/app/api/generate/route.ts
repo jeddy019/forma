@@ -83,6 +83,11 @@ export async function POST(request: NextRequest) {
   // Phase 5 Step 28: check_and_log_generation enforces the 3/month free
   // cap - it has no notion of plan at all, so an active paid plan must
   // skip it entirely, not just tolerate hitting the cap.
+  //
+  // FOUNDER MODEL W6 (de-pro): isActivePro is unconditionally true, so this
+  // branch and the RPC never fire - retained as the dormant free-tier shape
+  // for the future SaaS sale, same discipline as planStatus.ts. Do not
+  // delete the RPC from the DB; it is referenced here.
   if (!isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at)) {
     const { data: allowed, error: rpcError } = await supabase.rpc('check_and_log_generation', {
       p_user_id: user.id,

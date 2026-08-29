@@ -5,10 +5,11 @@ import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { computeTopicsCovered } from '@/lib/curriculum/topicsCovered';
 import { EmptyState } from '@/lib/ui/EmptyState';
-import { BookOpen, StickyNote, ChevronLeft } from 'lucide-react';
+import { BookOpen, Home, StickyNote, ChevronLeft } from 'lucide-react';
 import SessionNotesForm from './SessionNotesForm';
 import ParentReportForm from './ParentReportForm';
 import WeeklyReportForm from './WeeklyReportForm';
+import SessionBriefForm from './SessionBriefForm';
 import EditStudentForm, { type EditableStudent } from './EditStudentForm';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
@@ -71,6 +72,17 @@ export default async function StudentDetailPage({
 
   if (!student) notFound();
 
+  // W4: the family this student belongs to, if any (at most one - student_id
+  // is UNIQUE on family_members). family_members_own RLS means only this
+  // student's owner sees the link, and the nested families row only resolves
+  // when the caller owns that family too - so a wrong-owner viewer gets
+  // nothing rather than a family name leak.
+  const { data: familyLink } = await supabase
+    .from('family_members')
+    .select('family:families(id, name)')
+    .eq('student_id', studentId)
+    .maybeSingle<{ family: { id: string; name: string } | null }>();
+
   // Phase 6 Step 35: "Topics practiced" - no fixed syllabus denominator
   // (per the user - see CHANGELOG.md), just distinct topics with
   // worksheet and question counts. Not tutor-pro gated: unlike session
@@ -120,6 +132,15 @@ export default async function StudentDetailPage({
         <p className="text-sm text-[#5C5849]">
           {student.curriculum_level} - {student.year_level}
         </p>
+        {familyLink?.family && (
+          <Link
+            href="/dashboard/families"
+            className="inline-flex items-center gap-1.5 text-xs text-[#5C5849] hover:text-[#1A3D2E] transition-colors duration-micro ease-premium mt-2"
+          >
+            <Home className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+            In the {familyLink.family.name} family
+          </Link>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -159,6 +180,11 @@ export default async function StudentDetailPage({
             hasParentEmail={Boolean(student.parent_email)}
             reportNote={student.report_note}
             lastReportSentAt={student.last_report_sent_at}
+          />
+
+          <SessionBriefForm
+            studentId={student.id}
+            lastNoteDateLabel={notes[0] ? formatNoteDate(notes[0].created_at) : null}
           />
 
           <ParentReportForm studentId={student.id} hasParentEmail={Boolean(student.parent_email)} />

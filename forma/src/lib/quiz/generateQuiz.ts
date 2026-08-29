@@ -98,6 +98,11 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
   // Per-owner free-tier check, mirroring the tutor route's atomic gate. The
   // RPC is SECURITY DEFINER so it runs as the table owner regardless of which
   // (possibly anonymous) client calls it.
+  //
+  // FOUNDER MODEL W6 (de-pro): isActivePro is unconditionally true, so this
+  // branch and its check_and_log_generation RPC never fire - retained as the
+  // dormant free-tier shape for the future SaaS sale, same discipline as
+  // planStatus.ts. Do not delete the RPC from the DB; it is referenced here.
   if (!isActivePro(owner.plan, owner.plan_expires_at)) {
     const { data: allowed, error: rpcError } = await admin.rpc('check_and_log_generation', {
       p_user_id: ownerId,

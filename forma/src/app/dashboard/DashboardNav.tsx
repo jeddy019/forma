@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, FilePlus, Calendar, ClipboardCheck, LayoutTemplate, BarChart3, CalendarRange, Settings, LogOut, Lock, LineChart } from 'lucide-react';
+import { Users, FilePlus, Calendar, ClipboardCheck, LayoutTemplate, BarChart3, CalendarRange, Settings, LogOut, Lock, LineChart, Home } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // Design System v3 (Phase 9, Step 51): rebuilt from a horizontal top bar
@@ -15,6 +15,7 @@ import type { LucideIcon } from 'lucide-react';
 // needed beyond the usePathname() this component already required.
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; tutorOnly?: boolean }[] = [
   { href: '/dashboard/students', label: 'Students', icon: Users },
+  { href: '/dashboard/families', label: 'Families', icon: Home, tutorOnly: true },
   { href: '/dashboard/generate', label: 'New', icon: FilePlus },
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
   { href: '/dashboard/marking', label: 'Marking', icon: ClipboardCheck, tutorOnly: true },

@@ -81,10 +81,7 @@ export default function LoginForm() {
         </form>
 
         <p className="text-sm text-center mt-6 text-[#5C5849]">
-          New to Forma?{' '}
-          <Link href="/signup" className="text-[#1A3D2E] font-medium">
-            Create an account
-          </Link>
+          New to Forma? Signup is by invitation - existing accounts log in above.
         </p>
         <p className="text-xs text-center mt-3 text-[#9A9080]">
           Are you a student?{' '}

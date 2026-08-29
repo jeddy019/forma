@@ -4605,3 +4605,317 @@ Verified through the real admin client + browser pool via a scratch test
 activity length 6, filename rule, PDF >20KB; deleted after passing). The
 populated sample PDF was left at forma/scratch-aisha-report.pdf for the
 founder's visual check.
+
+## [2026-08-29] W3 - session brief (the founder's before-session prep document)
+
+**What:** the offer's third piece after the report - what the founder skims
+right before a 1:1. A branded one-pager combining the student's recent
+practice data with the founder's OWN last session note, verbatim. Founder-
+facing only (downloads to the founder, never emailed, never parent data).
+
+**User decisions this session (asked directly, all three):** trigger = manual
+button only (the app has no model of when 3x/week sessions happen - sessions
+live on the founder's calendar, so a cron has nothing to anchor to; auto can
+slot in later if scheduling is ever built); window = "since the last session
+note", falling back to the last 7 days when no note exists; the last session
+note IS included verbatim - continuity is the whole point of a prep document,
+so it is never rewritten or summarised, and no AI touches this feature.
+
+**Build:**
+- src/lib/brief/buildSessionBrief.ts (pure, tested): sessionBriefWindow() -
+  `lastNoteAt ? "Practice since 24 August" : "Practice this week"`, identical
+  7-day fallback semantics to the weekly report.
+- src/lib/pdf/session-brief-template.ts: the document. Same premium language
+  as the W2 report (wordmark, rule, Playfair name, data numerals, practice
+  log, gold-edged note block) with a "Session brief" label, an optional
+  curriculum context line under the name (GCSE - Year 10), the window line +
+  "Prepared [date]", and "From the last session" showing the verbatim note
+  with its date. COLOUR FLOOR respected. No note yet renders a gentle hint
+  ("Record one after your next session - the brief reads practice since
+  then") instead of an empty block.
+- src/lib/brief/generateSessionBrief.ts: the ONE shared assembly. Reads the
+  most recent session_notes row for the anchor, scores-only submissions since
+  that anchor (same student-scoped query as the report - no mark schemes, no
+  raw answers), reuses buildWeeklyReport's aggregation wholesale so a brief
+  and a report never disagree about the same period, renders the branded PDF
+  via the existing browser pool. Nothing persisted, no email.
+- src/app/api/session-brief/[studentId]/pdf/route.ts: the download (the
+  invoice-PDF-route pattern exactly): 400 invalid UUID, 401 unauthenticated,
+  403 tutor+pro gate (the brief reads session notes, a pro entitlement, and
+  should not let a free account spend a Chromium render), RLS ownership
+  collapse for not-yours/gone, 25s PDF timeout, attachment filename
+  [FirstName]-SessionBrief-DDMMMYYYY.pdf (Performance Rule 11). No storage,
+  regenerated on demand.
+- SessionBriefForm.tsx card on /dashboard/students/[id] between the Weekly
+  report card and the AI parent report: accent card, "Prep for next session"
+  primary button (window.open to the route in a new tab), explains what the
+  document covers and flags when no note exists yet. It lives inside the
+  tutor-pro block beside its sibling forms.
+
+**No schema change, no email template, no cron** - the brief is deliberately
+the smallest complete slice of the founder workflow: download, read, walk in
+prepared.
+
+**Verification:** tsc clean; eslint 0 errors 0 warnings on all touched files
+(only pre-existing warnings elsewhere remain); vitest 244 -> 252/252 across
+34 files (8 new tests: window anchoring incl. the 7-day fallback instant,
+filename rule x2, template brand/context/window/score, verbatim note + its
+date, note HTML escaping, no-note hint). Live end-to-end render through the
+real admin client + browser pool against Aisha: window "Practice this week",
+6 worksheets, ~48KB branded PDF written to forma/scratch-aisha-session-brief.pdf
+for the founder's eyeball (untracked; delete with the other scratch files).
+Route gates verified over HTTP on the running dev server: 401 unauthenticated,
+400 invalid UUID; the signed-in click is the founder's own browser check.
+
+**Demo state confirmed for the W2 report the founder wants to send themselves:**
+live check against the DB shows Aisha's parent_email is [founder-inbox]
+(the only Resend free-tier address), report_note still null (so a report sent
+with a blank textarea falls back to the default framing line), and all 6
+seeded scored submissions sit inside the 7-day window - a manual send from
+Aisha's card will land and render populated.
+
+**Next:** W4 - family plan (the £170/2-kid and £240/3-kid tiers, bundled
+multi-student pricing on top of the W5 invoice path).
+
+## [2026-08-29] W4 - family plan (the founder's households, priced per child count)
+
+**What:** the one-inclusive-price-per-household layer the founder model needs
+before W5 can invoice it. A family = one parent customer of the founder's,
+holding 1-3 of their children at a single monthly tier (£99/£170/£240, GBP).
+Pure management UI for now - the invoice that bills off it is W5. No
+student-facing surface ever reads these tables (the no-student-paywall
+invariant).
+
+**User decisions this session (asked directly, both recommended options
+taken):** dedicated Families area (a new tutor-only dashboard page, not
+buried in Settings) and cap at 3 children (UI, server actions AND a DB
+trigger all refuse a 4th - the offer defines no 4+ tier, so no price was
+invented for one).
+
+**Build:**
+- supabase/add-families.sql (RUN MANUALLY, same as the other add-*.sql):
+  families (owner_id, name, parent_email, created_at) + family_members
+  (family_id, student_id with UNIQUE - a student belongs to at most one
+  family; PRIMARY KEY (family_id, student_id)). RLS: families_own on owner;
+  family_members_own requires BOTH the family and the student be the
+  caller's (a 4th kid stays impossible, and so does attaching someone
+  else's student). BEFORE INSERT trigger enforce_family_children_cap
+  raises 'family_children_cap_reached' at 3 - the DB backstop so the cap
+  can never drift even if the UI check is bypassed.
+- src/lib/payments/familyPricing.ts (pure, tested): FAMILY_MONTHLY_PRICES
+  {1:99, 2:170, 3:240}, FAMILY_MAX_CHILDREN=3, FAMILY_CURRENCY='GBP',
+  familyMonthlyPrice()/familyMonthlyPriceLabel() returning null outside
+  1-3. The ONLY place the numbers live - nothing stores a family price, so
+  a quoted tier can never drift from the offer.
+- /dashboard/families (tutor-only page, redirects non-tutors to Students):
+  PageHeader, accent-railed "Add a family" form (name + optional parent
+  email), paginated family cards (PAGE_SIZE 20, Performance Rule 3) each
+  showing parent email, N of 3 children, the live-derived price pill, the
+  member list (linked to each student's page), add-child select of the
+  owner's unassigned students (capped 50 for the dropdown), inline edit
+  (name/email), remove member, delete family (members cascade). Members
+  fetched per-page in one IN() query; unassigned set computed after
+  loading the owner's students. loading.tsx skeleton per Performance Rule 4.
+- /dashboard/families/actions.ts: createFamilyAction (tutor gate + shared
+  parseFamilyForm: NAME_MAX_LENGTH 100, EMAIL_MAX_LENGTH 200 + pattern -
+  Security Rule 4), updateFamilyAction, addFamilyMemberAction (checks
+  one-family-per-student via UNIQUE-backed select, then the cap, then
+  inserts - clear message at cap instead of a constraint error),
+  removeFamilyMemberAction, deleteFamilyAction. Every action RLS-selects
+  ownership first, so "not found" folds "doesn't exist" and "isn't yours"
+  together. revalidatePath both /dashboard/families and the student page
+  on member changes (the student page shows a "In the [family] family"
+  link under the student's header line).
+- DashboardNav: new tutor-only Families item (Home icon) between Students
+  and New - parents never see the entry.
+
+**No email, no cron, no billing call, no student-facing change** - the
+founder's browser is the only consumer so far.
+
+**Verification:** tsc clean; eslint 0 errors 0 warnings on all touched
+files; vitest 252 -> 257/257 across 35 files (5 new familyPricing tests:
+the three exact tiers, null outside 1-3, label formatting, constants
+consistency). Smoke-tested on the running dev server: /dashboard/families
+and /dashboard/students/[id] both 307 to /login unauthenticated, i.e. the
+new page module (FamilyForm, FamilyCard, actions, pricing, loading)
+compiles server-side without an import-time crash.
+
+**Sample data remains seeded for Aisha; no family exists yet** - the
+first thing to do after applying the SQL is create one in the browser.
+
+**Next:** W5 - invoice-led direct-payment billing (the app issues the
+branded invoice per family; parent keeps paying the founder directly;
+mark paid/unpaid on the founder's dashboard). Needs this session's
+families rows + the W2/W3 PDF pattern.
+
+## [2026-08-29] W5 - invoice-led billing (the branded statement per family)
+
+**What:** the app now issues the branded monthly bill for each family and
+the founder marks it paid/unpaid. Parents keep paying the founder directly
+(bank transfer / whatever they already use) - there is NO card collection,
+NO Flutterwave call, and NO student-facing paywall of any kind: a child
+opening their /s/[code] or /q/[code] link never learns an invoice exists.
+This is the founder's own billing surface, exactly as the FOUNDER'S
+PERSONAL MODEL documents it: one inclusive number, sell the system, the app
+is just the bookkeeping.
+
+**Built on / built with:**
+- The W4 families tables. A family bill is a STATEMENT, deliberately a
+  separate table from the existing `invoices` receipt table (that one is
+  the Flutterwave SaaS path W6 de-pro retires - see add-family-invoices.sql's
+  comment on why the two are kept apart rather than ALTERed together).
+- The W2/W3 branded PDF pipeline (renderBillingInvoiceHtml in the existing
+  invoice-template.ts - the SaaS receipt renderer is untouched and still used
+  by the Settings billing history / EMAIL 6).
+
+**Decisions this session (all documented, none asked - the founder model +
+W3's manual-trigger precedent already decided them):**
+- Cadence = manual: a "Invoice for [Month]" button per family on the
+  Families page. No cron - one sole founder bills one family at a time, and
+  auto-emailing is meaningless until the Resend domain blocker lifts anyway.
+- Period = one CALENDAR MONTH, always the CURRENT month (currentInvoicePeriod
+  in src/lib/invoices/familyBilling.ts, UTC boundaries, pure + tested). The
+  generate action refuses if an invoice for this month already exists
+  (UNIQUE (family_id, period_start) backs it up).
+- Delivery = founder downloads the PDF and sends it themselves (the invoice
+  row keeps parent_email reachable via the family join, so email-to-parent
+  drops in cleanly once Resend is unblocked - no schema change needed).
+- Price = snapshotted from familyPricing.ts AT GENERATION TIME into the
+  invoice row. familyPricing stays the only source for what a NEW invoice
+  costs; an issued invoice keeps the number it was issued at even if
+  pricing later changes. The PDF's line items are the fixed founder-model
+  offer (3x 1-hour sessions/week, daily auto-generated practice, weekly
+  proof report) plus "For: [children's names]" - sell the system, not an hour.
+- Status is a SOFT signal on the founder's dashboard only: 'pending' is
+  "Payment due", 'paid' records paid_at + an optional payment note (how they
+  paid, e.g. "Bank transfer"). Marking paid never gates anything for anyone.
+
+**Build:**
+- supabase/add-family-invoices.sql (RUN MANUALLY, same as the other add-*.sql):
+  family_invoices (family_id FK CASCADE, invoice_number reused from the shared
+  generate_invoice_number sequence - globally unique across both tables,
+  amount/currency snapshot, status CHECK pending|paid, period_start/period_end,
+  paid_at, payment_note, UNIQUE (family_id, period_start)). RLS
+  family_invoices_own keys on families.owner_id = auth.uid() via EXISTS -
+  FOR ALL doubles as WITH CHECK, so the owner can only insert/update their
+  own families' bills. No student-facing policy anywhere.
+- src/lib/invoices/familyBilling.ts + tests: currentInvoicePeriod (UTC
+  first/last instant of the month), invoicePeriodLabel ("September 2026"),
+  hasInvoiceForPeriod (first-of-month anchor compare).
+- src/lib/pdf/invoice-template.ts: added renderBillingInvoiceHtml - the
+  rebranded STATEMENT: wordmark, Invoice number, "Statement for [family]",
+  "Month billed", For/sessions/daily practice/proof report line items,
+  Billed to, green total, gold "Payment due" vs green "Paid on [date]"
+  status, optional payment note line, branded footer. Premium Print-family
+  header rule matches every other Forma document.
+- families/actions.ts: generateFamilyInvoiceAction (tutor gate, family
+  ownership via RLS, price from CURRENT child count - a 0-child family has
+  no tier so nothing to invoice, current-month-only, existing-month check,
+  rpc generate_invoice_number, insert), markFamilyInvoicePaidAction
+  (status/paid_at/payment_note, note <=200 chars), markFamilyInvoicePendingAction
+  (reverts and clears paid_at + note - an unpaid bill records no payment).
+  All revalidate /dashboard/families.
+- FamilyInvoices.tsx (client): the per-family statement card under each
+  FamilyCard - generate button (disabled at 0 children or when the month's
+  bill exists, with the reason shown), invoice rows (period, number+amount,
+  Paid-with-date pill / gold Payment-due pill, Download PDF link, Mark paid
+  -> inline one-field note form -> Confirm paid, Mark unpaid to revert),
+  Payment note echo, message area. Pure founder surface, zero student
+  elements.
+- src/app/api/family-invoices/[id]/pdf/route.ts: the branded statement PDF,
+  regenerated on demand from the stored row every time (nothing stored -
+  same pattern as /api/invoices/[id]/pdf). 400 invalid UUID, 401
+  unauthenticated, 404 folds "not found" and "not yours" (RLS through the
+  family join gates every nested read: families_own + family_members_own +
+  the invoice's own policy), 25s PDF timeout, attachment [number].pdf,
+  brand from resolveBranding. Child names + parent email come live from the
+  family join at render time - the stored row never freezes them.
+
+**Verification:** tsc clean; eslint 0 errors 0 warnings on all touched
+files; vitest 257 -> 262/262 across 36 files (5 new familyBilling tests:
+month boundaries incl. leap February, label, duplicate-period anchors,
+null-guard). Route gates verified over HTTP on the running dev server: 400
+invalid UUID, 401 unauthenticated for the invoice PDF; families page 307 to
+/login (compiles). The Families page QUERIES family_invoices defensively -
+until add-family-invoices.sql is applied, the invoices list just doesn't
+render (and the generate action returns a clear error), it does not crash.
+
+**Founder checklist before using it:** 1) run supabase/add-family-invoices.sql
+in the SQL Editor; 2) create a family + add 1-3 children on /dashboard/families;
+3) "Invoice for [Month]" -> a Payment-due STATEMENT appears; 4) Download PDF
+and eyeball the branded bill; 5) Mark paid (with the payment method) -> pill
+flips to paid-with-date and the PDF re-renders as "Paid on [date]";
+6) Mark unpaid flips it back. No student sees any of it.
+
+**Next:** W6 - de-pro: paid account = everything, close public signup (the
+remaining PRICING rework - 'Forma Tutor'/'Forma Parent' plan labels + Monday
+summary are W5/W6 leftovers flagged in Current Build Status).
+
+## [2026-08-29] W6 - de-pro (paid account = everything, public signup closed)
+
+**What:** the freemium sales machinery is switched OFF, cleanly and
+reversibly. There is no free tier, no Basic, no Pro, no self-serve plan to
+buy. Every account is the paid account, because under the FOUNDER'S PERSONAL
+MODEL the only accounts that exist are the founder's own families and
+students, billed one inclusive monthly price via /dashboard/families. The
+old plan columns, the free-tier cap RPC, the AI-tutor quota branches, and
+the Flutterwave checkout are retained DORMANT (not deleted) for the day the
+software is sold to other tutors as white-label SaaS - W6 only changes which
+of them decides anything (none of them).
+
+**Decisions this session (all the founder model already implied; none asked):**
+- De-pro = a SINGLE flip at the entitlement choke point, not ~25 edits.
+  isActivePro() in src/lib/payments/planStatus.ts (the one function every
+  paid-feature gate reads through: marking, mastery, templates, group mode,
+  schedule, session notes, /api/pdf, AI tutor quota, session brief, daily
+  mode) now returns true unconditionally with its signature unchanged. The
+  signature's params are retained for stability + as documented shape of the
+  dormant plan machinery. aiTutorAllowance therefore returns Infinity for
+  every account (the usage_log quota counting is never entered); its
+  basic/free branches stay written for the future SaaS. AI_TUTOR_BASIC_QUOTA
+  and the users.plan CHECK note survive until the billing workstream re-arms
+  them.
+- Free-tier cap branches in /api/generate/route.ts and generateQuiz.ts are
+  now unreachable (the `!isActivePro()` guard never fires). Left in place,
+  annotated FOUNDER MODEL W6, with the check_and_log_generation RPC
+  explicitly NOT deleted from the DB (both call sites reference it).
+- Settings billing card de-pro'd: removed the Upgrade -> /api/billing/checkout
+  flow, Cancel subscription, the $15/$10 SAS plan labels, and the SaaS
+  receipts card. Replaced with founder-model copy ("billed at one inclusive
+  monthly price per family; the app issues a branded invoice each month")
+  and a "View families and invoices" link for tutor accounts. Settings page
+  no longer reads ?payment= or queries the invoices table. cancelSubscriptionAction,
+  /api/billing/checkout, and /api/payments/callback become orphaned but
+  compile; the callback's ?payment=success redirect is inert.
+- Public signup closed: /signup is now a static "Signup is closed for now"
+  page in the founder's voice (no form, no role preselect - there is no
+  plan to quote). SignupForm.tsx + sendWelcomeEmailAction are retained,
+  unused, for the day SaaS self-serve reopens. Landing page's now-false
+  freemium claims corrected: "Get started free" CTAs -> "Log in" (header +
+  hero), eyebrow badge "3 free assignments every month - no card required"
+  -> "Practice built for each student - one family at a time", Tutor/Parent
+  audience links -> /login (Student stays on /student/login). Login page's
+  "New to Forma? Create an account" -> "Signup is by invitation".
+- NOT touched (still dormant or open): the Monday-summary cron's 'Forma
+  Parent' label (its cron entry is Vercel-removed since 2026-08-20 and W2's
+  weekly report is the real parent communication now - flagged for the W7
+  paid-rollout pass), users.plan CHECK (no 'basic'), the analytics scratch
+  files, add-family-invoices.sql (still unapplied), add-assignments.sql.
+
+**Verification:** vitest 262 -> 258/258 across 36 files (planStatus.test.ts
+rewritten to the de-pro shape, 5 assertions; aiTutorAllowance.test.ts
+consolidated 6 -> 2 blocks covering every plan input returning Infinity and
+the retained Basic-quota constant - the drop is consolidation, not lost
+coverage); targeted re-run of both files 7/7; tsc --noEmit clean; eslint 0
+errors on all touched files (fixed two warnings: window.location.href ->
+router.push in SettingsPanel delete-account, and the isActivePro `now` param
+now voided/_prefixed rather than eslint-disabled). Routes smoke-tested on the
+running dev server: /, /signup, /login 200; /dashboard/settings 307 to
+/login; /signup body renders the closed notice; / body carries the new badge
+and no "Get started free"/"3 free assignments" strings anywhere.
+
+**Next:** W7 - Vercel Pro + re-added generate-scheduled cron, at the paid
+rollout. Before the founder uses the Invoices card: run
+supabase/add-family-invoices.sql (the SQL Editor will show a "destructive
+operations" warning - safe, it only DROP TRIGGER IF EXISTS / CREATE OR
+REPLACE FUNCTION, no DROP TABLE anywhere).

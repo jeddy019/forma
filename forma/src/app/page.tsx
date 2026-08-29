@@ -32,11 +32,8 @@ export default function Home() {
             >
               Student login
             </Link>
-            <Link href="/login" className="text-sm text-[#5C5849] px-3 py-2 hover:text-[#1A1A18] transition-colors duration-micro ease-premium">
+            <Link href="/login" className={primaryButtonClass}>
               Log in
-            </Link>
-            <Link href="/signup" className={primaryButtonClass}>
-              Get started free
             </Link>
           </nav>
         </div>
@@ -47,7 +44,7 @@ export default function Home() {
         <section className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center pt-10 pb-16 md:pt-16 md:pb-24">
           <div className="flex flex-col gap-5 animate-fade-up">
             <span className="inline-flex w-fit items-center bg-[#FEF9EC] text-[#8A6D22] text-xs font-medium tracking-[0.02em] rounded-full px-3 py-1.5">
-              3 free assignments every month - no card required
+              Practice built for each student - one family at a time
             </span>
             <h1
               className="text-4xl md:text-[48px] leading-[1.08] font-semibold text-[#1A1A18]"
@@ -60,8 +57,8 @@ export default function Home() {
               or timed test, coloured diagrams and all, in minutes, not hours.
             </p>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-1">
-              <Link href="/signup" className={primaryButtonClass}>
-                Get started free
+              <Link href="/login" className={primaryButtonClass}>
+                Log in
               </Link>
               <a
                 href="#how-it-works"
@@ -86,10 +83,10 @@ export default function Home() {
                 "I am a" field rather than being a cosmetic label only. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[#5C5849] pt-2">
               <span className="text-[#9A9080]">I&apos;m a:</span>
-              <Link href="/signup?role=tutor" className="font-medium text-[#1A3D2E] hover:underline">
+              <Link href="/login" className="font-medium text-[#1A3D2E] hover:underline">
                 Tutor
               </Link>
-              <Link href="/signup?role=parent" className="font-medium text-[#1A3D2E] hover:underline">
+              <Link href="/login" className="font-medium text-[#1A3D2E] hover:underline">
                 Parent
               </Link>
               <Link href="/student/login" className="font-medium text-[#1A3D2E] hover:underline">
