@@ -4580,3 +4580,28 @@ same 403 hits EVERY parent email until a domain is verified at resend.com/
 domains and EMAIL_FROM moves onto it - a genuine pre-launch blocker for the
 founder model's weekly report reaching real parents. Deferred at the user's
 choice; the drill works with the verified address only.
+
+## [2026-08-29] Why Aisha's report was empty, and the demo data seed
+
+The founder sent Aisha's (manual-send) weekly report and the PDF arrived
+near-empty. It was NOT a rendering or delivery bug - replaying the data query
+showed the real cause: the report is built from COMPLETED, SCORED submissions
+(the whole point of a proof report is completion evidence), and the demo
+student had 18 worksheets but ZERO submissions. Zero practice this week =
+honest zero report (the template already renders that state gracefully:
+"0 worksheets", "&mdash;" for scores, "No completed practice this week.",
+plus the founder's note).
+
+Fix: seeded 6 realistic scored submissions for the demo student (Aisha),
+attached to her own real worksheets, spread Aug 23-28 inside the 7-day
+window - Surds 84, mixed 88, Mixed Practice 91, fractions/trig 62 (the
+weakest, so "Area to work on"), mixed 74, Cell division & periodic table
+96 (the strongest). Scores only; no answers or mark schemes stored. This is
+demo account data only - real students still start at zero until they
+complete /s/[code] work, exactly as they should.
+
+Verified through the real admin client + browser pool via a scratch test
+(asserts worksheetsCompleted=6, avg 83, strongest contains "Cell division",
+activity length 6, filename rule, PDF >20KB; deleted after passing). The
+populated sample PDF was left at forma/scratch-aisha-report.pdf for the
+founder's visual check.
