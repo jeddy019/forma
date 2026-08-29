@@ -30,3 +30,14 @@ export function getResendClient(): Resend {
 // verified - expected, not a bug, per the user. Swap back to
 // worksheets@forma.app once a custom domain is verified on Resend.
 export const EMAIL_FROM = 'Forma <onboarding@resend.dev>';
+
+// W1 identity layer: the display name email clients show in the recipient's
+// inbox ("from <name>"). Every parent/student-facing send now resolves the
+// account owner's brand first (send.tsx threads brandName through each
+// template's props), so the inbox shows the founder's name - "Forma" is
+// never the sender a parent sees unless the account has no brand set. The
+// address half stays the shared platform mailbox either way.
+export function emailFrom(brandName?: string): string {
+  const displayName = brandName?.trim() ? brandName.trim() : 'Forma';
+  return `${displayName} <onboarding@resend.dev>`;
+}

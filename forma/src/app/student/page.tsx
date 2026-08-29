@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveBranding } from '@/lib/branding';
 import { cardClass, interactiveCardClass, accentCardClass } from '@/lib/ui/formStyles';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import MasteryBars from '@/lib/ui/MasteryBars';
@@ -19,6 +20,7 @@ const PAGE_SIZE = 20;
 interface StudentProfileMatch {
   id: string;
   name: string;
+  owner_id: string;
   skill_map: SkillMap | null;
 }
 
@@ -94,7 +96,7 @@ export default async function StudentPortalPage({
   const admin = createAdminClient();
   const { data: matchedStudents } = await admin
     .from('student_profiles')
-    .select('id, name, skill_map')
+    .select('id, name, owner_id, skill_map')
     .ilike('email', user.email)
     .returns<StudentProfileMatch[]>();
 
@@ -121,6 +123,18 @@ export default async function StudentPortalPage({
   // labelling which profile each row belongs to when there's more than one.
   const studentIds = matchedStudents.map((s) => s.id);
   const studentNameById = new Map(matchedStudents.map((s) => [s.id, s.name]));
+
+  // Same owner-brand resolution as /s/[code] and /q/[code]: the portal is a
+  // student-facing surface, so the header carries the account's own brand
+  // rather than "Forma". When a single email matches profiles under more
+  // than one owner, the first profile's owner wins - single-owner reality
+  // in the founder model, and a reasonable merge otherwise.
+  const { data: owners } = await admin
+    .from('users')
+    .select('brand_name, brand_accent')
+    .eq('id', matchedStudents[0].owner_id)
+    .maybeSingle();
+  const brand = resolveBranding(owners as { brand_name: string | null; brand_accent: string | null } | null);
 
   const {
     data: worksheets,
@@ -227,7 +241,7 @@ export default async function StudentPortalPage({
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F7F4EF' }}>
-      <PortalHeader />
+      <PortalHeader brandName={brand.name} />
       <main className="px-6 py-8 max-w-2xl mx-auto flex flex-col gap-8">
         <div>
           <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Your worksheets</h1>
@@ -336,11 +350,11 @@ export default async function StudentPortalPage({
   );
 }
 
-function PortalHeader() {
+function PortalHeader({ brandName = 'Forma' }: { brandName?: string }) {
   return (
     <header className="flex items-center justify-between px-6 py-3 border-b border-[#E0D9D0] bg-[#F7F4EF]/95 backdrop-blur-sm sticky top-0 z-10">
       <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
-        Forma
+        {brandName}
       </span>
       <form action={signOutAction}>
         <button

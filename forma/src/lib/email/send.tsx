@@ -1,4 +1,4 @@
-import { getResendClient, EMAIL_FROM } from './resend';
+import { getResendClient, emailFrom } from './resend';
 import { unsubscribeHeaders } from '@/emails/components/EmailLayout';
 import WelcomeEmail, { type WelcomeEmailProps } from '@/emails/Welcome';
 import WorksheetReadyEmail, { type WorksheetReadyEmailProps } from '@/emails/WorksheetReady';
@@ -32,6 +32,7 @@ async function send(args: {
   to: string;
   subject: string;
   react: React.ReactElement;
+  brandName?: string;
   headers?: Record<string, string>;
   attachments?: EmailAttachment[];
 }): Promise<boolean> {
@@ -44,7 +45,7 @@ async function send(args: {
   }
 
   const { error } = await getResendClient().emails.send({
-    from: EMAIL_FROM,
+    from: emailFrom(args.brandName),
     to: args.to,
     subject: args.subject,
     react: args.react,
@@ -59,13 +60,14 @@ async function send(args: {
 }
 
 export function sendWelcomeEmail(to: string, props: WelcomeEmailProps): Promise<boolean> {
-  return send({ to, subject: 'Welcome to Forma', react: <WelcomeEmail {...props} /> });
+  return send({ to, subject: 'Welcome to Forma', brandName: props.brandName, react: <WelcomeEmail {...props} /> });
 }
 
 export function sendWorksheetReadyEmail(to: string, props: WorksheetReadyEmailProps): Promise<boolean> {
   return send({
     to,
     subject: `${props.studentName}'s ${props.subject} worksheet is ready`,
+    brandName: props.brandName,
     react: <WorksheetReadyEmail {...props} />,
   });
 }
@@ -74,6 +76,7 @@ export function sendWeeklyDeliveryEmail(to: string, props: WeeklyDeliveryEmailPr
   return send({
     to,
     subject: `This week's ${props.subject} practice for ${props.studentName}`,
+    brandName: props.brandName,
     react: <WeeklyDeliveryEmail {...props} />,
     headers: unsubscribeHeaders(),
   });
@@ -83,6 +86,7 @@ export function sendMondayParentSummaryEmail(to: string, props: MondayParentSumm
   return send({
     to,
     subject: `${props.studentName}'s week in review`,
+    brandName: props.brandName,
     react: <MondayParentSummaryEmail {...props} />,
     headers: unsubscribeHeaders(),
   });
@@ -92,6 +96,7 @@ export function sendTutorParentReportEmail(to: string, props: TutorParentReportE
   return send({
     to,
     subject: `A progress report for ${props.studentName}`,
+    brandName: props.brandName,
     react: <TutorParentReportEmail {...props} />,
     headers: unsubscribeHeaders(),
   });
@@ -105,6 +110,7 @@ export function sendPaymentConfirmedEmail(
   return send({
     to,
     subject: 'Payment confirmed',
+    brandName: props.brandName,
     react: <PaymentConfirmedEmail {...props} />,
     attachments: invoicePdf ? [invoicePdf] : undefined,
   });
@@ -114,12 +120,18 @@ export function sendRenewalReminderEmail(to: string, props: RenewalReminderEmail
   return send({
     to,
     subject: `Your ${props.brandName ?? 'Forma'} plan renews soon`,
+    brandName: props.brandName,
     react: <RenewalReminderEmail {...props} />,
   });
 }
 
 export function sendPaymentFailedEmail(to: string, props: PaymentFailedEmailProps): Promise<boolean> {
-  return send({ to, subject: 'Payment could not be processed', react: <PaymentFailedEmail {...props} /> });
+  return send({
+    to,
+    subject: 'Payment could not be processed',
+    brandName: props.brandName,
+    react: <PaymentFailedEmail {...props} />,
+  });
 }
 
 // Not one of the 8 numbered emails - see ScheduleFailed.tsx's own comment.
@@ -127,6 +139,7 @@ export function sendScheduleFailedEmail(to: string, props: ScheduleFailedEmailPr
   return send({
     to,
     subject: `A scheduled worksheet for ${props.studentName} did not generate`,
+    brandName: props.brandName,
     react: <ScheduleFailedEmail {...props} />,
   });
 }

@@ -4439,3 +4439,48 @@ recompiled clean in the running dev server.
 pipeline - already branded in slice 1 - so slice 3 = W1 close-out: scan for
 any remaining user-visible "Forma" straight-line strings, then move on to
 W2 (weekly branded proof report).
+
+## [2026-08-29] W1 Identity layer - slice 3 (W1 close-out: remaining student-facing "Forma" strings)
+
+**What:** closes W1 by sweeping the last user-visible "Forma" strings and
+confirming every remaining occurrence is a deliberate keep. Two real fixes and
+one recorded-open item.
+
+**Fixed 1 - email sender display name (src/lib/email/resend.ts + send.tsx):**
+the Resend send used the constant `EMAIL_FROM = 'Forma <onboarding@resend.dev>'`
+for every send, so a parent or student's inbox showed "Forma" as the sender
+name on worksheet-ready/weekly/report emails - the one parent-visible surface
+the identity layer had missed. New `emailFrom(brandName?)` in resend.ts builds
+the from-bearing string with the account's brand as the display name (address
+half unchanged), and send.tsx's `send()` helper now accepts `brandName` and
+every wrapper passes its template's `props.brandName`. Unset brand still reads
+"Forma". EMAIL_FROM remains exported solely as the pre-brand fallback origin
+(no remaining imports).
+
+**Fixed 2 - /student portal header (src/app/student/page.tsx):** the
+student-facing portal wordmark was hardcoded "Forma". The page now selects
+owner_id on its student_profiles lookup and resolves the FIRST matched
+profile's owner through the same resolveBranding path /s /q use; PortalHeader
+takes `brandName` (default 'Forma', used on the "no worksheets" branch where
+no owner exists to resolve). /student/login stays "Forma" deliberately - it is
+pre-auth, same category as /login and /signup.
+
+**Recorded open (not fixed now):** the `'Forma Tutor' / 'Forma Parent'` plan
+labels in src/lib/payments/plans.ts flow into invoices and the three billing
+emails' planName lines. Deferred on purpose - W5 (invoice-led direct billing)
+and W6 (de-pro: no plan tiers at all) both rework this surface, so the label
+dies with the old billing model rather than being re-branded twice.
+
+**Confirmed deliberate keeps (already documented in slice 1/2):** landing /,
+/login, /signup, /student/login, /privacy, root-layout metadata title - all
+pre-auth surfaces that cannot resolve an owner; dashboard generate-page
+subtitle "Forma builds the practice" and the Welcome email body - both reach
+only the founder/account owner, never a parent, student, or invoice.
+
+**Verification:** tsc clean; eslint 0 errors on all three touched files;
+vitest 236/236 (32 files). add-branding.sql confirmed applied by the user this
+session, so branded surfaces are now live against the real DB.
+
+**Next:** W2 - weekly branded proof report (per-student practice/submission
+summary in the founder's voice, buildable from existing submissions + the
+founder's own session-note text, delivered as premium branded PDF + email).
