@@ -11,6 +11,7 @@ export interface MondayParentSummaryEmailProps {
   strongestTopic: string | null;
   areaToImprove: string | null;
   dashboardUrl: string;
+  brandName?: string;
 }
 
 export default function MondayParentSummaryEmail({
@@ -20,9 +21,10 @@ export default function MondayParentSummaryEmail({
   strongestTopic,
   areaToImprove,
   dashboardUrl,
+  brandName,
 }: MondayParentSummaryEmailProps) {
   return (
-    <EmailLayout previewText={`${studentName}'s week in review.`} showUnsubscribeFooterLine>
+    <EmailLayout previewText={`${studentName}'s week in review.`} showUnsubscribeFooterLine brandName={brandName}>
       <Text style={emailStyles.heading}>{studentName}&apos;s week in review</Text>
       <Text style={emailStyles.body}>
         {worksheetsCompleted === 0

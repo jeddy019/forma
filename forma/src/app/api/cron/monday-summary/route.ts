@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendMondayParentSummaryEmail } from '@/lib/email/send';
 import { computeWeeklySummary, type ScoredSubmission } from '@/lib/summary/weeklySummary';
+import { resolveBranding } from '@/lib/branding';
 
 // EMAIL 4: Monday parent summary (Build Phases Step 24). Permissions
 // Summary lists "Monday summaries" only under PARENT's paid plan, not
@@ -27,7 +28,13 @@ interface SubmissionRow {
   worksheet: { topic: string } | null;
 }
 
-async function sendSummaryForStudent(admin: AdminClient, ownerEmail: string, student: StudentRow, sinceIso: string): Promise<void> {
+async function sendSummaryForStudent(
+  admin: AdminClient,
+  ownerEmail: string,
+  brand: { name: string },
+  student: StudentRow,
+  sinceIso: string
+): Promise<void> {
   const { data: submissions } = await admin
     .from('submissions')
     .select('score_percentage, worksheet:worksheets(topic)')
@@ -55,6 +62,7 @@ async function sendSummaryForStudent(admin: AdminClient, ownerEmail: string, stu
     // /dashboard/marking (tutor-only, would dead-end a parent with an
     // upsell message).
     dashboardUrl: `${appUrl}/dashboard/students`,
+    brandName: brand.name,
   });
 }
 
@@ -67,7 +75,11 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
   const sinceIso = new Date(Date.now() - DAYS_LOOKBACK * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: parents, error: parentsError } = await admin.from('users').select('id, email').eq('role', 'parent').eq('plan', 'pro');
+  const { data: parents, error: parentsError } = await admin
+    .from('users')
+    .select('id, email, brand_name, brand_accent')
+    .eq('role', 'parent')
+    .eq('plan', 'pro');
   if (parentsError) {
     console.error('Failed to query parent-pro owners', parentsError);
     return NextResponse.json({ error: 'Failed to query owners' }, { status: 500 });
@@ -82,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     for (const student of students ?? []) {
       try {
-        await sendSummaryForStudent(admin, owner.email, student, sinceIso);
+        await sendSummaryForStudent(admin, owner.email, resolveBranding(owner), student, sinceIso);
         results.studentsSummarised++;
       } catch (error) {
         console.error(`Monday summary failed for student ${student.id}`, error);

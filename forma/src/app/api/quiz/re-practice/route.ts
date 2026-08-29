@@ -51,6 +51,8 @@ interface UserRow {
   plan: string | null;
   plan_expires_at: string | null;
   paper_size: string | null;
+  brand_name: string | null;
+  brand_accent: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -107,7 +109,7 @@ export async function POST(request: NextRequest) {
 
   const { data: owner } = await admin
     .from('users')
-    .select('email, plan, plan_expires_at, paper_size')
+    .select('email, plan, plan_expires_at, paper_size, brand_name, brand_accent')
     .eq('id', profile.owner_id)
     .single<UserRow>();
 
@@ -132,6 +134,8 @@ export async function POST(request: NextRequest) {
         paper_size: owner?.paper_size ?? 'a4',
         plan: owner?.plan ?? null,
         plan_expires_at: owner?.plan_expires_at ?? null,
+        brand_name: owner?.brand_name ?? null,
+        brand_accent: owner?.brand_accent ?? null,
       },
       focusSubSkills: targets,
       generatedFrom: 're-practice',

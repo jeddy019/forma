@@ -6,6 +6,7 @@ import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { generateParentReport } from '@/lib/ai/generateParentReport';
 import { sendTutorParentReportEmail } from '@/lib/email/send';
+import { resolveBranding } from '@/lib/branding';
 
 const RECENT_SESSION_NOTES_LIMIT = 5;
 const RECENT_SUBMISSIONS_LIMIT = 10;
@@ -22,18 +23,22 @@ export interface AddSessionNoteResult {
 
 // Permissions Summary: session notes are a tutor-pro entitlement, same gate
 // as the marking dashboard and mark scheme PDFs.
-async function requireTutorPro(): Promise<{ error?: string; userId?: string }> {
+async function requireTutorPro(): Promise<{ error?: string; userId?: string; brand?: { name: string } }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: 'You must be signed in.' };
 
-  const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
+  const { data: ownerRow } = await supabase
+    .from('users')
+    .select('role, plan, plan_expires_at, brand_name, brand_accent')
+    .eq('id', user.id)
+    .single();
   if (!ownerRow || ownerRow.role !== 'tutor' || !isActivePro(ownerRow.plan, ownerRow.plan_expires_at)) {
     return { error: 'Session notes are available on the Tutor plan.' };
   }
-  return { userId: user.id };
+  return { userId: user.id, brand: resolveBranding(ownerRow) };
 }
 
 export async function addSessionNoteAction(
@@ -195,6 +200,7 @@ export async function sendParentReportAction(studentId: string, paragraphs: stri
   const sent = await sendTutorParentReportEmail(student.parent_email, {
     studentName: student.name,
     reportParagraphs: cleanParagraphs,
+    brandName: auth.brand?.name,
   });
   if (!sent) {
     return { error: 'Could not send the report - please try again.' };

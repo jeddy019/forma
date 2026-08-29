@@ -23,6 +23,8 @@ interface OwnerRow {
   plan: string | null;
   plan_expires_at: string | null;
   paper_size: string | null;
+  brand_name: string | null;
+  brand_accent: string | null;
 }
 
 interface StudentProfileRow {
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
   }
   const sanitizedTopic = stripHtmlTags(topicPrompt).trim();
 
-  const { data: ownerRow } = await supabase.from('users').select('email, plan, plan_expires_at, paper_size').eq('id', user.id).single<OwnerRow>();
+  const { data: ownerRow } = await supabase.from('users').select('email, plan, plan_expires_at, paper_size, brand_name, brand_accent').eq('id', user.id).single<OwnerRow>();
 
   const { data: student, error: studentError } = await supabase
     .from('student_profiles')
@@ -109,6 +111,8 @@ export async function POST(request: NextRequest) {
         paper_size: ownerRow?.paper_size ?? 'a4',
         plan: ownerRow?.plan ?? null,
         plan_expires_at: ownerRow?.plan_expires_at ?? null,
+        brand_name: ownerRow?.brand_name ?? null,
+        brand_accent: ownerRow?.brand_accent ?? null,
       },
       topicPrompt: sanitizedTopic,
       fundamentalsTarget,

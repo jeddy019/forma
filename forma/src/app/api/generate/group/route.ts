@@ -7,6 +7,7 @@ import { generateWorksheet, buildWorksheetFromDeterministic } from '@/lib/ai/gen
 import { buildUserPrompt } from '@/lib/ai/buildUserPrompt';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
+import { resolveBranding } from '@/lib/branding';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { sendWorksheetReadyEmail } from '@/lib/email/send';
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
   }
 
-  const { data: ownerRow } = await supabase.from('users').select('email, role, plan, plan_expires_at, paper_size').eq('id', user.id).single();
+  const { data: ownerRow } = await supabase.from('users').select('email, role, plan, plan_expires_at, paper_size, brand_name, brand_accent').eq('id', user.id).single();
   if (ownerRow?.role !== 'tutor' || !isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at)) {
     return NextResponse.json({ error: 'Group mode is available on the Tutor plan.' }, { status: 403 });
   }
@@ -254,6 +255,7 @@ export async function POST(request: NextRequest) {
         worksheetUrl: `${appUrl}/s/${row.digital_code}`,
         sentToStudentDirectly: Boolean(student.email),
         portalUrl: `${appUrl}/student/login`,
+        brandName: resolveBranding(ownerRow).name,
       }).catch((error) => console.error('Failed to send worksheet-ready email', error));
     }
   }

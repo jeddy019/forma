@@ -5,11 +5,12 @@ import EmailLayout, { emailStyles } from './components/EmailLayout';
 export interface PaymentFailedEmailProps {
   planName: string;
   retryUrl: string;
+  brandName?: string;
 }
 
-export default function PaymentFailedEmail({ planName, retryUrl }: PaymentFailedEmailProps) {
+export default function PaymentFailedEmail({ planName, retryUrl, brandName }: PaymentFailedEmailProps) {
   return (
-    <EmailLayout previewText={`Your ${planName} plan payment could not be processed.`}>
+    <EmailLayout previewText={`Your ${planName} plan payment could not be processed.`} brandName={brandName}>
       <Text style={emailStyles.heading}>Payment could not be processed</Text>
       <Text style={emailStyles.body}>
         We could not process your {planName} plan payment. Please check your card details and try again to keep your

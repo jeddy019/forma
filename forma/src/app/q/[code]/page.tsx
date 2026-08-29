@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import type { DiagramSpec } from '@/lib/ai/schema';
 import { renderRichText } from '@/lib/render/richText';
 import { aiTutorAllowance } from '@/lib/payments/planStatus';
+import { resolveBranding } from '@/lib/branding';
 import QuizForm from './QuizForm';
 
 export interface QuizQuestionPart {
@@ -105,10 +106,11 @@ export default async function QuizPage({
   // cap, so the two cannot drift.
   const { data: ownerRow } = await admin
     .from('users')
-    .select('plan, plan_expires_at')
+    .select('plan, plan_expires_at, brand_name, brand_accent')
     .eq('id', worksheet.owner_id ?? '')
-    .maybeSingle<{ plan: string | null; plan_expires_at: string | null | undefined }>();
+    .maybeSingle<{ plan: string | null; plan_expires_at: string | null | undefined; brand_name: string | null; brand_accent: string | null }>();
   const aiTutorEnabled = aiTutorAllowance(ownerRow?.plan, ownerRow?.plan_expires_at) > 0;
+  const brand = resolveBranding(ownerRow);
 
   const quizQuestions: QuizQuestion[] = questions.map((question) => ({
     id: question.id,
@@ -128,7 +130,7 @@ export default async function QuizPage({
         <div className={cardClass}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
-              Forma
+              {brand.name}
             </span>
           </div>
           <hr className="border-t-2 border-[#1A3D2E] mb-3" />

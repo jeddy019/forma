@@ -11,6 +11,7 @@ export interface PaymentConfirmedEmailProps {
   amountFormatted: string;
   renewalDateFormatted: string;
   invoiceAttached?: boolean;
+  brandName?: string;
 }
 
 export default function PaymentConfirmedEmail({
@@ -18,9 +19,10 @@ export default function PaymentConfirmedEmail({
   amountFormatted,
   renewalDateFormatted,
   invoiceAttached = true,
+  brandName,
 }: PaymentConfirmedEmailProps) {
   return (
-    <EmailLayout previewText={`Your ${planName} plan payment was confirmed.`}>
+    <EmailLayout previewText={`Your ${planName} plan payment was confirmed.`} brandName={brandName}>
       <Text style={emailStyles.heading}>Payment confirmed</Text>
       <Text style={emailStyles.body}>
         Thanks - your {planName} plan payment of {amountFormatted} went through. Your plan renews on{' '}

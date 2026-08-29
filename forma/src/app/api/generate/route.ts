@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { generateWorksheet, buildWorksheetFromDeterministic } from '@/lib/ai/generateWorksheet';
 import { buildUserPrompt } from '@/lib/ai/buildUserPrompt';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
+import { resolveBranding } from '@/lib/branding';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { isActivePro } from '@/lib/payments/planStatus';
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
   }
   const sanitizedTopic = stripHtmlTags(topicPrompt).trim();
 
-  const { data: ownerRow } = await supabase.from('users').select('email, plan, plan_expires_at, paper_size').eq('id', user.id).single();
+  const { data: ownerRow } = await supabase.from('users').select('email, plan, plan_expires_at, paper_size, brand_name, brand_accent').eq('id', user.id).single();
 
   // Phase 5 Step 28: check_and_log_generation enforces the 3/month free
   // cap - it has no notion of plan at all, so an active paid plan must
@@ -298,6 +299,7 @@ export async function POST(request: NextRequest) {
       worksheetUrl: `${appUrl}/s/${inserted.digital_code}`,
       sentToStudentDirectly: Boolean(student.email),
       portalUrl: `${appUrl}/student/login`,
+      brandName: resolveBranding(ownerRow).name,
     }).catch((error) => console.error('Failed to send worksheet-ready email', error));
   }
 

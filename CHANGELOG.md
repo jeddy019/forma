@@ -4394,3 +4394,48 @@ worksheetHtml brand-threading test). Dev server running with the change.
 **Next (W1 slice 2):** email templates (EmailLayout wordmark + the 8 send.tsx
 subject lines), landing/login/signup copy, /s/[code] and /q/[code] wordmarks.
 Then W2 weekly proof report.
+
+## [2026-08-29] W1 Identity layer - slice 2 (emails + student pages carry the owner's brand)
+
+**What:** the remaining parent/student-facing surfaces now carry the account
+owner's resolved brand (users.brand_name via src/lib/branding.ts used by
+slice 1) instead of the platform wordmark.
+
+**Emails (all 9 templates + EmailLayout):** EmailLayout gained an optional
+brandName prop (default 'Forma') driving the layout wordmark and the footer
+"Practice built for your student" line. Every template's Props interface
+accepts optional brandName and forwards it. send.tsx's renewal-reminder
+subject now uses the brand instead of hardcoded "Forma". Every call site that
+knows the owner now resolves and passes the brand: /api/generate,
+/api/generate/daily, /api/generate/group (owner selects gained brand_name/
+brand_accent), generateQuiz.ts + the three quiz routes (generate, re-practice,
+study - the owner object carried through generateQuiz so the inserted
+worksheet's owner identity flows into the email), the generate-scheduled cron
+(weekly delivery + schedule-failed, both owner selects extended), the
+monday-summary cron, the renewal-reminder cron, activateSubscription.ts's
+ChargeOwner now carries brandName (from the user selects it already made),
+and the tutor parent-report action (sendParentReportAction, whose
+requireTutorPro helper now returns the resolved brand).
+
+**Student pages:** /s/[code] and /q/[code] now select owner_id (the /q page
+already did for ai-tutor gating), fetch the owner's brand_name/brand_accent,
+and render the owner's name in the page's wordmark header where "Forma" was
+hardcoded. Unknown/missing owner still falls back to 'Forma'.
+
+**Deliberately unchanged in this slice:** / (landing), /login, /signup and
+/student/login still say "Forma". These are pre-auth surfaces that cannot
+resolve an owner brand (no owner is known until someone signs in), and the
+landing page is the future tutor-SaaS sales funnel where the Forma brand
+stays correct. The founder's personal model applies to parent/student-facing
+deliverables - emails and /s /q links - not to the platform's own entry
+pages.
+
+**Verification:** tsc clean; eslint 0 errors (5 pre-existing warnings);
+vitest 236/236 across 32 files (no new tests needed - bare reactor work, the
+branding resolver itself was already covered in slice 1). All touched routes
+recompiled clean in the running dev server.
+
+**Next (W1 slice 3):** the remaining hardcoded "Forma" surface is the PDF
+pipeline - already branded in slice 1 - so slice 3 = W1 close-out: scan for
+any remaining user-visible "Forma" straight-line strings, then move on to
+W2 (weekly branded proof report).

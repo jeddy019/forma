@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { generateWorksheet, buildWorksheetFromDeterministic } from '@/lib/ai/generateWorksheet';
 import { buildUserPrompt } from '@/lib/ai/buildUserPrompt';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
+import { resolveBranding } from '@/lib/branding';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { sendWeeklyDeliveryEmail, sendScheduleFailedEmail } from '@/lib/email/send';
 import { isDueNow } from '@/lib/schedule/isDueNow';
@@ -145,7 +146,7 @@ async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Pr
 
   const { questionsJson, markSchemeJson } = splitMarkScheme(worksheet);
 
-  const { data: ownerRow } = await admin.from('users').select('email, paper_size').eq('id', schedule.owner_id).single();
+  const { data: ownerRow } = await admin.from('users').select('email, paper_size, brand_name, brand_accent').eq('id', schedule.owner_id).single();
 
   // digital_code is UNIQUE - same collision-retry pattern as /api/generate.
   let inserted: { id: string; digital_code: string } | null = null;
@@ -193,6 +194,7 @@ async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Pr
       sentToStudentDirectly: Boolean(student.email),
       manageScheduleUrl: `${appUrl}/dashboard/schedule`,
       portalUrl: `${appUrl}/student/login`,
+      brandName: resolveBranding(ownerRow).name,
     });
   }
 }
@@ -271,7 +273,7 @@ export async function GET(request: NextRequest) {
 
     const [{ data: student }, { data: owner }] = await Promise.all([
       admin.from('student_profiles').select('name').eq('id', schedule.student_id).single(),
-      admin.from('users').select('email').eq('id', schedule.owner_id).single(),
+      admin.from('users').select('email, brand_name, brand_accent').eq('id', schedule.owner_id).single(),
     ]);
     if (owner?.email) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -279,6 +281,7 @@ export async function GET(request: NextRequest) {
         studentName: student?.name ?? 'your student',
         subject: schedule.subject,
         scheduleUrl: `${appUrl}/dashboard/schedule`,
+        brandName: resolveBranding(owner).name,
       });
     }
   }

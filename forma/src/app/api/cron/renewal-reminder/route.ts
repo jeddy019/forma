@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendRenewalReminderEmail } from '@/lib/email/send';
 import { PLAN_PRICING, isSubscribableRole } from '@/lib/payments/plans';
+import { resolveBranding } from '@/lib/branding';
 
 // EMAIL 7: Renewal reminder - "3 days before expiry" (Email Templates).
 // Runs daily (vercel.json) with a deliberately narrow window - only
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   const { data: owners, error } = await admin
     .from('users')
-    .select('id, email, role, plan_expires_at')
+    .select('id, email, role, plan_expires_at, brand_name, brand_accent')
     .eq('plan', 'pro')
     .gte('plan_expires_at', windowStart)
     .lt('plan_expires_at', windowEnd);
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
       amountFormatted: `$${PLAN_PRICING[owner.role].amount.toFixed(2)}`,
       expiryDateFormatted: new Date(owner.plan_expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
       billingUrl: `${appUrl}/dashboard/settings`,
+      brandName: resolveBranding(owner).name,
     });
     if (sent) results.sent++;
   }

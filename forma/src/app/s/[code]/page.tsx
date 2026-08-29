@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { DiagramSpec } from '@/lib/ai/schema';
 import { renderRichText } from '@/lib/render/richText';
+import { resolveBranding } from '@/lib/branding';
 import StudentWorksheetForm from './StudentWorksheetForm';
 
 // Student-safe question shape: questions_json is already answer-free
@@ -43,6 +44,7 @@ interface WorksheetRow {
   alignment_note: string | null;
   expires_at: string | null;
   first_opened_at: string | null;
+  owner_id: string | null;
   questions_json: {
     curriculum: string;
     year_level: string;
@@ -78,11 +80,22 @@ export default async function StudentWorksheetPage({
   const admin = createAdminClient();
   const { data: worksheet } = await admin
     .from('worksheets')
-    .select('id, digital_code, subject, topic, alignment_note, expires_at, first_opened_at, questions_json')
+    .select('id, digital_code, subject, topic, alignment_note, expires_at, first_opened_at, owner_id, questions_json')
     .eq('digital_code', code)
     .single<WorksheetRow>();
 
   if (!worksheet) notFound();
+
+  // W1 identity layer: the student's page carries the OWNER's brand, not
+  // the platform's (FOUNDER'S PERSONAL MODEL) - resolve it from the
+  // worksheet's owner, falling back to Forma when unset/unknown so the
+  // page still renders for legacy rows with no owner at all.
+  const { data: ownerRow } = await admin
+    .from('users')
+    .select('brand_name, brand_accent')
+    .eq('id', worksheet.owner_id ?? '')
+    .maybeSingle<{ brand_name: string | null; brand_accent: string | null }>();
+  const brand = resolveBranding(ownerRow);
 
   // Phase 7 Step 39 (Speed awareness): "started working on it" event,
   // captured once - first view wins, every later view of the same link
@@ -142,7 +155,7 @@ export default async function StudentWorksheetPage({
         <div className={cardClass}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
-              Forma
+              {brand.name}
             </span>
           </div>
           <hr className="border-t-2 border-[#1A3D2E] mb-3" />

@@ -12,6 +12,7 @@ export interface WorksheetReadyEmailProps {
   topic: string;
   worksheetUrl: string;
   sentToStudentDirectly: boolean;
+  brandName?: string;
   // Phase 6 Step 36: the student portal login link - only meaningful (and
   // only ever passed) when sentToStudentDirectly is true, since the
   // portal itself is keyed off the recipient's own verified email, not
@@ -25,10 +26,11 @@ export default function WorksheetReadyEmail({
   topic,
   worksheetUrl,
   sentToStudentDirectly,
+  brandName,
   portalUrl,
 }: WorksheetReadyEmailProps) {
   return (
-    <EmailLayout previewText={`${studentName}'s ${subject} worksheet is ready.`}>
+    <EmailLayout previewText={`${studentName}'s ${subject} worksheet is ready.`} brandName={brandName}>
       <Text style={emailStyles.heading}>{studentName}&apos;s worksheet is ready</Text>
       <Text style={emailStyles.body}>
         A new {subject} worksheet on {topic} is ready{sentToStudentDirectly ? ' for you' : ` for ${studentName}`} to

@@ -11,14 +11,15 @@ export interface ScheduleFailedEmailProps {
   studentName: string;
   subject: string;
   scheduleUrl: string;
+  brandName?: string;
 }
 
-export default function ScheduleFailedEmail({ studentName, subject, scheduleUrl }: ScheduleFailedEmailProps) {
+export default function ScheduleFailedEmail({ studentName, subject, scheduleUrl, brandName }: ScheduleFailedEmailProps) {
   return (
-    <EmailLayout previewText={`This week's ${subject} worksheet for ${studentName} could not be generated.`}>
+    <EmailLayout previewText={`This week's ${subject} worksheet for ${studentName} could not be generated.`} brandName={brandName}>
       <Text style={emailStyles.heading}>A scheduled worksheet did not generate</Text>
       <Text style={emailStyles.body}>
-        Forma tried twice to generate {studentName}&apos;s scheduled {subject} worksheet and could not complete it.
+        Your automated practice for {studentName}&apos;s scheduled {subject} worksheet could not be completed.
         Nothing was sent to {studentName}. Your other schedules are not affected.
       </Text>
       <Section style={{ margin: '24px 0' }}>

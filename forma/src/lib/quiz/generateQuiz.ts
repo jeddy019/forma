@@ -22,6 +22,7 @@ import { generateWorksheet, buildWorksheetFromDeterministic } from '@/lib/ai/gen
 import { matchMathEngineTopic, callMathEngine } from '@/lib/ai/mathEngineClient';
 import { pullVerifiedQuestions } from '@/lib/questionBank/pullVerifiedQuestions';
 import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
+import { resolveBranding } from '@/lib/branding';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { blendWithBank } from '@/lib/questionBank/blendWithBank';
 import { EXPECTED_TYPE_ORDER, DAILY_TYPE_ORDER } from '@/lib/ai/schema';
@@ -60,6 +61,8 @@ export interface GenerateQuizOptions {
     paper_size?: string | null;
     plan?: string | null;
     plan_expires_at?: string | null;
+    brand_name?: string | null;
+    brand_accent?: string | null;
   };
   // Exactly one targeting mode must be provided.
   topicPrompt?: string;
@@ -240,6 +243,7 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
       worksheetUrl: `${appUrl}/q/${inserted.digital_code}`,
       sentToStudentDirectly: Boolean(profile.email),
       portalUrl: `${appUrl}/student/login`,
+      brandName: resolveBranding(owner).name,
     }).catch((error) => console.error('Failed to send quiz-ready email', error));
   }
 

@@ -25,6 +25,13 @@ const BODY_FALLBACK_CSS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvet
 export interface EmailLayoutProps {
   previewText: string;
   children: ReactNode;
+  // W1 identity layer: the account owner's own brand name (resolved from
+  // users.brand_name via resolveBranding, threaded by the caller through
+  // each template's props). Defaults to 'Forma' when the account has no
+  // custom brand set. The wordmark replaces "Forma" everywhere a parent or
+  // student reads it - emails are the founder's own voice, not the
+  // platform's (FOUNDER'S PERSONAL MODEL anti-swallow invariant).
+  brandName?: string;
   // RFC 8058 List-Unsubscribe. Only emails 3, 4, and 5 pass this (Legal
   // Requirements: "Include the List-Unsubscribe header in emails 3, 4, and
   // 5") - a mailto: link, not a one-click HTTP endpoint, since there is no
@@ -84,7 +91,12 @@ export const emailStyles = {
   },
 } as const;
 
-export default function EmailLayout({ previewText, children, showUnsubscribeFooterLine }: EmailLayoutProps) {
+export default function EmailLayout({
+  previewText,
+  children,
+  brandName = 'Forma',
+  showUnsubscribeFooterLine,
+}: EmailLayoutProps) {
   return (
     <Html>
       <Head>
@@ -125,14 +137,14 @@ export default function EmailLayout({ previewText, children, showUnsubscribeFoot
               margin: '0 0 24px 0',
             }}
           >
-            Forma
+            {brandName}
           </Text>
 
           <Section style={{ fontFamily: `${BODY_FONT_FAMILY}, ${BODY_FALLBACK_CSS}` }}>{children}</Section>
 
           <Hr style={{ borderColor: '#E0D9D0', margin: '32px 0 16px 0' }} />
           <Text style={{ fontFamily: `${BODY_FONT_FAMILY}, ${BODY_FALLBACK_CSS}`, fontSize: '11px', color: '#9A9080', margin: 0 }}>
-            Forma - Practice built for your student.
+            {brandName} - Practice built for your student.
             {showUnsubscribeFooterLine && (
               <>
                 {' '}

@@ -111,7 +111,11 @@ export function sendPaymentConfirmedEmail(
 }
 
 export function sendRenewalReminderEmail(to: string, props: RenewalReminderEmailProps): Promise<boolean> {
-  return send({ to, subject: 'Your Forma plan renews soon', react: <RenewalReminderEmail {...props} /> });
+  return send({
+    to,
+    subject: `Your ${props.brandName ?? 'Forma'} plan renews soon`,
+    react: <RenewalReminderEmail {...props} />,
+  });
 }
 
 export function sendPaymentFailedEmail(to: string, props: PaymentFailedEmailProps): Promise<boolean> {

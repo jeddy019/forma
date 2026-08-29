@@ -14,6 +14,7 @@ export interface WeeklyDeliveryEmailProps {
   worksheetUrl: string;
   sentToStudentDirectly: boolean;
   manageScheduleUrl: string;
+  brandName?: string;
   // Phase 6 Step 36: the student portal login link - only meaningful (and
   // only ever passed) when sentToStudentDirectly is true, same reasoning
   // as WorksheetReadyEmail's own portalUrl.
@@ -27,10 +28,11 @@ export default function WeeklyDeliveryEmail({
   worksheetUrl,
   sentToStudentDirectly,
   manageScheduleUrl,
+  brandName,
   portalUrl,
 }: WeeklyDeliveryEmailProps) {
   return (
-    <EmailLayout previewText={`This week's ${subject} practice for ${studentName} is ready.`} showUnsubscribeFooterLine>
+    <EmailLayout previewText={`This week's ${subject} practice for ${studentName} is ready.`} showUnsubscribeFooterLine brandName={brandName}>
       <Text style={emailStyles.heading}>This week&apos;s practice is ready</Text>
       <Text style={emailStyles.body}>
         {studentName}&apos;s scheduled {subject} worksheet on {topic} is ready

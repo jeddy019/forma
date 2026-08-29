@@ -7,12 +7,13 @@ import EmailLayout, { emailStyles } from './components/EmailLayout';
 export interface WelcomeEmailProps {
   role: 'tutor' | 'parent';
   appUrl: string;
+  brandName?: string;
 }
 
-export default function WelcomeEmail({ role, appUrl }: WelcomeEmailProps) {
+export default function WelcomeEmail({ role, appUrl, brandName }: WelcomeEmailProps) {
   const roleLabel = role === 'tutor' ? 'tutor' : 'parent';
   return (
-    <EmailLayout previewText="Welcome to Forma - practice built for your student.">
+    <EmailLayout previewText="Welcome to Forma - practice built for your student." brandName={brandName}>
       <Text style={emailStyles.heading}>Welcome to Forma</Text>
       <Text style={emailStyles.body}>
         You are set up as a {roleLabel} on Forma. Add a student profile, describe what they are struggling with, and

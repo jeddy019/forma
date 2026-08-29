@@ -9,11 +9,12 @@ import EmailLayout, { emailStyles } from './components/EmailLayout';
 export interface TutorParentReportEmailProps {
   studentName: string;
   reportParagraphs: string[];
+  brandName?: string;
 }
 
-export default function TutorParentReportEmail({ studentName, reportParagraphs }: TutorParentReportEmailProps) {
+export default function TutorParentReportEmail({ studentName, reportParagraphs, brandName }: TutorParentReportEmailProps) {
   return (
-    <EmailLayout previewText={`A progress report for ${studentName} from your tutor.`} showUnsubscribeFooterLine>
+    <EmailLayout previewText={`A progress report for ${studentName} from your tutor.`} showUnsubscribeFooterLine brandName={brandName}>
       <Text style={emailStyles.heading}>A note from {studentName}&apos;s tutor</Text>
       {reportParagraphs.map((paragraph, i) => (
         <Text key={i} style={emailStyles.body}>

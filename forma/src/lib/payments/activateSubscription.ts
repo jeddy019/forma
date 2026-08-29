@@ -4,6 +4,7 @@ import { PLAN_PRICING, isSubscribableRole, type SubscribableRole } from './plans
 import { sendPaymentConfirmedEmail, sendPaymentFailedEmail } from '@/lib/email/send';
 import { findActiveSubscriptionId } from './flutterwave';
 import { createInvoice } from '@/lib/invoices/createInvoice';
+import { resolveBranding } from '@/lib/branding';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -14,6 +15,7 @@ interface ChargeOwner {
   planKey: SubscribableRole;
   email: string;
   isRenewal: boolean;
+  brandName: string;
 }
 
 // Identifies which user a Flutterwave charge belongs to. The first charge
@@ -37,14 +39,26 @@ async function identifyChargeOwner(
 ): Promise<ChargeOwner | null> {
   const decoded = decodeTxRef(txRef);
   if (decoded) {
-    const { data: userRow } = await admin.from('users').select('email').eq('id', decoded.userId).maybeSingle();
+    const { data: userRow } = await admin.from('users').select('email, brand_name, brand_accent').eq('id', decoded.userId).maybeSingle();
     if (!userRow?.email) return null;
-    return { userId: decoded.userId, planKey: decoded.planKey, email: userRow.email, isRenewal: false };
+    return {
+      userId: decoded.userId,
+      planKey: decoded.planKey,
+      email: userRow.email,
+      isRenewal: false,
+      brandName: resolveBranding(userRow).name,
+    };
   }
   if (customerEmail) {
-    const { data: userRow } = await admin.from('users').select('id, role').eq('email', customerEmail).maybeSingle();
+    const { data: userRow } = await admin.from('users').select('id, role, brand_name, brand_accent').eq('email', customerEmail).maybeSingle();
     if (!userRow || !isSubscribableRole(userRow.role)) return null;
-    return { userId: userRow.id, planKey: userRow.role, email: customerEmail, isRenewal: true };
+    return {
+      userId: userRow.id,
+      planKey: userRow.role,
+      email: customerEmail,
+      isRenewal: true,
+      brandName: resolveBranding(userRow).name,
+    };
   }
   return null;
 }
@@ -154,6 +168,7 @@ export async function activateSubscriptionFromTransaction(
       amountFormatted: `$${PLAN_PRICING[owner.planKey].amount.toFixed(2)}`,
       renewalDateFormatted: new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
       invoiceAttached: Boolean(invoicePdf),
+      brandName: owner.brandName,
     },
     invoicePdf
   );
@@ -196,7 +211,7 @@ export async function notifyPaymentFailedFromTransaction(
   });
 
   const planName = owner.planKey === 'tutor' ? 'Tutor' : 'Parent';
-  await sendPaymentFailedEmail(owner.email, { planName, retryUrl });
+  await sendPaymentFailedEmail(owner.email, { planName, retryUrl, brandName: owner.brandName });
 
   return { notified: true };
 }
