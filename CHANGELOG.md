@@ -4351,3 +4351,46 @@ assignment were ever removed.
 **Next:** B74 tutor analytics dashboard (extends the assignment status views
 upward), B75 cram mode, B76 flexible task setting, B77 accuracy-required mode,
 B78 streak freeze. Wave 6 extraction continues in parallel.
+
+## [2026-08-29] W1 Identity layer - slice 1 (branding config + print/web surfaces)
+
+**Context:** the product pivoted (per CLAUDE.md Product Definition, 2026-08-27
+ecosystem pivot) from a freemium worksheet platform sold as "Forma" into the
+founder's own personalised practice system. First workstream = identity layer:
+every surface carries the account owner's name, not the platform brand. This
+session lay the config + the highest-visibility surfaces; emails, landing page,
+login/signup, and the /s /q student pages follow in later slices.
+
+**New schema** (supabase/add-branding.sql, NOT yet applied live): two nullable
+TEXT columns on users - brand_name, brand_accent. NULL means unset (fall back
+to platform defaults); the settings action validates accent against #RRGGBB and
+name ≤100 chars (Security Rule 4's server-side length rule, mirroring
+student-name). Users generate-metadata and /api/pdf now select these.
+
+**New lib** (src/lib/branding.ts, pure + unit tested): resolveBranding(row) →
+{ name, accent } with BRANDING_DEFAULTS (Forma / #1A3D2E). Falls back on blank
+name and non-hex accent. branding.test.ts covers null/blank/normalisation/
+malformed-accent. Consumed by: worksheet/mark-scheme/invoice HTML renderers,
+buildFooterTemplate (now takes brandName), /api/pdf, createInvoice,
+invoices/[id]/pdf, dashboard layout (sidebar wordmark + generateMetadata title),
+dashboard settings.
+
+**Surfaces now branded:** worksheet PDF cover wordmark + marketing line, PDF
+header row-1 wordmark + footer, mark scheme header, invoice wordmark + thank-you
+line + footer, dashboard sidebar wordmark (desktop full name, mobile first
+initial), dashboard browser-tab title, settings "Your brand" editor card (name
+input + accent colour picker/hex, save action updateBrandingAction with length +
+hex validation).
+
+**Design note:** accent defaults to #1A3D2E (the primary green), NOT the gold
+accent token - on printed paper the Designer's COLOUR FLOOR and wordmark colour
+stay primary-green unless the owner chooses otherwise; the gold remains the
+accent-rail/interaction colour across surfaces.
+
+**Verification:** tsc clean; eslint 0 errors (4 pre-existing warnings untouched);
+vitest 236/236 across 32 files (added branding.test.ts 7 tests + 1 new
+worksheetHtml brand-threading test). Dev server running with the change.
+
+**Next (W1 slice 2):** email templates (EmailLayout wordmark + the 8 send.tsx
+subject lines), landing/login/signup copy, /s/[code] and /q/[code] wordmarks.
+Then W2 weekly proof report.

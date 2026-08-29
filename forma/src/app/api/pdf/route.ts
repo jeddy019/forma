@@ -9,6 +9,7 @@ import { renderWorksheetHtml, renderMarkSchemeHtml } from '@/lib/render/workshee
 import type { WorksheetQuestion } from '@/lib/pdf/worksheet-template';
 import type { MarkSchemeQuestion } from '@/lib/pdf/mark-scheme-template';
 import { isActivePro } from '@/lib/payments/planStatus';
+import { resolveBranding } from '@/lib/branding';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Performance Rule 10's documented "PDF: 25 seconds" cap. The LuaLaTeX
@@ -109,6 +110,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // W1 identity layer: the printed wordmark/footer use the owner's configured
+  // brand. Fetched here regardless of document type (worksheets get it too,
+  // not just mark schemes).
+  const { data: brandRow } = await supabase
+    .from('users')
+    .select('brand_name, brand_accent')
+    .eq('id', user.id)
+    .single();
+  const brand = resolveBranding(brandRow);
+
   const createdAt = new Date(worksheet.created_at);
   const studentName = worksheet.student?.name ?? 'Student';
   const curriculumBadge = worksheet.student?.curriculum_level ?? '';
@@ -130,6 +141,7 @@ export async function POST(request: NextRequest) {
               createdAt,
             },
             questions: worksheet.questions_json.questions,
+            brand,
           },
         )
       : renderMarkSchemeHtml(
@@ -146,6 +158,7 @@ export async function POST(request: NextRequest) {
             },
             // Presence already checked above when document === 'mark_scheme'.
             questions: worksheet.mark_scheme_json!.questions,
+            brand,
           },
         );
 
@@ -158,7 +171,7 @@ export async function POST(request: NextRequest) {
   let pdfBuffer: Buffer;
   try {
     pdfBuffer = await Promise.race([
-      generatePdf(html, format, { footerTemplate: buildFooterTemplate(), signal: controller.signal }),
+      generatePdf(html, format, { footerTemplate: buildFooterTemplate(brand.name), signal: controller.signal }),
       new Promise<never>((_, reject) => {
         setTimeout(() => {
           controller.abort();

@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { cancelSubscriptionAction, deleteAccountAction } from './actions';
-import { cardClass, primaryButtonClass, secondaryButtonClass } from '@/lib/ui/formStyles';
+import { cancelSubscriptionAction, deleteAccountAction, updateBrandingAction } from './actions';
+import { accentCardClass, cardClass, primaryButtonClass, secondaryButtonClass, inputClass, labelClass } from '@/lib/ui/formStyles';
 
 const PLAN_LABELS: Record<string, { name: string; price: string }> = {
   tutor: { name: 'Tutor', price: '$15/month' },
@@ -34,21 +34,43 @@ export default function SettingsPanel({
   planExpiresAt,
   paymentNotice,
   invoices,
+  brandName,
+  brandAccent,
 }: {
   role: string | null;
   isPro: boolean;
   planExpiresAt: string | null;
   paymentNotice: 'success' | 'failed' | null;
   invoices: InvoiceRow[];
+  brandName: string;
+  brandAccent: string;
 }) {
   const router = useRouter();
   const [upgrading, setUpgrading] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingBrand, setSavingBrand] = useState(false);
+  const [nameValue, setNameValue] = useState(brandName);
+  const [accentValue, setAccentValue] = useState(brandAccent);
   const [error, setError] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
+  const [brandSaved, setBrandSaved] = useState(false);
 
   const planInfo = role ? PLAN_LABELS[role] : null;
+
+  async function handleSaveBrand() {
+    setSavingBrand(true);
+    setError(null);
+    setBrandSaved(false);
+    const result = await updateBrandingAction({ name: nameValue, accent: accentValue });
+    setSavingBrand(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setBrandSaved(true);
+    router.refresh();
+  }
 
   async function handleUpgrade() {
     setUpgrading(true);
@@ -108,6 +130,69 @@ export default function SettingsPanel({
           Payment could not be confirmed. Please try again or contact support.
         </p>
       )}
+
+      <div className={accentCardClass}>
+        <h2 className="text-lg font-semibold text-[#1A1A18] mb-1">Your brand</h2>
+        <p className="text-sm text-[#5C5849] mb-4">
+          Your name appears as the wordmark across the dashboard, worksheets, and invoices.
+        </p>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <label htmlFor="brand-name" className={labelClass}>
+              Brand name
+            </label>
+            <input
+              id="brand-name"
+              type="text"
+              value={nameValue}
+              onChange={(e) => {
+                setNameValue(e.target.value);
+                setBrandSaved(false);
+              }}
+              placeholder="e.g. Aisha Ade Tutoring"
+              maxLength={100}
+              className={inputClass}
+            />
+          </div>
+          <div className="md:w-36">
+            <label htmlFor="brand-accent" className={labelClass}>
+              Accent
+            </label>
+            <div className="flex gap-2 items-center">
+              <input
+                id="brand-accent"
+                type="color"
+                value={accentValue}
+                onChange={(e) => {
+                  setAccentValue(e.target.value.toUpperCase());
+                  setBrandSaved(false);
+                }}
+                className="h-[50px] w-12 rounded-[10px] border border-[#E0D9D0] bg-white cursor-pointer"
+                aria-label="Accent colour"
+              />
+              <input
+                type="text"
+                value={accentValue}
+                onChange={(e) => {
+                  setAccentValue(e.target.value);
+                  setBrandSaved(false);
+                }}
+                placeholder="#1A3D2E"
+                className={inputClass}
+              />
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleSaveBrand}
+          disabled={savingBrand}
+          className={`${primaryButtonClass} mt-5 self-start`}
+        >
+          {savingBrand ? 'Saving...' : 'Save brand'}
+        </button>
+        {brandSaved && <p className="text-sm text-[#1A3D2E] mt-3">Brand saved.</p>}
+      </div>
 
       <div className={cardClass}>
         <h2 className="text-lg font-semibold text-[#1A1A18] mb-3">Billing</h2>

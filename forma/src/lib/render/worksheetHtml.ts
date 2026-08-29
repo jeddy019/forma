@@ -16,6 +16,8 @@ import type {
 import { renderDiagramSvg } from '../diagrams/renderDiagramSpec';
 import { sectionDividerLabel } from '../worksheet/sectionDividerLabel';
 import { CODING_SUBJECTS } from '../constants';
+import { BRANDING_DEFAULTS } from '../branding';
+import type { Branding } from '../branding';
 
 // ---------------------------------------------------------------------------
 // One renderer, two skins. This file is the SINGLE source that turns
@@ -126,11 +128,11 @@ function badgesRow(curriculum: string, yearOrGrade: string, subject: string): st
   return `<div class="badges">${badge(curriculum)}${badge(yearOrGrade)}${badge(subject)}</div>`;
 }
 
-function renderCoverPage(header: WorksheetHeaderData): string {
+function renderCoverPage(header: WorksheetHeaderData, brand: Branding): string {
   return `
   <section class="cover">
     <div class="cover-inner">
-      <div class="wordmark small">Forma</div>
+      <div class="wordmark small" style="color: ${brand.accent}">${escapeHtml(brand.name)}</div>
       <h1>${escapeHtml(header.subject)}</h1>
       <h2>${escapeHtml(header.topic)}</h2>
     </div>
@@ -150,17 +152,17 @@ function renderCoverPage(header: WorksheetHeaderData): string {
         <li>Check your answers before finishing.</li>
       </ul>
     </div>
-    <div class="marketing">This assignment was built by Forma, a personalised practice platform.<br>forma.app</div>
+    <div class="marketing">This assignment was built by ${escapeHtml(brand.name)}, a personalised practice platform.<br>forma.app</div>
   </section>`;
 }
 
-function renderHeaderBlock(header: Omit<WorksheetHeaderData, 'digitalCode'>, titleSuffix: string): string {
+function renderHeaderBlock(header: Omit<WorksheetHeaderData, 'digitalCode'>, titleSuffix: string, brand: Branding): string {
   const alignmentNote =
     header.alignmentNote ?? `Questions are appropriate for ${header.curriculumLevelForFallback} ${header.subject}.`;
   return `
   <div class="header-row1">
     <span class="student">${escapeHtml(header.studentName)}${titleSuffix}</span>
-    <span class="mark">Forma</span>
+    <span class="mark" style="color: ${brand.accent}">${escapeHtml(brand.name)}</span>
   </div>
   <hr class="header-rule">
   ${badgesRow(header.curriculumBadge, header.yearOrGradeBadge, header.subject)}
@@ -219,6 +221,7 @@ function qrBlock(digitalCode: string): string {
 
 export function renderWorksheetHtml(data: WorksheetTemplateData): string {
   const { header, questions } = data;
+  const brand = data.brand ?? BRANDING_DEFAULTS;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -227,9 +230,9 @@ ${bakedPrintHead()}
 <style>${documentCss(header.subject)}</style>
 </head>
 <body>
-${renderCoverPage(header)}
+${renderCoverPage(header, brand)}
 <section>
-${renderHeaderBlock(header, '')}
+${renderHeaderBlock(header, '', brand)}
 ${questions.map((question, index) => renderWorksheetQuestion(question, index, questions)).join('\n')}
 ${qrBlock(header.digitalCode)}
 </section>
@@ -273,6 +276,7 @@ function renderMarkSchemeQuestion(question: MarkSchemeQuestion, index: number): 
 
 export function renderMarkSchemeHtml(data: MarkSchemeTemplateData): string {
   const { header, questions } = data;
+  const brand = data.brand ?? BRANDING_DEFAULTS;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -282,7 +286,7 @@ ${bakedPrintHead()}
 </head>
 <body>
 <section>
-${renderHeaderBlock(header, ' <span style="font-size: 12pt; color: ' + C.textMutedPrint + '">Mark Scheme</span>')}
+${renderHeaderBlock(header, ' <span style="font-size: 12pt; color: ' + C.textMutedPrint + '">Mark Scheme</span>', brand)}
 ${questions.map((question, index) => renderMarkSchemeQuestion(question, index)).join('\n')}
 </section>
 </body>

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generatePdf } from '@/lib/pdf/browser-pool';
 import { renderInvoiceHtml } from '@/lib/pdf/invoice-template';
+import { resolveBranding } from '@/lib/branding';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Same budget as /api/pdf (Performance Rule 10) - this is a much simpler
@@ -61,6 +62,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const planName = invoice.plan === 'tutor' ? 'Forma Tutor' : 'Forma Parent';
+  // W1 identity layer: the invoice wordmark/footer use the sign-in owner's
+  // brand (RLS already scoped the invoice to them above).
+  const { data: brandRow } = await supabase.from('users').select('brand_name, brand_accent').eq('id', user.id).single();
+  const brand = resolveBranding(brandRow);
   const { html, footerTemplate } = renderInvoiceHtml({
     invoiceNumber: invoice.invoice_number,
     paidAt: new Date(invoice.created_at),
@@ -69,6 +74,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     planName,
     amountFormatted: formatAmount(invoice.amount, invoice.currency),
     paymentReference: invoice.payment_reference,
+    brand,
   });
 
   let pdfBuffer: Buffer;

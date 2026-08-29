@@ -2,6 +2,7 @@ import type { createAdminClient } from '@/lib/supabase/admin';
 import { generatePdf } from '@/lib/pdf/browser-pool';
 import { renderInvoiceHtml } from '@/lib/pdf/invoice-template';
 import type { SubscribableRole } from '@/lib/payments/plans';
+import { resolveBranding } from '@/lib/branding';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -60,6 +61,12 @@ export async function createInvoice(admin: AdminClient, params: CreateInvoicePar
   }
 
   const planName = params.planKey === 'tutor' ? 'Forma Tutor' : 'Forma Parent';
+  // W1 identity layer: the invoice wordmark/footer carry the account owner's
+  // brand. The admin client bypasses RLS but rows are only ever read by
+  // their own id (the verified subscriber) - brand_name/accent are the
+  // owner's own cosmetic settings, not another user's data.
+  const { data: brandRow } = await admin.from('users').select('brand_name, brand_accent').eq('id', params.userId).single();
+  const brand = resolveBranding(brandRow);
   const { html, footerTemplate } = renderInvoiceHtml({
     invoiceNumber,
     paidAt: new Date(),
@@ -68,6 +75,7 @@ export async function createInvoice(admin: AdminClient, params: CreateInvoicePar
     planName,
     amountFormatted: formatAmount(params.amount, params.currency),
     paymentReference: params.paymentReference,
+    brand,
   });
 
   const pdfBuffer = await generatePdf(html, 'A4', { footerTemplate });

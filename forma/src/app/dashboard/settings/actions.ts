@@ -10,6 +10,54 @@ export interface ActionResult {
   success?: boolean;
 }
 
+const HEX_COLOR = /^#?[0-9a-fA-F]{6}$/;
+
+// W1 identity layer - account's own brand (wordmark name + accent colour).
+// Applied to dashboards and PDFs via resolveBranding. Security Rule 4's
+// server-side length cap, mirroring the student-name rule: names over 100
+// chars rejected. Accent must look like a hex colour; normalised to #RRGGBB
+// so the DB only ever holds clean values.
+export async function updateBrandingAction(input: { name?: string; accent?: string }): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: 'You must be signed in.' };
+  }
+
+  const name = input.name?.trim() ?? '';
+  if (name.length > 100) {
+    return { error: 'Brand name must be 100 characters or fewer.' };
+  }
+
+  let accent: string | null = null;
+  if (input.accent !== undefined) {
+    const raw = input.accent?.trim() ?? '';
+    if (raw !== '') {
+      if (!HEX_COLOR.test(raw)) {
+        return { error: 'Accent must be a hex colour like #C8A84B.' };
+      }
+      accent = raw.startsWith('#') ? raw.toUpperCase() : `#${raw.toUpperCase()}`;
+    } else {
+      accent = null;
+    }
+  }
+
+  const update: Record<string, string | null> = { brand_name: name === '' ? null : name };
+  if (accent !== null || input.accent !== undefined) {
+    update.brand_accent = accent;
+  }
+
+  const { error: updateError } = await supabase.from('users').update(update).eq('id', user.id);
+  if (updateError) {
+    console.error('Failed to update branding', updateError);
+    return { error: 'Could not save your branding - please try again.' };
+  }
+
+  return { success: true };
+}
+
 // Only downgrades locally once Flutterwave itself confirms the
 // subscription is cancelled (or there was never one to cancel) - if the
 // Flutterwave-side call fails, plan stays 'pro' and the user is told to

@@ -131,4 +131,15 @@ describe('renderWorksheetHtml', () => {
     });
     expect(codingHtml).toContain("'Fira Code', monospace");
   });
+
+  it('uses the supplied brand for wordmark, marketing line and header', () => {
+    const html = renderWorksheetHtml({
+      ...data,
+      brand: { name: 'Aisha Ade', accent: '#B8963C' },
+    });
+    expect(html).toContain('Aisha Ade');
+    expect(html).toContain('built by Aisha Ade');
+    expect(html).toContain('color: #B8963C');
+    expect(html).not.toContain('built by Forma');
+  });
 });

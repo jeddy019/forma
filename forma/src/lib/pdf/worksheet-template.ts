@@ -1,4 +1,5 @@
 import type { DiagramSpec } from '../ai/schema';
+import type { Branding } from '../branding';
 
 // Shared HTML/type primitives, not a worksheet renderer any more. PDF
 // rendering moved to src/lib/render/worksheetHtml.ts (HTML -> Chromium
@@ -44,6 +45,8 @@ export interface WorksheetQuestion {
 export interface WorksheetTemplateData {
   header: WorksheetHeaderData;
   questions: WorksheetQuestion[];
+  /** W1 identity layer - wordmark/footer brand. Defaults to platform defaults. */
+  brand?: Branding;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,10 +76,11 @@ export function formatDate(date: Date): string {
 // templates in an isolated context that doesn't see the main document's
 // <link> stylesheets, so this falls back to a system sans-serif instead of
 // Inter. Still used by invoice-template.ts.
-export function buildFooterTemplate(): string {
+export function buildFooterTemplate(brandName: string = 'Forma'): string {
+  const safe = escapeHtml(brandName);
   return `<div style="width: 100%; font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #9A9080; padding: 0 22mm; box-sizing: border-box;">
   <div style="border-top: 0.5px solid #E0D9D0; padding-top: 4px; display: flex; justify-content: space-between;">
-    <span>Forma</span>
+    <span>${safe}</span>
     <span><span class="pageNumber"></span> of <span class="totalPages"></span></span>
   </div>
 </div>`;

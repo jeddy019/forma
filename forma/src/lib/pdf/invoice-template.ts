@@ -1,5 +1,7 @@
 import { buildFooterTemplate, escapeHtml, formatDate } from './worksheet-template';
 import { printFontFaces } from '@/lib/render/printStyles';
+import { BRANDING_DEFAULTS } from '../branding';
+import type { Branding } from '../branding';
 
 // Fonts are embedded via printFontFaces() (base64 data URIs, built once per
 // process) - invoices previously fetched Google Fonts at print time over the
@@ -14,6 +16,8 @@ export interface InvoiceTemplateData {
   planName: string;
   amountFormatted: string;
   paymentReference: string;
+  /** W1 identity layer - wordmark brand. Defaults to platform defaults. */
+  brand?: Branding;
 }
 
 // Deliberately much smaller than PAGE_STYLES in worksheet-template.ts - an
@@ -36,6 +40,7 @@ body { background: #F7F4EF; color: #1A1A18; font-family: 'Inter', sans-serif; fo
 `;
 
 export function renderInvoiceHtml(data: InvoiceTemplateData): { html: string; footerTemplate: string } {
+  const brand = data.brand ?? BRANDING_DEFAULTS;
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -45,7 +50,7 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): { html: string; fo
 </head>
 <body>
   <div class="header-row-1">
-    <span class="wordmark">Forma</span>
+    <span class="wordmark">${escapeHtml(brand.name)}</span>
     <span class="invoice-label">Invoice ${escapeHtml(data.invoiceNumber)}</span>
   </div>
   <hr class="header-rule">
@@ -75,9 +80,9 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): { html: string; fo
     <span class="field-value">${escapeHtml(data.paymentReference)}</span>
   </div>
 
-  <p class="thank-you">Thank you for choosing Forma.</p>
+  <p class="thank-you">Thank you for choosing ${escapeHtml(brand.name)}.</p>
 </body>
 </html>`;
 
-  return { html, footerTemplate: buildFooterTemplate() };
+  return { html, footerTemplate: buildFooterTemplate(brand.name) };
 }

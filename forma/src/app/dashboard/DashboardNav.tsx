@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, FilePlus, Calendar, ClipboardCheck, LayoutTemplate, BarChart3, CalendarRange, Settings, LogOut, Lock } from 'lucide-react';
+import { Users, FilePlus, Calendar, ClipboardCheck, LayoutTemplate, BarChart3, CalendarRange, Settings, LogOut, Lock, LineChart } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // Design System v3 (Phase 9, Step 51): rebuilt from a horizontal top bar
@@ -19,6 +19,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; tutorOnly?: bo
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
   { href: '/dashboard/marking', label: 'Marking', icon: ClipboardCheck, tutorOnly: true },
   { href: '/dashboard/assignments', label: 'Assignments', icon: CalendarRange, tutorOnly: true },
+  { href: '/dashboard/analytics', label: 'Analytics', icon: LineChart, tutorOnly: true },
   { href: '/dashboard/mastery', label: 'Mastery', icon: BarChart3, tutorOnly: true },
   { href: '/dashboard/templates', label: 'Templates', icon: LayoutTemplate, tutorOnly: true },
 ];
@@ -39,23 +40,27 @@ const linkClass = (active: boolean) =>
 export function DashboardSidebar({
   role,
   userEmail,
+  brandName,
   signOutAction,
 }: {
   role: string | null;
   userEmail: string | null;
+  brandName?: string;
   signOutAction: () => void;
 }) {
   const pathname = usePathname();
+  const cleanBrandName = (brandName ?? 'Forma').trim() || 'Forma';
 
   return (
     <aside className="w-14 md:w-60 shrink-0 h-screen sticky top-0 flex flex-col bg-[#F0EBE3] border-r border-[#E0D9D0]">
       <Link
         href="/dashboard/students"
-        className="flex items-center justify-center md:justify-start px-0 md:px-5 h-14 shrink-0 border-b border-[#E0D9D0] text-lg font-semibold text-[#1A3D2E]"
+        className="flex items-center justify-center md:justify-start px-0 md:px-5 h-14 shrink-0 border-b border-[#E0D9D0] text-lg font-semibold text-[#1A3D2E] truncate"
         style={{ fontFamily: 'var(--font-fira)' }}
+        title={cleanBrandName}
       >
-        <span className="hidden md:inline">Forma</span>
-        <span className="md:hidden">F</span>
+        <span className="hidden md:inline">{cleanBrandName}</span>
+        <span className="md:hidden">{cleanBrandName.charAt(0).toUpperCase()}</span>
       </Link>
 
       <nav className="flex-1 flex flex-col gap-0.5 px-2 md:px-3 py-4 overflow-y-auto">

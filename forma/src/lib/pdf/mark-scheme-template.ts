@@ -1,4 +1,5 @@
 import type { WorksheetHeaderData } from './worksheet-template';
+import type { Branding } from '../branding';
 
 // Type primitives only - the Puppeteer/HTML rendering that used to live
 // here (renderMarkSchemeHtml and its helpers) moved to
@@ -27,4 +28,6 @@ export interface MarkSchemeQuestion {
 export interface MarkSchemeTemplateData {
   header: MarkSchemeHeaderData;
   questions: MarkSchemeQuestion[];
+  /** W1 identity layer - wordmark brand. Defaults to platform defaults. */
+  brand?: Branding;
 }
