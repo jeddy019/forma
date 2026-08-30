@@ -10,6 +10,9 @@ import PaymentConfirmedEmail, { type PaymentConfirmedEmailProps } from '@/emails
 import RenewalReminderEmail, { type RenewalReminderEmailProps } from '@/emails/RenewalReminder';
 import PaymentFailedEmail, { type PaymentFailedEmailProps } from '@/emails/PaymentFailed';
 import ScheduleFailedEmail, { type ScheduleFailedEmailProps } from '@/emails/ScheduleFailed';
+import DailyQuizDigestEmail, { type DailyQuizDigestProps } from '@/emails/DailyQuizDigest';
+import FamilyDailyReadyEmail, { type FamilyDailyReadyProps } from '@/emails/FamilyDailyReady';
+import { familyReadySubject } from './familyReadySubject';
 
 // Thin typed wrappers around resend.emails.send(), one per template in
 // src/emails/. Every function returns a boolean rather than throwing -
@@ -161,5 +164,33 @@ export function sendScheduleFailedEmail(to: string, props: ScheduleFailedEmailPr
     subject: `A scheduled worksheet for ${props.studentName} did not generate`,
     brandName: props.brandName,
     react: <ScheduleFailedEmail {...props} />,
+  });
+}
+
+// W8 Wave D (automatic daily quiz): the founder's morning digest. Goes to the
+// owner (tutor) account only - never to a student - and is founder-facing so
+// no List-Unsubscribe (same category as ScheduleFailed above).
+export function sendDailyQuizDigestEmail(to: string, props: DailyQuizDigestProps): Promise<boolean> {
+  return send({
+    to,
+    subject: `${props.dateLabel}: daily practice ready for ${props.generated.length} student${props.generated.length === 1 ? '' : 's'}`,
+    brandName: props.brandName,
+    react: <DailyQuizDigestEmail {...props} />,
+  });
+}
+
+// W8 Wave E (daily practice to the family, 2026-08-30): ONE parent email per
+// family listing every child's practice, replacing the old per-student
+// send. Goes to families.parent_email (the only place a parent email lives
+// now) with the subject derived from the children's first names via
+// familyReadySubject. Recurring parent-facing summary - carries
+// List-Unsubscribe like emails 3/4/5 (see FamilyDailyReady.tsx's comment).
+export function sendFamilyDailyReadyEmail(to: string, props: FamilyDailyReadyProps): Promise<boolean> {
+  return send({
+    to,
+    subject: familyReadySubject(props.entries),
+    brandName: props.brandName,
+    react: <FamilyDailyReadyEmail {...props} />,
+    headers: unsubscribeHeaders(),
   });
 }

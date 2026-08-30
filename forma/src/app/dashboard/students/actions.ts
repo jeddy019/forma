@@ -6,10 +6,6 @@ import { COUNTRIES, SUBJECTS, EXAM_BOARDS_BY_COUNTRY, type Country, type Subject
 
 // Security Rule 4: reject student name over 100 characters, server side.
 const NAME_MAX_LENGTH = 100;
-const EMAIL_MAX_LENGTH = 200;
-// Deliberately simple (not RFC 5322) - this only needs to catch obvious
-// typos before Resend's own delivery attempt does, not be a full validator.
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export interface StudentFormResult {
   error?: string;
@@ -24,8 +20,6 @@ interface ParsedStudentForm {
     curriculumLevel: string;
     yearLevel: string;
     examBoard: string;
-    email: string;
-    parentEmail: string;
     weaknesses: string;
     subjects: string[];
   };
@@ -40,8 +34,6 @@ function parseStudentForm(formData: FormData): ParsedStudentForm {
   const curriculumLevel = String(formData.get('curriculumLevel') ?? '').trim();
   const yearLevel = String(formData.get('yearLevel') ?? '').trim();
   const examBoard = String(formData.get('examBoard') ?? '').trim();
-  const email = String(formData.get('email') ?? '').trim();
-  const parentEmail = String(formData.get('parentEmail') ?? '').trim();
   const weaknesses = String(formData.get('weaknesses') ?? '').trim();
   const subjects = formData.getAll('subjects').map(String);
 
@@ -66,23 +58,13 @@ function parseStudentForm(formData: FormData): ParsedStudentForm {
   if (examBoard && !(EXAM_BOARDS_BY_COUNTRY[country as Country] as readonly string[]).includes(examBoard)) {
     return { error: 'Please select a valid exam board for this country.' };
   }
-  // Optional - see CLAUDE.md's Student Accounts and Data Processor Status.
-  if (email && (email.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(email))) {
-    return { error: 'Please enter a valid email address, or leave it blank.' };
-  }
-  // Also optional - only shown/meaningful for tutor accounts (see
-  // add-parent-email.sql's own comment on why this is a separate field
-  // from the student's own optional email above).
-  if (parentEmail && (parentEmail.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(parentEmail))) {
-    return { error: 'Please enter a valid parent email address, or leave it blank.' };
-  }
 
   const validSubjects = subjects.filter((subject): subject is Subject =>
     (SUBJECTS as readonly string[]).includes(subject)
   );
 
   return {
-    values: { name, country, curriculumLevel, yearLevel, examBoard, email, parentEmail, weaknesses, subjects: validSubjects },
+    values: { name, country, curriculumLevel, yearLevel, examBoard, weaknesses, subjects: validSubjects },
   };
 }
 
@@ -103,7 +85,7 @@ export async function createStudentAction(
   if (parsed.error || !parsed.values) {
     return { error: parsed.error };
   }
-  const { name, country, curriculumLevel, yearLevel, examBoard, email, parentEmail, weaknesses, subjects } =
+  const { name, country, curriculumLevel, yearLevel, examBoard, weaknesses, subjects } =
     parsed.values;
 
   const { error: insertError } = await supabase.from('student_profiles').insert({
@@ -114,8 +96,6 @@ export async function createStudentAction(
     year_level: yearLevel,
     exam_board: examBoard || null,
     subjects: subjects,
-    email: email || null,
-    parent_email: parentEmail || null,
     weaknesses: weaknesses || null,
   });
 
@@ -160,7 +140,7 @@ export async function updateStudentAction(
   if (parsed.error || !parsed.values) {
     return { error: parsed.error };
   }
-  const { name, country, curriculumLevel, yearLevel, examBoard, email, parentEmail, weaknesses, subjects } =
+  const { name, country, curriculumLevel, yearLevel, examBoard, weaknesses, subjects } =
     parsed.values;
 
   const { error: updateError } = await supabase
@@ -172,8 +152,6 @@ export async function updateStudentAction(
       year_level: yearLevel,
       exam_board: examBoard || null,
       subjects: subjects,
-      email: email || null,
-      parent_email: parentEmail || null,
       weaknesses: weaknesses || null,
     })
     .eq('id', studentId);

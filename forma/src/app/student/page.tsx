@@ -1,14 +1,15 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveBranding } from '@/lib/branding';
+import { resolvePortalSession } from '@/lib/portal/server';
+import { portalSignOutAction } from './actions';
 import { cardClass, interactiveCardClass, accentCardClass } from '@/lib/ui/formStyles';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import MasteryBars from '@/lib/ui/MasteryBars';
 import SrsSection, { type ReviewInfo } from '@/lib/ui/SrsSection';
 import ScoresChart, { type ScorePoint } from '@/lib/ui/ScoresChart';
 import StudyNow from '@/lib/ui/StudyNow';
-import { toMasteryBarsAggregated, masteryScore } from '@/lib/mastery/masteryView';
+import { toMasteryBars, masteryScore } from '@/lib/mastery/masteryView';
 import { isDue, nextDueLabel } from '@/lib/srs/engine';
 import { currentStreak } from '@/lib/streak/streak';
 import type { SkillMap } from '@/lib/mastery/types';
@@ -17,7 +18,7 @@ import { BarChart3, FileText, Flame, LogOut, TrendingUp } from 'lucide-react';
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
 
-interface StudentProfileMatch {
+interface StudentRow {
   id: string;
   name: string;
   owner_id: string;
@@ -56,13 +57,12 @@ interface ActivitySubmissionRow {
   submitted_at: string;
 }
 
-async function signOutAction() {
-  'use server';
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  redirect('/student/login');
-}
-
+// W8 Wave B: the student portal's auth gate is now a portal_accounts session
+// (username/password created at enrollment, no email) rather than a Supabase
+// Auth email match - the portal account owns exactly one student, so the old
+// merge-multiple-profiles-by-email path is gone by construction. Everything
+// below the gate is unchanged: the same admin-client, safe-columns-only reads
+// (Security Rules 1) as before.
 export default async function StudentPortalPage({
   searchParams,
 }: {
@@ -73,66 +73,27 @@ export default async function StudentPortalPage({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  // proxy.ts's middleware only protects /dashboard - this route is its
-  // own primary auth gate, not a defensive backup like /dashboard pages'
-  // own redirect checks are.
-  if (!user?.email) redirect('/student/login');
+  const session = await resolvePortalSession('student');
+  if (!session) redirect('/student/login');
 
-  // Security Rules 1's established pattern (/s/[code], /api/submit):
-  // service-role client, explicit safe-column selects only. RLS's
-  // profiles_own/worksheets_own policies are keyed to auth.uid() ===
-  // owner_id, which a student's own auth account never satisfies (the
-  // owner is always their tutor/parent) - RLS cannot express "a student
-  // may read their own data" at all under the current policies, so this
-  // page authorizes itself in application code instead: match the
-  // *verified* Supabase Auth email (never anything client-supplied)
-  // against student_profiles.email, same "never trust client-asserted
-  // identity" principle as /api/submit not trusting a client-supplied
-  // student_id.
   const admin = createAdminClient();
-  const { data: matchedStudents } = await admin
+  const { data: student } = await admin
     .from('student_profiles')
     .select('id, name, owner_id, skill_map')
-    .ilike('email', user.email)
-    .returns<StudentProfileMatch[]>();
+    .eq('id', session.account.student_id as string)
+    .single<StudentRow>();
 
-  if (!matchedStudents || matchedStudents.length === 0) {
-    return (
-      <div className="min-h-screen" style={{ backgroundColor: '#F7F4EF' }}>
-        <PortalHeader />
-        <main className="px-6 py-8 max-w-2xl mx-auto">
-          <div className={`${cardClass} text-center`}>
-            <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">No worksheets found</h1>
-            <p className="text-sm text-[#5C5849]">
-              We couldn&apos;t find any worksheets for {user.email}. Ask your tutor or parent to add this email to
-              your profile.
-            </p>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  if (!student) redirect('/student/login');
 
-  // A student's email could plausibly be on file with more than one
-  // tutor/parent (or both) - the portal merges everything into one
-  // combined history rather than showing separate tabs per profile, only
-  // labelling which profile each row belongs to when there's more than one.
-  const studentIds = matchedStudents.map((s) => s.id);
-  const studentNameById = new Map(matchedStudents.map((s) => [s.id, s.name]));
+  const studentIds = [student.id];
 
   // Same owner-brand resolution as /s/[code] and /q/[code]: the portal is a
   // student-facing surface, so the header carries the account's own brand
-  // rather than "Forma". When a single email matches profiles under more
-  // than one owner, the first profile's owner wins - single-owner reality
-  // in the founder model, and a reasonable merge otherwise.
+  // rather than "Forma".
   const { data: owners } = await admin
     .from('users')
     .select('brand_name, brand_accent')
-    .eq('id', matchedStudents[0].owner_id)
+    .eq('id', student.owner_id)
     .maybeSingle();
   const brand = resolveBranding(owners as { brand_name: string | null; brand_accent: string | null } | null);
 
@@ -168,50 +129,36 @@ export default async function StudentPortalPage({
   const totalPages = count ? Math.max(1, Math.ceil(count / PAGE_SIZE)) : 1;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
-  // Phase B Wave 1 (B5): aggregate each matched profile's skill_map into one
-  // combined set of mastery bars for the student. skill_map carries only
-  // scores/history - no mark scheme - so it is safe to hand to the student
-  // (see masteryView.ts / Security Rules 1; the route uses the admin client
-  // with verified-email matching, same as the rest of this page).
-  const masteryBars = toMasteryBarsAggregated(matchedStudents.map((s) => s.skill_map));
+  const masteryBars = toMasteryBars(student.skill_map);
   const overallMastery = masteryScore(masteryBars);
 
-  // Phase B Wave 1 (B7): load the student's spaced-review schedule across all
-  // matched profiles. buildHes consumed by SrsSection for the "due today"
-  // list + Track toggle. Rows carry no mark scheme and no raw answers -
-  // safe for the student (admin client + verified-email matching, as above).
-  const { data: reviewSchedules } = studentIds.length
-    ? await admin
-        .from('review_schedule')
-        .select('student_id, sub_skill, sub_skill_label, next_review_at')
-        .in('student_id', studentIds)
-        .returns<ReviewScheduleRow[]>()
-    : { data: [] as ReviewScheduleRow[] };
+  // Phase B Wave 1 (B7): load the student's spaced-review schedule. Rows carry
+  // no mark scheme and no raw answers - safe for the student.
+  const { data: reviewSchedules } = await admin
+    .from('review_schedule')
+    .select('student_id, sub_skill, sub_skill_label, next_review_at')
+    .eq('student_id', student.id)
+    .order('next_review_at', { ascending: true })
+    .returns<ReviewScheduleRow[]>();
 
   const reviewMap: Record<string, ReviewInfo> = {};
   const now = new Date();
   for (const row of reviewSchedules ?? []) {
-    const existing = reviewMap[row.sub_skill];
     const entry = { nextReviewAt: row.next_review_at };
-    if (!existing) {
-      reviewMap[row.sub_skill] = {
-        tracked: true,
-        due: isDue(entry, now),
-        nextIn: nextDueLabel(entry, now),
-      };
-    } else {
-      existing.due = existing.due || isDue(entry, now);
-      if (!existing.nextIn || isDue(entry, now)) existing.nextIn = nextDueLabel(entry, now);
-    }
+    reviewMap[row.sub_skill] = {
+      tracked: true,
+      due: isDue(entry, now),
+      nextIn: nextDueLabel(entry, now),
+    };
   }
 
-  // Phase B Wave 1 (B8-B9): load every submission across the student's
-  // worksheets to compute the daily streak and the recent-scores chart -
-  // independent of this page's pagination so the numbers are complete.
+  // Phase B Wave 1 (B8-B9): every submission across the student's worksheets
+  // to compute the daily streak and the recent-scores chart - independent of
+  // this page's pagination so the numbers are complete.
   const { data: activityWorksheets } = await admin
     .from('worksheets')
     .select('id')
-    .in('student_id', studentIds)
+    .eq('student_id', student.id)
     .range(0, 999)
     .returns<{ id: string }[]>();
   const allWorksheetIds = (activityWorksheets ?? []).map((w) => w.id);
@@ -244,8 +191,8 @@ export default async function StudentPortalPage({
       <PortalHeader brandName={brand.name} />
       <main className="px-6 py-8 max-w-2xl mx-auto flex flex-col gap-8">
         <div>
-          <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Your worksheets</h1>
-          <p className="text-sm text-[#5C5849]">{user.email}</p>
+          <h1 className="text-xl font-semibold text-[#1A1A18] mb-1">Hi {student.name.split(' ')[0]} - your practice</h1>
+          <p className="text-sm text-[#5C5849]">Everything you&apos;ve completed, and what&apos;s next.</p>
         </div>
 
         <div className={`${accentCardClass} flex items-center justify-between gap-4`}>
@@ -312,7 +259,6 @@ export default async function StudentPortalPage({
                     {worksheet.subject} - {worksheet.topic}
                   </p>
                   <p className="text-xs text-[#9A9080] mt-1">
-                    {matchedStudents.length > 1 ? `${studentNameById.get(worksheet.student_id) ?? ''} - ` : ''}
                     {new Date(worksheet.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                   </p>
                 </div>
@@ -356,7 +302,7 @@ function PortalHeader({ brandName = 'Forma' }: { brandName?: string }) {
       <span className="text-lg font-semibold text-[#1A3D2E]" style={{ fontFamily: 'var(--font-fira)' }}>
         {brandName}
       </span>
-      <form action={signOutAction}>
+      <form action={portalSignOutAction}>
         <button
           type="submit"
           className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-sm text-[#5C5849] hover:bg-[#F0EBE3] hover:text-[#1A1A18] transition-colors duration-micro ease-premium"

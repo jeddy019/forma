@@ -30,7 +30,6 @@ interface OwnerRow {
 interface StudentProfileRow {
   id: string;
   name: string;
-  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -72,7 +71,7 @@ export async function POST(request: NextRequest) {
 
   const { data: student, error: studentError } = await supabase
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, skill_map, exam_board')
+    .select('id, name, country, curriculum_level, year_level, subjects, skill_map, exam_board')
     .eq('id', studentId)
     .single<StudentProfileRow>();
 
@@ -93,7 +92,6 @@ export async function POST(request: NextRequest) {
   const profile: GenerateQuizProfile = {
     id: student.id,
     name: student.name,
-    email: student.email,
     country: student.country,
     curriculum_level: student.curriculum_level,
     year_level: student.year_level,

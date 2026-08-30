@@ -5,8 +5,9 @@ import EmailLayout, { emailStyles } from './components/EmailLayout';
 // parent-facing deliverable - hard data + the founder's words, sent as a
 // branded PDF attachment (built by /lib/report/generateWeeklyReport.ts). The
 // email body itself stays light: a two-line summary and the attachment is
-// the real product. Always to the parent (student_profiles.parent_email),
-// never the student. Carries List-Unsubscribe - this is a recurring
+// the real product. Always to the family email (families.parent_email - W8
+// Wave E rekeyed this from student_profiles.parent_email), never the
+// student. Carries List-Unsubscribe - this is a recurring
 // summary, the same category as EMAILs 3, 4, and 5.
 export interface WeeklyReportEmailProps {
   studentName: string;

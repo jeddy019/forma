@@ -37,7 +37,6 @@ interface WorksheetRow {
 interface ProfileRow {
   id: string;
   name: string;
-  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -99,7 +98,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await admin
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, owner_id, exam_board')
+    .select('id, name, country, curriculum_level, year_level, subjects, owner_id, exam_board')
     .eq('id', worksheet.student_id)
     .single<ProfileRow>();
 
@@ -116,7 +115,6 @@ export async function POST(request: NextRequest) {
   const quizProfile: GenerateQuizProfile = {
     id: profile.id,
     name: profile.name,
-    email: profile.email,
     country: profile.country,
     curriculum_level: profile.curriculum_level,
     year_level: profile.year_level,
@@ -139,6 +137,7 @@ export async function POST(request: NextRequest) {
       },
       focusSubSkills: targets,
       generatedFrom: 're-practice',
+      sendReadyEmail: false,
     });
   } catch (error) {
     if (error instanceof TrackedError) {

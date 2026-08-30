@@ -2,9 +2,19 @@
 
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
-import { Pencil, Trash2, Users } from 'lucide-react';
-import { addFamilyMemberAction, deleteFamilyAction, removeFamilyMemberAction, updateFamilyAction, type FamilyActionResult } from './actions';
+import { KeyRound, Pencil, Trash2, Users } from 'lucide-react';
+import {
+  addFamilyMemberAction,
+  deleteFamilyAction,
+  removeFamilyMemberAction,
+  updateFamilyAction,
+  provisionParentPortalLoginAction,
+  resetParentPortalLoginAction,
+  type FamilyActionResult,
+  type ParentPortalCredentialResult,
+} from './actions';
 import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from '@/lib/ui/formStyles';
+import PortalCredentialBox from '@/lib/ui/PortalCredentialBox';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import { familyMonthlyPriceLabel } from '@/lib/payments/familyPricing';
 
@@ -13,18 +23,26 @@ import { familyMonthlyPriceLabel } from '@/lib/payments/familyPricing';
 // Shows the parent contact, the children in the family, the monthly tier
 // derived from the child count, and the manage controls: add/remove
 // children (capped at 3), edit the name/email, delete the family.
+//
+// W8 Wave B slice 2: the card also carries the parent-portal provisioning
+// control (issue/reset the parent's /parent/login credentials, shown once
+// through the shared PortalCredentialBox) - the parent portal is the family
+// customer's view-only proof surface, so its credentials live here, next to
+// the family they belong to.
 export default function FamilyCard({
   familyId,
   name,
   parentEmail,
   members,
   unassignedStudents,
+  portalAccount,
 }: {
   familyId: string;
   name: string;
   parentEmail: string | null;
   members: { studentId: string; name: string }[];
   unassignedStudents: { id: string; name: string }[];
+  portalAccount: { username: string; password_reset_at: string | null } | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -32,6 +50,9 @@ export default function FamilyCard({
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [portalCreds, setPortalCreds] = useState<{ username: string; password: string } | null>(null);
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
 
   const [editState, editAction, editPending] = useActionState<FamilyActionResult, FormData>(
     (_prevState, formData) => updateFamilyAction(familyId, _prevState, formData),
@@ -71,6 +92,19 @@ export default function FamilyCard({
     setDeleting(true);
     await run(() => deleteFamilyAction(familyId));
     setDeleting(false);
+  }
+
+  async function handlePortal(action: 'issue' | 'reset') {
+    setPortalBusy(true);
+    setPortalError(null);
+    const result: ParentPortalCredentialResult =
+      action === 'issue' ? await provisionParentPortalLoginAction(familyId) : await resetParentPortalLoginAction(familyId);
+    setPortalBusy(false);
+    if (result.error) {
+      setPortalError(result.error);
+      return;
+    }
+    setPortalCreds({ username: result.username as string, password: result.password as string });
   }
 
   return (
@@ -202,6 +236,54 @@ export default function FamilyCard({
       {message && (
         <p className={`text-sm ${message.kind === 'ok' ? 'text-[#1A3D2E]' : 'text-[#C0392B]'}`}>{message.text}</p>
       )}
+
+      <div className="border-t border-[#E0D9D0] pt-3 flex flex-col gap-2">
+        <p className="text-sm font-medium text-[#1A1A18] flex items-center gap-1.5">
+          <KeyRound className="w-3.5 h-3.5 text-[#1A3D2E]" strokeWidth={1.75} aria-hidden="true" />
+          Parent portal login
+        </p>
+
+        {portalCreds ? (
+          <PortalCredentialBox
+            username={portalCreds.username}
+            password={portalCreds.password}
+            loginPath="/parent/login"
+            recipient="the family"
+            onReset={() => handlePortal('reset')}
+            onDone={() => setPortalCreds(null)}
+            busy={portalBusy}
+          />
+        ) : (
+          <>
+            <p className="text-xs text-[#9A9080]">
+              {portalAccount
+                ? `Login issued (username ${portalAccount.username}). Resetting mints a new password - the old one stops working immediately.`
+                : 'Issue a username and password so the parent can check progress, history, and statements at any time (no email needed).'}
+            </p>
+            {portalAccount ? (
+              <button
+                type="button"
+                onClick={() => handlePortal('reset')}
+                disabled={portalBusy}
+                className="self-start text-sm text-[#1A3D2E] hover:text-[#152F23] transition-colors duration-micro ease-premium disabled:opacity-60"
+              >
+                {portalBusy ? 'Working...' : 'Reset password'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handlePortal('issue')}
+                disabled={portalBusy}
+                className={`${secondaryButtonClass} self-start`}
+              >
+                {portalBusy ? 'Working...' : 'Issue login'}
+              </button>
+            )}
+          </>
+        )}
+
+        {portalError && <p className="text-sm text-[#C0392B]">{portalError}</p>}
+      </div>
     </div>
   );
 }

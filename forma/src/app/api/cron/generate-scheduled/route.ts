@@ -9,6 +9,7 @@ import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { resolveBranding } from '@/lib/branding';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { sendWeeklyDeliveryEmail, sendScheduleFailedEmail } from '@/lib/email/send';
+import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
 import { isDueNow } from '@/lib/schedule/isDueNow';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { callMathEngine, matchMathEngineTopic } from '@/lib/ai/mathEngineClient';
@@ -55,7 +56,6 @@ interface ScheduleRow {
 interface StudentRow {
   id: string;
   name: string;
-  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -66,7 +66,7 @@ interface StudentRow {
 async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Promise<void> {
   const { data: student } = await admin
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, exam_board')
+    .select('id, name, country, curriculum_level, year_level, subjects, exam_board')
     .eq('id', schedule.student_id)
     .single<StudentRow>();
   if (!student) throw new Error(`Student ${schedule.student_id} not found`);
@@ -184,14 +184,18 @@ async function generateAndDeliver(schedule: ScheduleRow, admin: AdminClient): Pr
   await admin.from('schedules').update({ last_generated_at: new Date().toISOString() }).eq('id', schedule.id);
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const recipientEmail = student.email ?? ownerRow?.email;
+  // W8 Wave E (family-first, 2026-08-30): same recipient rule as every other
+  // ready/summary send - family email first, owner fallback. EMAIL 3's
+  // template and weekly scheduling semantics are unchanged.
+  const { emails } = await resolveStudentFamilyEmails(admin, [student.id]);
+  const recipientEmail = emails.get(student.id) ?? ownerRow?.email;
   if (recipientEmail) {
     await sendWeeklyDeliveryEmail(recipientEmail, {
       studentName: student.name,
       subject: worksheet.subject,
       topic: worksheet.topic,
       worksheetUrl: `${appUrl}/s/${inserted.digital_code}`,
-      sentToStudentDirectly: Boolean(student.email),
+      sentToStudentDirectly: false,
       manageScheduleUrl: `${appUrl}/dashboard/schedule`,
       portalUrl: `${appUrl}/student/login`,
       brandName: resolveBranding(ownerRow).name,

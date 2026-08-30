@@ -55,7 +55,7 @@ export function DashboardSidebar({
   return (
     <aside className="w-14 md:w-60 shrink-0 h-screen sticky top-0 flex flex-col bg-[#F0EBE3] border-r border-[#E0D9D0]">
       <Link
-        href="/dashboard/students"
+        href="/dashboard"
         className="flex items-center justify-center md:justify-start px-0 md:px-5 h-14 shrink-0 border-b border-[#E0D9D0] text-lg font-semibold text-[#1A3D2E] truncate"
         style={{ fontFamily: 'var(--font-fira)' }}
         title={cleanBrandName}

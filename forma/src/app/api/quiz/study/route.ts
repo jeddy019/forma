@@ -27,7 +27,6 @@ interface StudyBody {
 interface ProfileRow {
   id: string;
   name: string;
-  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -72,7 +71,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   const { data: matched } = await admin
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, owner_id, skill_map, exam_board')
+    .select('id, name, country, curriculum_level, year_level, subjects, owner_id, skill_map, exam_board')
     .ilike('email', user.email)
     .returns<ProfileRow[]>();
 
@@ -130,7 +129,6 @@ export async function POST(request: NextRequest) {
   const quizProfile: GenerateQuizProfile = {
     id: owningProfile.id,
     name: owningProfile.name,
-    email: owningProfile.email,
     country: owningProfile.country,
     curriculum_level: owningProfile.curriculum_level,
     year_level: owningProfile.year_level,
@@ -153,6 +151,7 @@ export async function POST(request: NextRequest) {
       },
       focusSubSkills: [target],
       generatedFrom: 'study',
+      sendReadyEmail: false,
     });
   } catch (error) {
     if (error instanceof TrackedError) {

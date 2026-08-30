@@ -10,7 +10,8 @@ import { resolveBranding } from '@/lib/branding';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { isActivePro } from '@/lib/payments/planStatus';
-import { sendWorksheetReadyEmail } from '@/lib/email/send';
+import { sendFamilyDailyReadyEmail } from '@/lib/email/send';
+import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
 import { selectFundamentalsTarget } from '@/lib/mastery/selectFundamentalsTarget';
 import { clearFundamentalsFlag } from '@/lib/mastery/clearFundamentalsFlag';
 import { EXPECTED_TYPE_ORDER, DAILY_TYPE_ORDER } from '@/lib/ai/schema';
@@ -40,7 +41,6 @@ interface GenerateRequestBody {
 interface StudentProfileRow {
   id: string;
   name: string;
-  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
 
   const { data: student, error: studentError } = await supabase
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, skill_map, exam_board')
+    .select('id, name, country, curriculum_level, year_level, subjects, skill_map, exam_board')
     .eq('id', studentId)
     .single<StudentProfileRow>();
 
@@ -288,22 +288,27 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // EMAIL 2 (Email Templates): "Worksheet ready - manual generation, sent
-  // to student." Same student.email ?? owner.email fallback as the
-  // scheduled cron's EMAIL 3 send - never fails the request itself (send()
-  // already never throws; this is additionally fire-and-forget so a slow
-  // or failed send can't hold up the response the tutor/parent is waiting
-  // on for their own generation).
-  const recipientEmail = student.email ?? ownerRow?.email;
+  // W8 Wave E (family-first ready email, 2026-08-30): a manual worksheet's
+  // ready notice goes to the student's FAMILY email (the only place a parent
+  // email lives now), falling back to the owner when the student is not in a
+  // family with an email yet - never fails the request itself (send() already
+  // never throws; this is additionally fire-and-forget so a slow or failed
+  // send can't hold up the response the tutor/parent is waiting on).
+  const { emails } = await resolveStudentFamilyEmails(supabase, [student.id]);
+  const recipientEmail = emails.get(student.id) ?? ownerRow?.email;
   if (recipientEmail) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-    void sendWorksheetReadyEmail(recipientEmail, {
-      studentName: student.name,
-      subject: inserted.subject,
-      topic: inserted.topic,
-      worksheetUrl: `${appUrl}/s/${inserted.digital_code}`,
-      sentToStudentDirectly: Boolean(student.email),
-      portalUrl: `${appUrl}/student/login`,
+    void sendFamilyDailyReadyEmail(recipientEmail, {
+      dateLabel: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+      entries: [
+        {
+          name: student.name,
+          subject: inserted.subject,
+          topic: inserted.topic,
+          url: `${appUrl}/s/${inserted.digital_code}`,
+          digitalCode: inserted.digital_code,
+        },
+      ],
       brandName: resolveBranding(ownerRow).name,
     }).catch((error) => console.error('Failed to send worksheet-ready email', error));
   }

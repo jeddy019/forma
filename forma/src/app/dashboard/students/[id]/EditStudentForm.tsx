@@ -15,14 +15,12 @@ export interface EditableStudent {
   year_level: string | null;
   exam_board: string | null;
   subjects: string[] | null;
-  email: string | null;
-  parent_email: string | null;
   weaknesses: string | null;
 }
 
 const initialState: StudentFormResult = {};
 
-export default function EditStudentForm({ student, isTutor }: { student: EditableStudent; isTutor: boolean }) {
+export default function EditStudentForm({ student }: { student: EditableStudent }) {
   const [state, formAction, pending] = useActionState(
     updateStudentAction.bind(null, student.id),
     initialState
@@ -164,38 +162,6 @@ export default function EditStudentForm({ student, isTutor }: { student: Editabl
           </div>
         </div>
       </div>
-
-      <div>
-        <label className={labelClass} htmlFor={`edit-student-email-${student.id}`}>
-          Student email (optional)
-        </label>
-        <input
-          id={`edit-student-email-${student.id}`}
-          name="email"
-          type="email"
-          maxLength={200}
-          defaultValue={student.email ?? ''}
-          className={inputClass}
-          placeholder="Leave blank to send worksheets to your own email instead"
-        />
-      </div>
-
-      {isTutor && (
-        <div>
-          <label className={labelClass} htmlFor={`edit-parent-email-${student.id}`}>
-            Parent email (optional)
-          </label>
-          <input
-            id={`edit-parent-email-${student.id}`}
-            name="parentEmail"
-            type="email"
-            maxLength={200}
-            defaultValue={student.parent_email ?? ''}
-            className={inputClass}
-            placeholder="For sending the weekly parent report"
-          />
-        </div>
-      )}
 
       <div>
         <label className={labelClass} htmlFor={`edit-weaknesses-${student.id}`}>

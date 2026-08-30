@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { FAMILY_MAX_CHILDREN, FAMILY_CURRENCY, familyMonthlyPrice } from '@/lib/payments/familyPricing';
 import { currentInvoicePeriod, hasInvoiceForPeriod } from '@/lib/invoices/familyBilling';
+import { generatePortalPassword, generatePortalUsername, hashPortalPassword } from '@/lib/portal/password';
 
 // Founder model W4 (family plan): server actions for the tutor-only Families
 // page. Every action runs an RLS ownership select first - the authenticated
@@ -350,17 +352,97 @@ export async function markFamilyInvoicePendingAction(invoiceId: string): Promise
     return { error: 'Invoice not found.' };
   }
 
-  // Reverting clears both the paid marker and the payment note - an unpaid
-  // bill records no payment details by definition.
-  const { error: updateError } = await supabase
-    .from('family_invoices')
-    .update({ status: 'pending', paid_at: null, payment_note: null })
-    .eq('id', invoiceId);
-  if (updateError) {
-    console.error('Failed to mark invoice pending', updateError);
-    return { error: 'Could not reverse this invoice - please try again.' };
+  revalidatePath('/dashboard/families');
+  return { success: true };
+}
+
+// --- Parent portal provisioning (W8 Wave B slice 2) ---
+//
+// Mirrors the student provision/reset pair: the ONLY paths that create or
+// reset a family's parent-portal login (kind 'parent', family_id). The
+// plaintext password exists ONLY in the response of the action that just
+// created it (shown once on screen); the DB stores only the scrypt hash, so
+// only Reset can mint another. portal_accounts is deny-all RLS, so both go
+// through the admin client after an RLS-scoped ownership check on the family.
+
+export interface ParentPortalCredentialResult {
+  error?: string;
+  username?: string;
+  password?: string;
+}
+
+async function requireFamilyOwner(familyId: string): Promise<{ error?: string; familyId?: string }> {
+  const auth = await requireTutor();
+  if (auth.error || !auth.userId) return { error: auth.error };
+  if (!UUID_PATTERN.test(familyId)) return { error: 'Invalid family.' };
+  const supabase = await createClient();
+  const { data: owned } = await supabase.from('families').select('id').eq('id', familyId).maybeSingle();
+  if (!owned) return { error: 'Family not found.' };
+  return { familyId };
+}
+
+export async function provisionParentPortalLoginAction(familyId: string): Promise<ParentPortalCredentialResult> {
+  const owner = await requireFamilyOwner(familyId);
+  if (owner.error || !owner.familyId) return { error: owner.error };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from('portal_accounts')
+    .select('id')
+    .eq('family_id', owner.familyId)
+    .maybeSingle<{ id: string }>();
+  if (existing) {
+    return { error: 'This family already has a parent login. Use "Reset password" to issue a new one.' };
+  }
+
+  const { data: familyRow } = await admin.from('families').select('name').eq('id', owner.familyId).single<{ name: string }>();
+  const username = generatePortalUsername(familyRow?.name ?? '');
+  const password = generatePortalPassword();
+
+  const { error } = await admin.from('portal_accounts').insert({
+    kind: 'parent',
+    family_id: owner.familyId,
+    username,
+    password_hash: hashPortalPassword(password),
+  });
+  if (error) {
+    console.error('Failed to provision parent portal login', error);
+    return { error: 'Could not create the parent login - please try again.' };
   }
 
   revalidatePath('/dashboard/families');
-  return { success: true };
+  return { username, password };
+}
+
+export async function resetParentPortalLoginAction(familyId: string): Promise<ParentPortalCredentialResult> {
+  const owner = await requireFamilyOwner(familyId);
+  if (owner.error || !owner.familyId) return { error: owner.error };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from('portal_accounts')
+    .select('id, username')
+    .eq('family_id', owner.familyId)
+    .maybeSingle<{ id: string; username: string }>();
+  if (!existing) {
+    return { error: 'No parent login exists yet - issue one first.' };
+  }
+
+  const password = generatePortalPassword();
+  const { error } = await admin
+    .from('portal_accounts')
+    .update({
+      password_hash: hashPortalPassword(password),
+      password_reset_at: new Date().toISOString(),
+      failed_attempts: 0,
+      locked_until: null,
+    })
+    .eq('id', existing.id);
+  if (error) {
+    console.error('Failed to reset parent portal password', error);
+    return { error: 'Could not reset the password - please try again.' };
+  }
+
+  revalidatePath('/dashboard/families');
+  return { username: existing.username, password };
 }

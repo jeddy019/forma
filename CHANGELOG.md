@@ -4919,3 +4919,461 @@ rollout. Before the founder uses the Invoices card: run
 supabase/add-family-invoices.sql (the SQL Editor will show a "destructive
 operations" warning - safe, it only DROP TRIGGER IF EXISTS / CREATE OR
 REPLACE FUNCTION, no DROP TABLE anywhere).
+
+---
+
+SESSION UPDATE (following the one above):
+Completed: W8 round 1 (account-model milestone, Wave A) - the "Product
+Experience Model" POV documentation and the founder "Needs you today" /dashboard
+home. The /dashboard redirect-to-students is gone; the index now renders a
+server component cockpit (src/app/dashboard/page.tsx) that answers the daily
+question from data we already store - which students have no practice generated
+yet today (worksheets.created_at >= midnight London), unsubmitted work from the
+last 7 days (worksheets without a submission row), weekly reports still to send
+this week (parent_email set and last_report_sent_at < 7 days), family invoices
+due (family_invoices.status = 'pending', with outstanding total), plus a
+this-week stat strip (issued / submitted / average score / unsubmitted) and a
+quick-actions row. "All caught up" state, empty-account state with an Add-a-
+student action, and a matching loading.tsx skeleton. Sidebar wordmark now links
+to /dashboard instead of /dashboard/students. CLAUDE.md gained the PRODUCT
+EXPERIENCE MODEL section (parent = proof report + portal never a paywall;
+student = link/code practice + optional auto-provisioned no-email account;
+founder = sole operator with the cockpit), the DAILY QUIZ founder-model rules
+(automatic 06:00 quiz, hard -> 5 questions / moderate -> 10, never easy-tier,
+founder-side Volume + Difficulty-posture dials, holiday posture Normal/Light/
+Paused manual default Light), the COUNTRY-AWARENESS rule (GBP for every country
+by design), and the WEEKLY REPORT FOUNDER SECTION decision (attentiveness check
+only, no text field, behaviour/punctuality live in the founder's own note; a
+"Practised at" difficulty line included).
+Next: Wave C (weekly report enrichment - trend chart, topics, sub-skill
+strengths/weaknesses, session count, difficulty line, attentiveness check +
+note save) followed by Wave B (portal accounts, parent portal, student login)
+then Wave D (automatic daily quiz + founder digest cron).
+Decisions (with the user): weekly-report rating section = attentiveness check
+ONLY, behaviour/punctuality deliberately have no rows (the founder's written
+note carries anything about them); the parent report gets a "Practised at"
+difficulty line; "parent wants more" is handled by founder-side per-student
+Volume (Light/Standard/Deep) and Difficulty-posture (Match/Push/Consolidate)
+dials - no parent self-serve controls ever; holiday posture = Light by default,
+manual (country term dates differ, no auto-detection); Resend domain fix
+deferred to launch - the founder digest to [founder-inbox] works on the
+current testing tier, every other parent email stays blocked until a domain is
+verified at resend.com/domains; correction to the previous entry's open-risk
+line: add-family-invoices.sql is now VERIFIED APPLIED (user ran it; table +
+10 columns + RLS confirmed live), the Invoices card is usable.
+Verification: vitest 258/258 across 36 files; tsc --noEmit clean; eslint 0
+errors on the three touched files (fixed React-purity lint - Date.now() in a
+component body is impure, refactored to a single explicit `now` date passed
+into the midnight-in-London helper); live smoke on the running dev server:
+/dashboard -> 307 to /login?redirect=%2Fdashboard (proxy intact), / 200, no
+compile errors in dev-server.log. The authenticated render is for the user to
+review at localhost:3000 (demo tutor login), per the session rule.
+
+## [2026-08-29] W8 Wave C - weekly report enrichment (proof, not promise)
+
+**What:** the W2 weekly branded proof report now proves more than a single
+weekly average. The parent-facing PDF (and the founder's own daily-ops view)
+carries real evidence of the system doing its job: a 4-week score trend
+chart, the difficulty level practised at, distinct days practised, this
+week's topics, sub-skill strengths/weaknesses straight from the mastery map,
+and the founder's attentiveness check keeping the founder section a plain
+binary - the exact "rating" the user asked for (no text field; behaviour and
+punctuality deliberately have no rows, anything about them lives in the
+founder's written note, which is never AI-drafted).
+
+**Decisions (from the user's explicit answers this session):**
+- Attentiveness = a literal plain checkbox ("no txt field"). Checked ->
+  "Attentive across this week's practice"; unchecked -> "needs monitoring";
+  left unmarked (null) -> the line is omitted from the PDF entirely, never
+  invented. A small "Unmark" affordance returns a marked student to the
+  omitted state. The value is a STANDING per-student column like report_note:
+  the founder marks it once and the Monday cron rides it, exactly like the
+  saved note.
+- This session's earlier plan-mode decisions (already in CLAUDE.md, now
+  acted on in code): the report gains a "Practised at" difficulty line;
+  sub-skill strengths/weaknesses come from skill_map; the trend uses the last
+  4 weekly buckets.
+
+**Build:**
+- src/lib/report/buildWeeklyReport.ts rewritten around a stable options
+  object: buildWeeklyReport(submissions, sinceIso, { skillMap,
+  trendSubmissions, attentive }, now). New pure helpers buildScoreTrend()
+  (4 fixed 7-day buckets ending at the report's "since" boundary, oldest
+  first, null average for an empty week - so an honest gap renders as a muted
+  stub, never a fabricated bar) and subSkillHighlights() (reuses the mastery
+  UI's classify() so the report never disagrees with the founder's mastery
+  bars; strengths = mastered/strong, weaknesses = weak/progressing weakest
+  first). New WeeklyReportData fields: daysPractised, topicsPractised (unique,
+  most-recent-first), difficultyPractised, trend, subSkills, attentive.
+- src/lib/report/generateWeeklyReport.ts: the submissions query spans 28 days
+  (TREND_SPAN_DAYS) with nested worksheets(topic, difficulty); StudentReportRow
+  now requires skill_map + report_attentive; the week vs trend split feeds
+  buildWeeklyReport's options. The same assembly serves manual send and cron,
+  so a mid-week manual send and Monday's auto send never disagree.
+- src/app/dashboard/students/[id]/actions.ts: saveReportNoteAction now takes
+  (studentId, note, attentive) and writes report_note + report_attentive
+  together (attentive echoed as-is so the founder can clear it); the send
+  action takes the same triple and falls each back to the standing value.
+- src/app/dashboard/students/[id]/WeeklyReportForm.tsx: rebuilt - a plain
+  checkbox for attentiveness + unmark escape, the note textarea (standing +
+  one-click send override), Save-as-defaults / Send buttons, last-sent line,
+  disabled send when no parent email. Uses the shared FormHeader.
+- src/app/dashboard/students/[id]/page.tsx + api/cron/weekly-report/route.ts:
+  thread report_attentive through select -> form/props.
+- src/lib/pdf/report-template.ts rebuilt: data-grid rows (Worksheets /
+  Average / Days practised / Practised at), topic chips, an inline SVG 4-bar
+  "Score trend" (brand-accent bars, muted empty stubs, % labels), the
+  practice log, a Sub-skill mastery Strengths/To-work-on grid (omitted when
+  the skill_map is empty), and the founder section with the attentiveness
+  line before the gold note block. COLOUR FLOOR respected; brand wordmark
+  rules unchanged.
+- src/lib/brief/generateSessionBrief.ts + sessionBrief.test.ts: call sites
+  fixed to the 4-arg buildWeeklyReport signature (they reused the report's
+  aggregation - the signature change rippled and the handoff summary caught
+  it via tsc, confirming the ripple-check habit works).
+- supabase/add-report-attentive.sql: the one-column migration the user must
+  run before live send/cron works.
+
+**Verification:** vitest 258 -> 266/266 across 36 files (weeklyReport.test.ts
+rewritten for the new signature + 8 new tests: trend bucketing incl. the
+empty-week null, sub-skill strengths/weaknesses order, distinct
+days/topics/difficulty most-recent-first, attentive carry-through + default
+null, template sections - trend/difficulty/topics/sub-skills/attentive line -
+plus attentive-empty omission and the HTML-escape inject test); tsc --noEmit
+clean; eslint 0 errors 0 warnings on all touched files. Rendered the report
+end-to-end through the browser pool with an Aisha-mirroring fixture (6 scored
+worksheets, 4-week trend, mastery map with a mastered/strong/weak mix,
+attentive checked): 66KB printed PDF left at
+forma/scratch-aisha-report-enriched.pdf plus a 2x full-page screenshot at
+forma/scratch-aisha-report-enriched.png for the founder's eyeball (both
+untracked, delete after review).
+
+**Blocked on the user:** run supabase/add-report-attentive.sql in the Supabase
+SQL Editor (1 ALTER TABLE, safe IF NOT EXISTS) - without it the student page's
+report card and the weekly-report cron 400 on the unknown column. flag for the
+resume prompt.
+
+## [2026-08-29] W8 Wave B slice 1 - portal accounts (username + password, no email)
+
+**What:** the PRODUCT EXPERIENCE MODEL's account layer begins. Students no
+longer need an email, a Supabase Auth identity, or a magic link to see their
+own progress. Instead the founder auto-generates a username + password portal
+credential at enrollment (next slice wires provisioning/reset into the
+students surface); the child logs in at /student/login and their portal reads
+the single student their portal_accounts row owns. One kind per person,
+scrypt-hashed passwords, hashed opaque session tokens, deny-all RLS. Parent
+portal accounts (kind 'parent', keyed on family_id) come in the next slice
+with the /parent portal itself.
+
+**Build:**
+- supabase/add-portal-accounts.sql: portal_accounts (kind student|parent with
+  an exactly-one-target CHECK, username UNIQUE on LOWER, scrypt password_hash,
+  failed_attempts + locked_until + last_login_at + password_reset_at) and
+  portal_sessions (account_id, token_hash UNIQUE, expires_at). Both RLS-enabled
+  with ZERO policies - deny-all, only the service-role admin client touches
+  them (same pattern as usage_log / webhook_events / question_bank). Never add
+  a public/authenticated policy to either.
+- src/lib/portal/password.ts (pure, tested): scryptSync N=16384 r=8 p=1,
+  key length 64, stored as scrypt$N,r,p$salt$key (base64url). verify uses
+  timingSafeEqual and returns false on malformed input (never throws).
+  generatePortalPassword() = 8 chars from an unambiguous alphabet dashed as
+  xxxx-xxxx; generatePortalUsername(name) = first-word slug + 4 consonant
+  chars (e.g. aisha-kxqr) so the founder can spot the account and a student
+  cannot guess the suffix.
+- src/lib/portal/session.ts (pure, tested): opaque 256-bit bearer token;
+  DB stores only its SHA-256 hex. portal_session cookie, 30-day TTL.
+- src/lib/portal/server.ts: the ONE shared session resolver (resolvePortalSession(kind),
+  clearPortalSession) used by login, the /student page, and sign-out - never
+  importable from client code.
+- src/app/student/login/: page.tsx (server shell, neutral Forma wordmark -
+  pre-identity so no owner brand can be shown) + StudentLoginForm.tsx
+  (useActionState form: username + password + the "no login needed for
+  practice links" honest spacing) + actions.ts (portalLoginAction: case-
+  insensitive username lookup, kind-scoped, locked-account early reject,
+  failed-attempt counter with 10-strike/15-minute lockout, session token
+  insert + httpOnly/sameSite=lax cookie set, redirect /student).
+- src/app/student/page.tsx: auth gate swapped from Supabase-Auth-email-match
+  to the portal session. The account owns exactly ONE student, so the old
+  merge-multiple-profiles-by-email path is deleted by construction; the skill
+  bars / streak / chart / SRS / StudyNow / worksheet list reads are unchanged
+  (still admin-client, safe columns only). Header line now greets the student
+  by first name instead of showing an email. signOut = portalSignOutAction
+  (src/app/student/actions.ts, revokes the DB row then clears the cookie).
+
+**Decisions:** student accounts remain OPTIONAL and never a gate (the /s and
+/q links still work with zero login, per the model); the portal is purely the
+"see your own progress over time" surface. Portal auth deliberately does NOT
+use Supabase Auth - it requires an email and the founder model requires none.
+One account per student/family enforced by functional unique indices.
+Credentials are shown once at provisioning and resettable by the founder only.
+
+**Verification:** vitest 266 -> 279/279 across 39 files (portal.test.ts, 11
+new: hash/verify round-trip, wrong/malformed rejection, salting, generated
+password shape + sign-in closure, username derivation incl. stripping +
+fallback + suffix variety, session token raw-vs-hash determinism/uniqueness,
+session constants - and this run's scratch pdf/png tests were deleted after
+passing, back to 37 files/268 tests in the tree). tsc --noEmit clean; eslint
+0 errors 0 warnings on all touched files (one unused-import warning cleaned).
+Live smoke on the running dev server: /student/login 200; /student 307 -> login
+(no session; the portal_sessions-query path can't be exercised until the SQL
+is applied). Note: once add-portal-accounts.sql is applied, /student with a
+stale/no cookie still 307s; a real portal_accounts row is required before a
+login succeeds - that IS the provisioning slice next.
+
+**Blocked on the user:** run supabase/add-portal-accounts.sql AND
+supabase/add-report-attentive.sql in the Supabase SQL Editor (both are
+additive, IF NOT EXISTS / unique-index only, no destructive operations).
+Until then /student 500s on the session query when a cookie exists (missing
+table) and the Wave C send/cron 400s (missing column).
+
+**Next:** Wave B slice 2 - founder-side provisioning + reset ("Issue portal
+login" on the students list / detail, shows username + password once, reset
+generates new password), then the parent portal at /parent (kind='parent'
+account -> family -> children progress, history, mastery, past weekly reports,
+invoice statements; strictly view-only, no self-serve configuration - the
+anti-swallow invariant).
+
+---
+
+SESSION UPDATE (Wave B slice 2a - founder portal-login provisioning):
+
+Completed: the founder can now create and reset a student's portal login
+from /dashboard/students/[id]. New PortalLoginCard (client component) sits
+at the top of the tutor-pro block with a gold accent rail + FormHeader. Two
+new server actions in [id]/actions.ts:
+- provisionPortalLoginAction(studentId): requireTutorPro -> RLS-off server
+  ownership check on student_profiles -> admin-client existence check on
+  portal_accounts (reject if already issued) -> generate username
+  (generatePortalUsername) + password (generatePortalPassword) -> insert
+  kind 'student' row with scrypt hash -> return { username, password } so
+  the plaintext is shown ONCE on screen and never stored.
+- resetPortalLoginAction(studentId): same ownership path, requires an
+  existing account, rotates password_hash, stamps password_reset_at, clears
+  failed_attempts/locked_until, returns the new plaintext once.
+Both are the ONLY writers to portal_accounts and revalidatePath the detail
+page. The card shows: idle state ("Issue login" when none exists; username +
+last-reset date + "Reset password" when it does), then a gold creds box
+(username + password in monospace, a clipboard copy button, the /student/login
+URL, a "Reset password" affordance) until "Got it - hide" dismisses it. No
+self-serve forgot-password by design - a minor's credentials come only from
+the founder. The page's existing portalAccount read goes through the admin
+client (deny-all RLS) and passes username + password_reset_at into the card.
+
+Decisions: plaintext password exists ONLY in the provisioning/reset action
+response (single on-screen display); no DB "shown/acknowledged" flag needed
+- if the founder misses the on-screen creds they simply Reset to mint a
+fresh one. A second reset always wins (no double-issue race beyond the
+insert's unique index on target handling the collide). Reset clears lockout.
+The card corrects its own guidance if a username collision errors.
+
+Verification: 277/277 tests (37 files) after adding the cards/actions (no
+new tests - the provisioning path needs live Supabase so the coverage stays
+in the portal lib + existing suites); tsc --noEmit clean; eslint 0 on all
+three touched files; /dashboard/students/<uuid> smoke 307 (protected route
+compiles, redirects to /login with the redirect param preserved);
+/student/login 200. Needs the founder's logged-in browser to eyeball:
+nothing here runs without an authenticated tutor+pro session (the card is
+unreachable below auth). Next: Wave B slice 2b - the parent portal at /parent
+(kind 'parent' account -> family -> children progress, history, mastery,
+past weekly reports, invoice statements; strictly view-only, no self-serve
+configuration - the anti-swallow invariant).
+
+---
+
+SESSION UPDATE (Wave B slice 2b - the parent portal at /parent):
+
+Completed: a view-only family proof portal, reachable at /parent with its own
+login (/parent/login), plus the founder-side control that provisions its
+credentials (parent accounts are kind 'parent' on portal_accounts, keyed by
+family_id - the W8 schema always had the column, this slice is the first
+writer/reader of it).
+
+New shared login core at src/lib/portal/login.ts: runPortalLogin(kind,
+username, password) now owns ALL the auth work (case-insensitive lookup
+scoped to kind, 10-strike/15-min lockout, scrypt verify, session-token
+insert, cookie) so the /student and /parent login actions are genuinely
+identical - portalLoginAction and parentLoginAction are thin wrappers that
+pick the target page. The student login path was refactored onto it and
+behaves exactly as before (verified: /student/login 200, /student 307 alone;
+user-confirmed working earlier this session).
+
+Parent portal page (/parent/page.tsx): resolvePortalSession('parent') gates
+it; every read is admin-client + filtered by the family_id the session
+already owns, and only student-safe columns are ever selected (Security
+Rules 1). Renders the account's brand (founder's name, via
+resolveBranding(users) on the family owner), then per child: name +
+curriculum line + average mastery, Recent scores (ScoresChart), What they
+know (MasteryBars over skill_map), Recent work (last 5 worksheets with
+scores / "Due"), and the latest weekly report send date + founder note.
+Then the family Statements card from family_invoices (period + amount +
+Paid/Payment due badge - informational only, never a paywall/gate, no
+mark-paid controls, no statement PDF links since that API is auth-scoped to
+the founder). Country-aware date locales (en-GB/en-US/en-CA). Deliberately
+NOT shown: difficulty dials, mark schemes, SRS, any self-serve config - the
+anti-swallow invariant.
+
+Parent login trio: /parent/login (neutral "Forma" pre-identity shell, links
+back to /student/login and /login), ParentLoginForm (same username/password
+shape as the student one), parentLoginAction (kind 'parent'). Sign-out via
+/parent/actions.ts parentSignOutAction (shared clearPortalSession).
+
+Founder provisioning on /dashboard/families: new provisionParentPortal
+LoginAction + resetParentPortalLoginAction in families/actions.ts (mirror
+the student pair; requireFamilyOwner RLS-check then admin-client
+portal_accounts write). FamilyCard gained a "Parent portal login" section
+using the NEW shared PortalCredentialBox component (src/lib/ui/
+PortalCredentialBox.tsx) - the same one-time gold creds reveal (username/
+password mono, copy button, Reset, Got it - hide) now used identically by
+the student card, which was refactored onto it. families/page.tsx reads the
+portal account state via admin client and threads it into each FamilyCard.
+
+Decisions: no new SQL - the portal_accounts schema (kind + family_id +
+deny-all RLS) already covered parent accounts; nothing suggests otherwise.
+Statement status is displayed to parents as information, consistent with
+"payment status is a soft signal." The shared PortalCredentialBox replaces
+the student card's inline box so both surfaces show one consistent reveal.
+
+Verification: 277/277 tests (37 files) - no new unit tests ride the shared
+login core (it needs the admin client); the pure password/session libs were
+already covered. tsc --noEmit clean; eslint 0 across all touched files;
+route smokes: /parent 307 -> /parent/login, /parent/login 200, /student 307,
+/student/login 200, /dashboard/families 307 (protected). Needs the founder's
+logged-in browser to eyeball: provision a parent login from Families (Issue
+login -> shown once -> reset), then log in at /parent/login in a private
+window and check the per-child data + statements render. Next: Wave D -
+automatic daily quiz (morning, per-student dials) + the founder digest cron.
+
+---
+
+SESSION UPDATE (Wave D slice 1 - automatic daily quiz + founder digest):
+
+Completed: the daily-driver automation of the founder model, verifiable on the
+Hobby plan (daily 06:00 cron, no sub-daily schedule). One automatic quiz per
+student per morning, derived from the student's own founder-side dials, plus
+a single morning digest email to the founder listing every student's link.
+
+- src/lib/daily/dailyDialPlan.ts: pure resolver turning the three dials into
+  the concrete daily plan (question count + a difficulty sentence folded into
+  the topic text). Rules from CLAUDE.md exactly: volume Light=5 / Standard=10
+  (5 when the student is higher-tier - "length by difficulty, never
+  easy-tier") / Deep=15; posture Match / Push-one-tier (silent at the cap) /
+  Consolidate; holiday posture Paused=null (skip), Light=5 moderate no-push,
+  Normal. Pure - trivially unit-tested (dailyDialPlan.test.ts).
+- src/lib/daily/dailyTarget.ts: picks WHAT the automatic quiz targets, in
+  priority order - RETURN TO FUNDAMENTALS (skill_map needsFundamentals flag)
+  > weakest not-yet-mastered sub-skill (ties broken by freshest practice) >
+  most recent worksheet's topic (first auto-quiz is never generic). Pure,
+  unit-tested (selectDailyTarget.test.ts). Reuses the existing mastery libs
+  (selectFundamentalsTarget, clearFundamentalsFlag) - no new SQL for this.
+- src/app/api/cron/daily-quiz/route.ts: the 06:00 cron. Per-owner parallel
+  student loop with retry-once-per-student isolation (one failing daily set
+  never stops the rest - same discipline as generate-scheduled). Skips
+  holiday-paused, already-generated (last_daily_generated_at idempotency
+  stamp, so a re-run never mints a second quiz the same day), and
+  no-history students. Folds the plan's difficulty directive and the
+  weakest/fundamentals sub-skill directive into the generateQuiz call.
+- lib/quiz/generateQuiz.ts + lib/ai/buildUserPrompt.ts: generatedFrom 'daily'
+  validates/inserts as a daily worksheet, all-core typeOrder (no warm-up, no
+  challenge, never easy-tier - an all-`core` array padded to the dial's
+  count), optional questionCount (5|10|15), dailyStyle prose ("N core
+  questions, all at level..."), a caller-provided subSkillDirective that wins
+  over the internal focus/fundamentals builders, and sendReadyEmail:false so
+  the per-student EMAIL 2 does not duplicate the digest.
+- src/emails/DailyQuizDigest.tsx + sendDailyQuizDigestEmail(): founder's
+  morning digest - one line per student (name, subject - topic, Open practice
+  link to /q/[code]), a muted footer listing skipped/failed counts so nothing
+  vanishes silently, and Alison's-colour brand on it. Founder-facing so no
+  List-Unsubscribe (same category as ScheduleFailed).
+- vercel.json: the daily-quiz cron re-entered at "0 6 * * *" - daily, so
+  Hobby-legal (only sub-daily schedules were the blocker). generate-scheduled
+  stays REMOVED per the W7/wait-for-Pro decision.
+- supabase/add-daily-dials.sql: practice_volume / difficulty_posture /
+  holiday_posture / last_daily_generated_at on student_profiles (+ index on
+  holiday_posture, last_daily_generated_at). NOT YET APPLIED - the user runs
+  it in the SQL Editor (same pattern as add-report-attentive.sql recently).
+  Without it the student dials card shows columns error on the live DB.
+- src/app/dashboard/students/[id]/DailyDialsCard.tsx + saveDailyDialsAction:
+  the founder's per-student dials UI (three selects + save). Founder-only
+  (PRODUCT EXPERIENCE MODEL: parents never see these). Renders beneath the
+  PortalLoginCard on the student page.
+- Bonus from the same surviving session: B74 tutor analytics dashboard
+  (src/app/dashboard/analytics/ + [studentId]/ drilldown, pure stats lib at
+  src/lib/analytics/stats.ts, nav link added) - completion rate / avg score /
+  time-to-finish / topics covered + per-student + per-topic breakdowns,
+  capped at 500 rows (Performance Rule 3), tutor-pro gated.
+
+Decisions: the daily quiz folds its difficulty/volume directives into the
+topic text (same mechanism generate-scheduled already uses) rather than
+adding a dedicated difficulty parameter to the AI prompt. Question count on
+the prompt is handled by the all-core typeOrder + the MSG's own request;
+buildUserPrompt's dailyStyle prose covers the "no warm-up/challenge" rule.
+
+Verification: 293/293 tests (39 files - +16 from the surviving session:
+dailyDialPlan, selectDailyTarget, analyticsStats, portal); tsc --noEmit
+clean; eslint 0 errors across the whole src tree (5 pre-existing warnings);
+route smokes via the running app (daily-quiz 401 without CRON_SECRET, dials
+card reachable server-side on /dashboard/students/[id] behind auth). Needs
+the user: run add-daily-dials.sql in the SQL Editor, then eyeball the dials
+card + analytics pages in the founder browser. Next: user eyeball + digest
+run-through, then W8 close-out (this wave's CHANGELOG + status only catch
+Wave D; Wave A dashboard cockpit + Wave C report enrichment were done in
+the sessions before the crash and are part of the same uncommitted stack).
+
+SESSION UPDATE (Wave E - family-first email pivot):
+Completed: the parent email now lives on the FAMILY, and every parent-facing
+email is one-per-family sent to families.parent_email, replacing the retired
+student_profiles.parent_email and the per-student / student-email paths.
+
+- src/lib/families/parentEmail.ts: resolveStudentFamilyEmails(db, studentIds)
+  -> { emails: Map<studentId, email>, missing }. Works with the RLS client or
+  the admin client (both SupabaseClient); maps only students actually in a
+  family with a parent email. Unit-tested alongside the subject builder
+  (parentEmail.test.ts).
+- src/lib/email/familyReadySubject.ts + src/emails/FamilyDailyReady.tsx +
+  sendFamilyDailyReadyEmail() in src/lib/email/send.tsx: the parent-facing
+  daily quiz email. Subject is first-names only (1 name, 2 names, 3+ names
+  forms), body is one card per child (name, subject - topic, 4-digit code,
+  "Open practice" -> /q/[code]), muted footer line for children with no
+  today entry ("taking a day off"), and a List-Unsubscribe footer (recurring
+  automated email, same obligation as weekly report).
+- src/app/api/cron/daily-quiz/route.ts: still sends the founder digest, but
+  now ALSO groups that morning's generated quizzes by family and sends ONE
+  FamilyDailyReady per family. New counters familyEmailsSent /
+  studentsNoFamilyEmail; generateForStudent returns { studentId, entry?,
+  reason? } so untouched students are excluded from the parent email rather
+  than threatening a parents' inbox every morning. Resolve is against the
+  admin client (cron has no user session).
+- Manual generation paths (src/app/api/generate, generate/group,
+  generate/daily, quiz/generate) now send the parent email to the family
+  email, falling back to the owner's email when the student is in no family.
+  quiz/study and quiz/re-practice pass sendReadyEmail:false (student
+  INITIATED micro-sessions - solving a re-practice drill is effort, sending
+  a "worksheet is ready" for a session the student started themselves is
+  spam). api/quiz/generate keeps sendReadyEmail true.
+- Weekly flows rekeyed: sendTutorParentReportAction, sendWeeklyReportAction,
+  the weekly-report cron (resolveStudentFamilyEmails + skippedNoFamilyEmail
+  counter, dropped the .not('parent_email') filter), and the /dashboard
+  cockpit reports-due count + copy all key off family emails now.
+- student email + parentEmail removed from the forms: StudentForm,
+  EditStudentForm (isTutor prop deleted - nothing gates off it any more),
+  students/actions.ts (EMAIL_PATTERN/EMAIL_MAX_LENGTH gone), the student
+  detail page's select (familyLink now carries families.parent_email for the
+  hasParentEmail gates on WeeklyReportForm and ParentReportForm, both now
+  saying "This student is not in a family with an email - add one from the
+  Families page first."), and the dashboard/students page (grouped under
+  family headings with a "Needs a family" section).
+- WorksheetReadyEmail/sendWorksheetReadyEmail left in place as dead code
+  (EMAIL 2's old at-target no longer fires) - pending a confirmed delete.
+
+Decisions: one family email replaces the per-student and student-email paths
+per the W8 family-first model; the parent-facing daily email is recurring so
+it carries unsubscribe headers, the founder digest deliberately does not.
+
+Verification: 300/300 tests (40 files - +7: familyReadySubject with the
+first-name forms and brackets logic, plus the resolver import graph); tsc
+--noEmit clean; eslint 0 errors (5 pre-existing warnings in files not
+touched). Blocker: add-report-*/add-portal-orders.sql-style - NONE new; the
+existing add-daily-dials.sql (Wave D) and add-assignments.sql (B73) are
+still unapplied. Needs the user: hit the daily-quiz route locally (or wait
+for 06:00) to see the FamilyDailyReady email land in [founder-inbox] and
+inspect Resend logs.

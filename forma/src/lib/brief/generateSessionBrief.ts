@@ -90,7 +90,7 @@ export async function generateSessionBrief(
     )
     .map((s) => ({ scorePercentage: s.score_percentage, topic: s.worksheet.topic, submittedAt: s.submitted_at }));
 
-  const data = buildWeeklyReport(submissions, window.sinceIso, now);
+  const data = buildWeeklyReport(submissions, window.sinceIso, {}, now);
   const brand: Branding = resolveBranding(ownerRow);
   const contextLine = student.curriculum_level && student.year_level
     ? `${student.curriculum_level} - ${student.year_level}`

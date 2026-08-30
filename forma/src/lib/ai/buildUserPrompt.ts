@@ -12,8 +12,13 @@ export interface WorksheetPromptParams {
   // 10-question worksheet. 5 selects the daily variant's question-structure
   // text below - callers also need to pass DAILY_TYPE_ORDER to
   // generateWorksheet/validateWorksheet separately (schema.ts), this only
-  // controls the prose the model reads.
-  questionCount?: 5 | 10;
+  // controls the prose the model reads. 15 is W8 Wave D's Deep volume.
+  questionCount?: 5 | 10 | 15;
+  // W8 Wave D (automatic daily quiz): forces the "N core questions, no
+  // warm-up, no challenge" prose regardless of count - the daily quiz is
+  // never easy-tier and never ends on a labelled challenge. Mirrors the
+  // all-core typeOrder the caller must also pass.
+  dailyStyle?: boolean;
   // Phase 7 Steps 40/41 shared mechanism: when present, appended as its own
   // paragraph instructing the model to target one specific sub-skill
   // instead of freely decomposing the topic - Step 40 (explicit tutor pick)
@@ -56,11 +61,13 @@ sub-skills.`
   const questionStructure =
     params.focusSubSkills?.length
       ? focusText ?? ''
-      : questionCount === 5
-        ? `Question structure:
+      : params.dailyStyle
+        ? `${questionCount} core questions, all at level - a focused daily practice set targeting the described weakness (no warm-up, no challenge questions).`
+        : questionCount === 5
+          ? `Question structure:
 5 core questions, all targeting the same single sub-skill - a short,
 focused daily practice set, not a full topic decomposition.`
-        : `Question structure:
+          : `Question structure:
 2 warm-up (slightly below level - builds confidence)
 6 core (at level - targets the described weakness directly)
 2 challenge (above level - clearly labelled, students expect it to be harder)`;

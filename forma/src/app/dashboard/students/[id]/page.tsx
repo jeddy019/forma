@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { cardClass } from '@/lib/ui/formStyles';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { computeTopicsCovered } from '@/lib/curriculum/topicsCovered';
@@ -10,7 +11,10 @@ import SessionNotesForm from './SessionNotesForm';
 import ParentReportForm from './ParentReportForm';
 import WeeklyReportForm from './WeeklyReportForm';
 import SessionBriefForm from './SessionBriefForm';
+import PortalLoginCard from './PortalLoginCard';
+import DailyDialsCard from './DailyDialsCard';
 import EditStudentForm, { type EditableStudent } from './EditStudentForm';
+import type { PracticeVolume, DifficultyPosture, HolidayPosture } from '@/lib/daily/dailyDialPlan';
 
 // Performance Rule 3: paginate all lists, never load an unbounded one.
 const PAGE_SIZE = 20;
@@ -23,7 +27,12 @@ const WORKSHEET_HISTORY_LIMIT = 500;
 
 interface StudentRow extends EditableStudent {
   report_note: string | null;
+  report_attentive: boolean | null;
   last_report_sent_at: string | null;
+  practice_volume: PracticeVolume;
+  difficulty_posture: DifficultyPosture;
+  holiday_posture: HolidayPosture;
+  last_daily_generated_at: string | null;
 }
 
 interface SessionNoteRow {
@@ -66,7 +75,9 @@ export default async function StudentDetailPage({
   // covers both "doesn't exist" and "isn't yours" without distinguishing them.
   const { data: student } = await supabase
     .from('student_profiles')
-    .select('id, name, country, curriculum_level, year_level, exam_board, subjects, email, parent_email, weaknesses, report_note, last_report_sent_at')
+    .select(
+      'id, name, country, curriculum_level, year_level, exam_board, subjects, weaknesses, report_note, report_attentive, last_report_sent_at, practice_volume, difficulty_posture, holiday_posture, last_daily_generated_at'
+    )
     .eq('id', studentId)
     .single<StudentRow>();
 
@@ -79,9 +90,9 @@ export default async function StudentDetailPage({
   // nothing rather than a family name leak.
   const { data: familyLink } = await supabase
     .from('family_members')
-    .select('family:families(id, name)')
+    .select('family:families(id, name, parent_email)')
     .eq('student_id', studentId)
-    .maybeSingle<{ family: { id: string; name: string } | null }>();
+    .maybeSingle<{ family: { id: string; name: string; parent_email: string | null } | null }>();
 
   // Phase 6 Step 35: "Topics practiced" - no fixed syllabus denominator
   // (per the user - see CHANGELOG.md), just distinct topics with
@@ -103,6 +114,18 @@ export default async function StudentDetailPage({
 
   const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
   const canUseSessionNotes = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
+
+  // Portal login state for this student. portal_accounts is deny-all RLS
+  // (Security Rules 1's service-role pattern), so this read uses the admin
+  // client - the student was already proven owned by the RLS lookup above.
+  // Only the username and last-reset date ever leave the DB; the scrypt hash
+  // never does (and the plaintext password is only ever in a provisioning
+  // action's response).
+  const { data: portalAccount } = await createAdminClient()
+    .from('portal_accounts')
+    .select('username, password_reset_at')
+    .eq('student_id', studentId)
+    .maybeSingle<{ username: string; password_reset_at: string | null }>();
 
   let notes: SessionNoteRow[] = [];
   let totalPages = 1;
@@ -175,10 +198,29 @@ export default async function StudentDetailPage({
         </div>
       ) : (
         <>
+          <PortalLoginCard
+            studentId={student.id}
+            studentName={student.name ?? ''}
+            account={
+              portalAccount
+                ? { username: portalAccount.username, passwordResetAt: portalAccount.password_reset_at }
+                : null
+            }
+          />
+
+          <DailyDialsCard
+            studentId={student.id}
+            practiceVolume={student.practice_volume}
+            difficultyPosture={student.difficulty_posture}
+            holidayPosture={student.holiday_posture}
+            lastDailyGeneratedAt={student.last_daily_generated_at}
+          />
+
           <WeeklyReportForm
             studentId={student.id}
-            hasParentEmail={Boolean(student.parent_email)}
+            hasParentEmail={Boolean(familyLink?.family?.parent_email)}
             reportNote={student.report_note}
+            reportAttentive={student.report_attentive}
             lastReportSentAt={student.last_report_sent_at}
           />
 
@@ -187,7 +229,7 @@ export default async function StudentDetailPage({
             lastNoteDateLabel={notes[0] ? formatNoteDate(notes[0].created_at) : null}
           />
 
-          <ParentReportForm studentId={student.id} hasParentEmail={Boolean(student.parent_email)} />
+          <ParentReportForm studentId={student.id} hasParentEmail={Boolean(familyLink?.family?.parent_email)} />
 
           <SessionNotesForm studentId={student.id} />
 
@@ -229,7 +271,6 @@ export default async function StudentDetailPage({
             ? (student.country as 'england' | 'canada_ontario' | 'united_states')
             : 'england',
         }}
-        isTutor={ownerRow?.role === 'tutor'}
       />
     </div>
   );

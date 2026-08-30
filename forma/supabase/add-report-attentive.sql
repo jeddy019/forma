@@ -1,0 +1,13 @@
+-- Standalone addition, run manually in Supabase SQL Editor (same pattern as
+-- the other add-*.sql files).
+--
+-- W8 Wave C (weekly report enrichment): the report's founder section carries
+-- a single attentiveness check (decided with the user 2026-08-29 - a plain
+-- check, no text field, nothing to type). The check is a standing per-student
+-- value like report_note: the founder marks it on the student page and the
+-- Monday cron rides it; unmarked means the line is omitted from the PDF
+-- entirely, never invented.
+--
+-- Semantics: true = "Attentive across this week's practice", false = "needs
+-- monitoring", NULL = never marked (omitted from the report).
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS report_attentive BOOLEAN;

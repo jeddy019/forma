@@ -5,12 +5,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendWeeklyReportEmail } from '@/lib/email/send';
 import { generateWeeklyReport, type StudentReportRow } from '@/lib/report/generateWeeklyReport';
+import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
 
 // Phase B W2 (weekly branded proof report) - the automatic half of the
 // founder model's weekly deliverable. Runs on the same Monday timing as
 // EMAIL 4 (monday-summary) but targets tutor-role accounts (the founder),
-// sending each student's branded PDF report to their parent_email with the
-// standing report_note as the founder's voice. The monday-summary cron
+// sending each student's branded PDF report to their family's parent_email
+// (families.parent_email - W8 Wave E, resolved per student via
+// resolveStudentFamilyEmails) with the standing report_note as the founder's
+// voice. The monday-summary cron
 // stays for parent-role accounts; under the founder model there are none.
 //
 // Guard rails, mirroring the generation cron's isolation discipline:
@@ -30,12 +33,12 @@ interface OwnerRow {
   brand_accent: string | null;
 }
 
-async function sendReportForStudent(admin: AdminClient, owner: OwnerRow, student: StudentReportRow, now: Date): Promise<boolean> {
+async function sendReportForStudent(admin: AdminClient, owner: OwnerRow, student: StudentReportRow, parentEmail: string, now: Date): Promise<boolean> {
   const { data, pdfBuffer, filename } = await generateWeeklyReport(admin, student, owner, now);
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const sent = await sendWeeklyReportEmail(
-    student.parent_email as string,
+    parentEmail,
     {
       studentName: student.name,
       worksheetsCompleted: data.worksheetsCompleted,
@@ -76,17 +79,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to query owners' }, { status: 500 });
   }
 
-  const results = { owners: (owners ?? []).length, reportsSent: 0, skippedAlreadySent: 0, failed: 0 };
+  const results = { owners: (owners ?? []).length, reportsSent: 0, skippedAlreadySent: 0, skippedNoFamilyEmail: 0, failed: 0 };
 
   for (const owner of owners as OwnerRow[]) {
     const { data: students } = await admin
       .from('student_profiles')
-      .select('id, name, parent_email, report_note, owner_id')
+      .select('id, name, report_note, skill_map, report_attentive, owner_id')
       .eq('owner_id', owner.id)
-      .not('parent_email', 'is', null)
       .returns<StudentReportRow[]>();
+    if (!students || students.length === 0) continue;
 
-    for (const student of students ?? []) {
+    // W8 Wave E (family-first): resolve every student's family email in one
+    // round trip (never N+1), then only report to families that have one.
+    const { emails: familyEmails } = await resolveStudentFamilyEmails(admin, students.map((s) => s.id));
+
+    for (const student of students) {
+      const parentEmail = familyEmails.get(student.id);
+      if (!parentEmail) {
+        results.skippedNoFamilyEmail++;
+        continue;
+      }
+
       // Already reported this week (manual send or an earlier cron run)?
       const { data: profile } = await admin
         .from('student_profiles')
@@ -99,7 +112,7 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        const sent = await sendReportForStudent(admin, owner, student, now);
+        const sent = await sendReportForStudent(admin, owner, student, parentEmail, now);
         if (sent) results.reportsSent++;
         else results.failed++;
       } catch (error) {

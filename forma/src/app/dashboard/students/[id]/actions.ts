@@ -9,6 +9,9 @@ import { sendTutorParentReportEmail, sendWeeklyReportEmail } from '@/lib/email/s
 import { resolveBranding } from '@/lib/branding';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generateWeeklyReport, type StudentReportRow } from '@/lib/report/generateWeeklyReport';
+import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
+import { generatePortalPassword, generatePortalUsername, hashPortalPassword } from '@/lib/portal/password';
+import { PRACTICE_VOLUMES, DIFFICULTY_POSTURES, HOLIDAY_POSTURES, type PracticeVolume, type DifficultyPosture, type HolidayPosture } from '@/lib/daily/dailyDialPlan';
 
 const RECENT_SESSION_NOTES_LIMIT = 5;
 const RECENT_SUBMISSIONS_LIMIT = 10;
@@ -193,17 +196,22 @@ export async function sendParentReportAction(studentId: string, paragraphs: stri
   const supabase = await createClient();
   const { data: student } = await supabase
     .from('student_profiles')
-    .select('id, name, parent_email')
+    .select('id, name')
     .eq('id', studentId)
     .single();
   if (!student) {
     return { error: 'Student not found.' };
   }
-  if (!student.parent_email) {
-    return { error: 'No parent email is set for this student - add one from the student list first.' };
+
+  // W8 Wave E (family-first): a parent email lives on the FAMILY, not the
+  // student row any more - resolve it here, same as the weekly report.
+  const { emails: familyEmails } = await resolveStudentFamilyEmails(supabase, [student.id]);
+  const parentEmail = familyEmails.get(student.id);
+  if (!parentEmail) {
+    return { error: 'No family email is set for this student - add one from the Families page first.' };
   }
 
-  const sent = await sendTutorParentReportEmail(student.parent_email, {
+  const sent = await sendTutorParentReportEmail(parentEmail, {
     studentName: student.name,
     reportParagraphs: cleanParagraphs,
     brandName: auth.brand?.name,
@@ -226,12 +234,18 @@ export interface SaveReportNoteResult {
   success?: boolean;
 }
 
-// The standing note used on every AUTO-sent weekly report (the weekly cron).
-// The manual send can also pass a fresher one typed at send time without
-// persisting it - this action is only for saving/permanently updating the
-// standing note. RLS (profiles_own: auth.uid() = owner_id) blocks saving to
-// another tutor's student, so "not yours" and "gone" collapse together.
-export async function saveReportNoteAction(studentId: string, note: string): Promise<SaveReportNoteResult> {
+// Saves the standing note and the attentiveness check together - both ride
+// the same "this is what the founder set as their default" semantics, used
+// by every AUTO-sent report (the weekly cron). The manual send can pass a
+// fresher note/check at send time without persisting it - this action is
+// only for saving/permanently updating the standing values. RLS
+// (profiles_own: auth.uid() = owner_id) blocks saving to another tutor's
+// student, so "not yours" and "gone" collapse together.
+export async function saveReportNoteAction(
+  studentId: string,
+  note: string,
+  attentive: boolean | null
+): Promise<SaveReportNoteResult> {
   const auth = await requireTutorPro();
   if (auth.error || !auth.userId) {
     return { error: auth.error };
@@ -246,10 +260,13 @@ export async function saveReportNoteAction(studentId: string, note: string): Pro
   }
 
   const supabase = await createClient();
-  const { error: updateError } = await supabase.from('student_profiles').update({ report_note: clean || null }).eq('id', studentId);
+  const { error: updateError } = await supabase
+    .from('student_profiles')
+    .update({ report_note: clean || null, report_attentive: attentive })
+    .eq('id', studentId);
   if (updateError) {
-    console.error('Failed to save report note', updateError);
-    return { error: 'Could not save this note - please try again.' };
+    console.error('Failed to save report settings', updateError);
+    return { error: 'Could not save these settings - please try again.' };
   }
 
   revalidatePath(`/dashboard/students/${studentId}`);
@@ -261,12 +278,13 @@ export interface SendWeeklyReportResult {
   success?: boolean;
 }
 
-// Sends this week's branded proof report to the student's parent_email as a
-// PDF - the founder model's weekly deliverable. The note passed here is
-// whatever the founder has in front of them at send time; it is used for
-// THIS send, falling back to the standing saved note. Names are NEVER
-// altered server-side (same principle as sendParentReportAction).
-export async function sendWeeklyReportAction(studentId: string, note: string): Promise<SendWeeklyReportResult> {
+// Sends this week's branded proof report to the student's family email as a
+// PDF - the founder model's weekly deliverable. The note and attentiveness
+// check passed here are whatever the founder has in front of them at send
+// time; they are used for THIS send, each falling back to the standing saved
+// value. Names are NEVER altered server-side (same principle as
+// sendParentReportAction).
+export async function sendWeeklyReportAction(studentId: string, note: string, attentive: boolean | null): Promise<SendWeeklyReportResult> {
   const auth = await requireTutorPro();
   if (auth.error || !auth.userId) {
     return { error: auth.error };
@@ -280,14 +298,19 @@ export async function sendWeeklyReportAction(studentId: string, note: string): P
   const supabase = await createClient();
   const { data: student } = await supabase
     .from('student_profiles')
-    .select('id, name, parent_email, report_note')
+    .select('id, name, report_note, skill_map, report_attentive')
     .eq('id', studentId)
     .single<StudentReportRow>();
   if (!student) {
     return { error: 'Student not found.' };
   }
-  if (!student.parent_email) {
-    return { error: 'No parent email is set for this student - add one from the student list first.' };
+
+  // W8 Wave E (family-first): parent email lives on the FAMILY now - resolve
+  // it here before building anything.
+  const { emails: familyEmails } = await resolveStudentFamilyEmails(supabase, [student.id]);
+  const parentEmail = familyEmails.get(student.id);
+  if (!parentEmail) {
+    return { error: 'This student is not in a family with an email - add one from the Families page first.' };
   }
 
   const typedNote = stripHtmlTags(note).trim();
@@ -295,13 +318,18 @@ export async function sendWeeklyReportAction(studentId: string, note: string): P
     return { error: `The note must be ${REPORT_NOTE_MAX_LENGTH} characters or fewer.` };
   }
   const effectiveNote = typedNote || (student.report_note ?? '');
+  const effectiveAttentive = attentive ?? student.report_attentive ?? null;
 
   try {
-    const { data, pdfBuffer, filename } = await generateWeeklyReport(createAdminClient(), { ...student, report_note: effectiveNote }, auth.ownerBrand ?? { brand_name: null, brand_accent: null });
+    const { data, pdfBuffer, filename } = await generateWeeklyReport(
+      createAdminClient(),
+      { ...student, report_note: effectiveNote, report_attentive: effectiveAttentive },
+      auth.ownerBrand ?? { brand_name: null, brand_accent: null }
+    );
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
     const sent = await sendWeeklyReportEmail(
-      student.parent_email,
+      parentEmail,
       {
         studentName: student.name,
         worksheetsCompleted: data.worksheetsCompleted,
@@ -329,4 +357,148 @@ export async function sendWeeklyReportAction(studentId: string, note: string): P
     console.error('Failed to send weekly report', error);
     return { error: 'Could not build the report - please try again.' };
   }
+}
+
+// --- Portal login provisioning (W8 Wave B slice 2) ---
+//
+// The ONLY paths that create or reset portal-account credentials. Handling a
+// minor's login is founder-side by design (anti-swallow invariant): there is
+// never a self-serve "forgot password" - the founder mints credentials at
+// enrollment and mints new ones when they are lost. The plaintext password
+// exists ONLY in the response of the action that just created it (shown once
+// on screen); the database stores only the scrypt hash, so no later screen
+// can ever show a password again - only Reset can mint another.
+
+export interface PortalCredentialResult {
+  error?: string;
+  username?: string;
+  password?: string;
+}
+
+async function requirePortalAccountOwner(studentId: string): Promise<{ error?: string; studentId?: string }> {
+  const auth = await requireTutorPro();
+  if (auth.error || !auth.userId) return { error: auth.error || 'You must be signed in.' };
+  if (!UUID_PATTERN.test(studentId)) return { error: 'Invalid student.' };
+  const supabase = await createClient();
+  const { data: owned } = await supabase.from('student_profiles').select('id').eq('id', studentId).maybeSingle();
+  if (!owned) return { error: 'Student not found.' };
+  return { studentId };
+}
+
+export async function provisionPortalLoginAction(studentId: string): Promise<PortalCredentialResult> {
+  const owner = await requirePortalAccountOwner(studentId);
+  if (owner.error || !owner.studentId) return { error: owner.error };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from('portal_accounts')
+    .select('id')
+    .eq('student_id', owner.studentId)
+    .maybeSingle<{ id: string }>();
+  if (existing) {
+    return { error: 'This student already has a portal login. Use "Reset password" to issue a new one.' };
+  }
+
+  const { data: studentRow } = await admin.from('student_profiles').select('name').eq('id', owner.studentId).single<{ name: string }>();
+  const username = generatePortalUsername(studentRow?.name ?? '');
+  const password = generatePortalPassword();
+
+  const { error } = await admin.from('portal_accounts').insert({
+    kind: 'student',
+    student_id: owner.studentId,
+    username,
+    password_hash: hashPortalPassword(password),
+  });
+  if (error) {
+    console.error('Failed to provision portal login', error);
+    return { error: 'Could not create the portal login - please try again.' };
+  }
+
+  revalidatePath(`/dashboard/students/${owner.studentId}`);
+  return { username, password };
+}
+
+export async function resetPortalLoginAction(studentId: string): Promise<PortalCredentialResult> {
+  const owner = await requirePortalAccountOwner(studentId);
+  if (owner.error || !owner.studentId) return { error: owner.error };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from('portal_accounts')
+    .select('id, username')
+    .eq('student_id', owner.studentId)
+    .maybeSingle<{ id: string; username: string }>();
+  if (!existing) {
+    return { error: 'No portal login exists yet - issue one first.' };
+  }
+
+  const password = generatePortalPassword();
+  const { error } = await admin
+    .from('portal_accounts')
+    .update({
+      password_hash: hashPortalPassword(password),
+      password_reset_at: new Date().toISOString(),
+      failed_attempts: 0,
+      locked_until: null,
+    })
+    .eq('id', existing.id);
+  if (error) {
+    console.error('Failed to reset portal password', error);
+    return { error: 'Could not reset the password - please try again.' };
+  }
+
+  revalidatePath(`/dashboard/students/${owner.studentId}`);
+  return { username: existing.username, password };
+}
+
+// --- Daily quiz dials (W8 Wave D) ---
+//
+// The founder-side per-student automation controls for the automatic daily
+// quiz. Founder-only by design (PRODUCT EXPERIENCE MODEL: "Difficulty/volume
+// dials are founder-side only; the portal only reflects what your tutor has
+// set") - nothing here is ever offered to a student or parent. Values are
+// validated against the same constant arrays the SQL CHECK constraints use,
+// so an impossible value can never be stored.
+
+export interface SaveDailyDialsResult {
+  error?: string;
+  success?: boolean;
+}
+
+export async function saveDailyDialsAction(
+  studentId: string,
+  practiceVolume: string,
+  difficultyPosture: string,
+  holidayPosture: string
+): Promise<SaveDailyDialsResult> {
+  const auth = await requireTutorPro();
+  if (auth.error || !auth.userId) {
+    return { error: auth.error };
+  }
+  if (!UUID_PATTERN.test(studentId)) {
+    return { error: 'Invalid student.' };
+  }
+  const volume = PRACTICE_VOLUMES.includes(practiceVolume as PracticeVolume) ? (practiceVolume as PracticeVolume) : null;
+  const posture = DIFFICULTY_POSTURES.includes(difficultyPosture as DifficultyPosture)
+    ? (difficultyPosture as DifficultyPosture)
+    : null;
+  const holiday = HOLIDAY_POSTURES.includes(holidayPosture as HolidayPosture) ? (holidayPosture as HolidayPosture) : null;
+  if (!volume || !posture || !holiday) {
+    return { error: 'Invalid daily settings.' };
+  }
+
+  const supabase = await createClient();
+  // RLS (profiles_own: auth.uid() = owner_id) enforces ownership at the DB
+  // level - a student from another account simply doesn't match here.
+  const { error } = await supabase
+    .from('student_profiles')
+    .update({ practice_volume: volume, difficulty_posture: posture, holiday_posture: holiday })
+    .eq('id', studentId);
+  if (error) {
+    console.error('Failed to save daily dials', error);
+    return { error: 'Could not save the daily settings - please try again.' };
+  }
+
+  revalidatePath(`/dashboard/students/${studentId}`);
+  return { success: true };
 }

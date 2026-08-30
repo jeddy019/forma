@@ -10,7 +10,8 @@ import { stripHtmlTags } from '@/lib/ai/sanitize';
 import { resolveBranding } from '@/lib/branding';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { isActivePro } from '@/lib/payments/planStatus';
-import { sendWorksheetReadyEmail } from '@/lib/email/send';
+import { sendFamilyDailyReadyEmail } from '@/lib/email/send';
+import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
 import { callMathEngine, matchMathEngineTopic } from '@/lib/ai/mathEngineClient';
 import type { Country } from '@/lib/constants';
 
@@ -38,7 +39,6 @@ interface GenerateGroupRequestBody {
 interface StudentProfileRow {
   id: string;
   name: string;
-  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
   const { data: students, error: studentsError } = await supabase
     .from('student_profiles')
-    .select('id, name, email, country, curriculum_level, year_level, subjects, exam_board')
+    .select('id, name, country, curriculum_level, year_level, subjects, exam_board')
     .in('id', studentIds)
     .returns<StudentProfileRow[]>();
 
@@ -95,6 +95,11 @@ export async function POST(request: NextRequest) {
   if (studentsError || !students || students.length !== studentIds.length) {
     return NextResponse.json({ error: 'One or more selected students could not be found.' }, { status: 404 });
   }
+
+  // W8 Wave E: resolve every group member's family email in ONE query before
+  // the per-student loop below, so each ready email goes to the right family
+  // (fallback owner when the student has no family email yet).
+  const { emails: familyEmails } = await resolveStudentFamilyEmails(supabase, students.map((s) => s.id));
 
   const first = students[0];
   const sameLevel = students.every(
@@ -245,16 +250,20 @@ export async function POST(request: NextRequest) {
     }
     inserted.push(row);
 
-    const recipientEmail = student.email ?? ownerRow?.email;
+    const recipientEmail = familyEmails.get(student.id) ?? ownerRow?.email;
     if (recipientEmail) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-      void sendWorksheetReadyEmail(recipientEmail, {
-        studentName: student.name,
-        subject: worksheet.subject,
-        topic: worksheet.topic,
-        worksheetUrl: `${appUrl}/s/${row.digital_code}`,
-        sentToStudentDirectly: Boolean(student.email),
-        portalUrl: `${appUrl}/student/login`,
+      void sendFamilyDailyReadyEmail(recipientEmail, {
+        dateLabel: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+        entries: [
+          {
+            name: student.name,
+            subject: worksheet.subject,
+            topic: worksheet.topic,
+            url: `${appUrl}/s/${row.digital_code}`,
+            digitalCode: row.digital_code,
+          },
+        ],
         brandName: resolveBranding(ownerRow).name,
       }).catch((error) => console.error('Failed to send worksheet-ready email', error));
     }

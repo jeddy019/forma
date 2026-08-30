@@ -25,9 +25,10 @@ import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { resolveBranding } from '@/lib/branding';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { blendWithBank } from '@/lib/questionBank/blendWithBank';
-import { EXPECTED_TYPE_ORDER, DAILY_TYPE_ORDER } from '@/lib/ai/schema';
+import { EXPECTED_TYPE_ORDER, DAILY_TYPE_ORDER, type QuestionType } from '@/lib/ai/schema';
 import { isActivePro } from '@/lib/payments/planStatus';
-import { sendWorksheetReadyEmail } from '@/lib/email/send';
+import { sendFamilyDailyReadyEmail } from '@/lib/email/send';
+import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
 import type { Country } from '@/lib/constants';
 
 const GENERATION_TIMEOUT_MS = 55_000;
@@ -38,7 +39,6 @@ const MAX_INSERT_ATTEMPTS = 3;
 export interface GenerateQuizProfile {
   id: string;
   name: string;
-  email: string | null;
   country: Country;
   curriculum_level: string;
   year_level: string;
@@ -67,12 +67,25 @@ export interface GenerateQuizOptions {
   // Exactly one targeting mode must be provided.
   topicPrompt?: string;
   focusSubSkills?: RePracticeTarget[];
+  // W8 Wave D: a caller-provided sub-skill directive (used by the daily quiz
+  // cron's weakest-sub-skill targeting) - mutually exclusive with
+  // focusSubSkills, matching buildUserPrompt's own rule.
+  subSkillDirective?: string;
   // Tutor-side "return to fundamentals" (mastery) routing - a focused 5-question
   // set on the identified prerequisite sub-skill. Mutually exclusive with
   // focusSubSkills and topicPrompt-driven foundations.
   fundamentalsTarget?: { subSkill: string; topic: string } | null;
   sessionNotes?: string;
-  generatedFrom: 'quiz' | 're-practice' | 'study';
+  // W8 Wave D: overrides the length (else focus sets keeps 5, everything
+  // else 10). The daily quiz derives its count from the volume dial.
+  questionCount?: 5 | 10 | 15;
+  // W8 Wave D: forces the "N core questions, no warm-up/challenge" prose
+  // (passes buildUserPrompt's dailyStyle through).
+  dailyStyle?: boolean;
+  // W8 Wave D: the auto-daily cron skips the ready-email (the founder digest
+  // covers delivery). Defaults to true for every existing caller.
+  sendReadyEmail?: boolean;
+  generatedFrom: 'quiz' | 're-practice' | 'study' | 'daily';
 }
 
 export interface GeneratedQuizRow {
@@ -92,8 +105,18 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
 
   const isFocus = (options.focusSubSkills?.length ?? 0) > 0 || Boolean(options.fundamentalsTarget);
   const focusSubSkills = (options.focusSubSkills ?? []).map((s) => s.subSkill);
-  const questionCount = isFocus ? 5 : 10;
-  const typeOrder = isFocus ? DAILY_TYPE_ORDER : EXPECTED_TYPE_ORDER;
+  // Daily sets override the length (volume dial decides; focus elsewhere
+  // fixes it at the short 5).
+  const questionCount = options.questionCount ?? (isFocus ? 5 : 10);
+  // Daily quizzes are never warm-up or challenge - every question is a core
+  // question (DAILY TYPE ORDER rule), padded to the dial's count. Focus sets
+  // stay on the shared 5-core order.
+  const typeOrder: QuestionType[] =
+    options.generatedFrom === 'daily'
+      ? (new Array(questionCount).fill('core') as QuestionType[])
+      : isFocus
+        ? DAILY_TYPE_ORDER
+        : EXPECTED_TYPE_ORDER;
 
   // Per-owner free-tier check, mirroring the tutor route's atomic gate. The
   // RPC is SECURITY DEFINER so it runs as the table owner regardless of which
@@ -116,12 +139,17 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
     }
   }
 
-  // Sub-skill directive text depends on which focused mode is active.
-  let subSkillDirective: string | undefined;
-  if (options.fundamentalsTarget) {
-    subSkillDirective = `The student is struggling with the sub-skill "${options.fundamentalsTarget.subSkill}" within "${options.fundamentalsTarget.topic}" (scored below 50% last time). Using your own curriculum knowledge, identify its single prerequisite sub-skill and write every question on that prerequisite instead - name the prerequisite in alignment_note.`;
-  } else if (isFocus) {
-    subSkillDirective = `The student is re-practising the specific sub-skills they struggled with. Using your own curriculum knowledge of these exact sub-skills, write questions that target them.`;
+  // Sub-skill directive text depends on which focused mode is active. A
+  // caller-provided directive (the daily quiz's weakest-sub-skill targeting)
+  // wins over the internal focus/fundamentals builders - callers must never
+  // pass both.
+  let subSkillDirective: string | undefined = options.subSkillDirective;
+  if (!subSkillDirective) {
+    if (options.fundamentalsTarget) {
+      subSkillDirective = `The student is struggling with the sub-skill "${options.fundamentalsTarget.subSkill}" within "${options.fundamentalsTarget.topic}" (scored below 50% last time). Using your own curriculum knowledge, identify its single prerequisite sub-skill and write every question on that prerequisite instead - name the prerequisite in alignment_note.`;
+    } else if (isFocus) {
+      subSkillDirective = `The student is re-practising the specific sub-skills they struggled with. Using your own curriculum knowledge of these exact sub-skills, write questions that target them.`;
+    }
   }
 
   const userPrompt = buildUserPrompt({
@@ -136,7 +164,8 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
       : isFocus
         ? `Re-practise the following sub-skills: ${focusSubSkills.join(', ')}`
         : (options.topicPrompt ?? ''),
-    questionCount: isFocus ? 5 : 10,
+    questionCount,
+    dailyStyle: options.dailyStyle,
     subSkillDirective,
     focusSubSkills: isFocus ? focusSubSkills : undefined,
     examBoard: profile.exam_board ?? undefined,
@@ -237,19 +266,37 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
     throw new TrackedError(GENERIC_FAILURE_MESSAGE, 500);
   }
 
-  // Fire-and-forget email (best-effort).
-  const recipientEmail = profile.email ?? owner.email;
-  if (recipientEmail) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-    void sendWorksheetReadyEmail(recipientEmail, {
-      studentName: profile.name,
-      subject: inserted.subject,
-      topic: inserted.topic,
-      worksheetUrl: `${appUrl}/q/${inserted.digital_code}`,
-      sentToStudentDirectly: Boolean(profile.email),
-      portalUrl: `${appUrl}/student/login`,
-      brandName: resolveBranding(owner).name,
-    }).catch((error) => console.error('Failed to send quiz-ready email', error));
+  // Fire-and-forget email (best-effort). Suppressed by the auto-daily cron -
+  // its founder digest covers delivery and a per-student ready email would
+  // duplicate it.
+  if (options.sendReadyEmail !== false) {
+    // W8 Wave E (family-first recipient, 2026-08-30): a parent email lives on
+    // the FAMILY, never the student row, so resolve profile.id through its
+    // family here - the single place generateQuiz decides where a ready
+    // notice goes, whatever lower-level caller (manual quiz, study,
+    // re-practice) triggered it. Falls back to the owner when the student has
+    // no family email yet, mirroring the manual worksheet routes.
+    const { emails, missing } = await resolveStudentFamilyEmails(admin, [profile.id]);
+    const recipientEmail = emails.get(profile.id) ?? owner.email;
+    if (recipientEmail) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+      if (missing > 0) {
+        console.warn(`Quiz ready for ${profile.id}: no family email - fell back to owner (${owner.email ?? 'none'})`);
+      }
+      void sendFamilyDailyReadyEmail(recipientEmail, {
+        dateLabel: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+        entries: [
+          {
+            name: profile.name,
+            subject: inserted.subject,
+            topic: inserted.topic,
+            url: `${appUrl}/q/${inserted.digital_code}`,
+            digitalCode: inserted.digital_code,
+          },
+        ],
+        brandName: resolveBranding(owner).name,
+      }).catch((error) => console.error('Failed to send quiz-ready email', error));
+    }
   }
 
   return inserted;

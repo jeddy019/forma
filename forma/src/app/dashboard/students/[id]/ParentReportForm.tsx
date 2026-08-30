@@ -56,7 +56,7 @@ export default function ParentReportForm({ studentId, hasParentEmail }: { studen
 
       {!hasParentEmail && (
         <p className="text-sm text-[#9A9080] italic">
-          No parent email set for this student - add one from the student list to send a report.
+          This student is not in a family with an email - add one from the Families page first.
         </p>
       )}
 

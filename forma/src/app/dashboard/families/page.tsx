@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { EmptyState } from '@/lib/ui/EmptyState';
 import { PageHeader } from '@/lib/ui/PageHeader';
 import { Home } from 'lucide-react';
@@ -99,6 +100,22 @@ export default async function FamiliesPage({
         .returns<FamilyInvoiceRow[]>()
     : { data: [] };
 
+  // Parent portal accounts: portal_accounts is deny-all RLS, so this read
+  // uses the admin client (each family was already proven owned via the
+  // families_own RLS query above). Only the username and last-reset date
+  // ever leave the DB for display; the scrypt hash and plaintext never do.
+  const { data: portalAccountRows } = familyIds.length
+    ? await createAdminClient()
+        .from('portal_accounts')
+        .select('family_id, username, password_reset_at')
+        .in('family_id', familyIds)
+        .returns<{ family_id: string; username: string; password_reset_at: string | null }[]>()
+    : { data: [] };
+  const portalAccountByFamily = new Map<string, { username: string; password_reset_at: string | null }>();
+  for (const row of portalAccountRows ?? []) {
+    portalAccountByFamily.set(row.family_id, { username: row.username, password_reset_at: row.password_reset_at });
+  }
+
   const assignedStudentIds = new Set((memberRows ?? []).map((row) => row.student_id));
   const unassignedStudents = (students ?? []).filter((student) => !assignedStudentIds.has(student.id));
 
@@ -142,6 +159,7 @@ export default async function FamiliesPage({
                 parentEmail={family.parent_email}
                 members={membersByFamily.get(family.id) ?? []}
                 unassignedStudents={unassignedStudents}
+                portalAccount={portalAccountByFamily.get(family.id) ?? null}
               />
               <FamilyInvoices
                 familyId={family.id}

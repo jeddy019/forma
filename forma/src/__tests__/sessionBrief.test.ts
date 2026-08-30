@@ -39,6 +39,7 @@ describe('renderSessionBriefHtml', () => {
       { scorePercentage: 62, topic: 'Trigonometry', submittedAt: '2026-09-03T12:00:00Z' },
     ],
     '2026-08-31T08:00:00.000Z',
+    {},
     now
   );
 

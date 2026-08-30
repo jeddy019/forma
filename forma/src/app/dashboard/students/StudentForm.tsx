@@ -9,7 +9,7 @@ import { FormHeader } from '@/lib/ui/FormHeader';
 
 const initialState: StudentFormResult = {};
 
-export default function StudentForm({ isTutor }: { isTutor: boolean }) {
+export default function StudentForm() {
   const [state, formAction, pending] = useActionState(createStudentAction, initialState);
   const [country, setCountry] = useState<Country>('england');
 
@@ -134,36 +134,6 @@ export default function StudentForm({ isTutor }: { isTutor: boolean }) {
           </div>
         </div>
       </div>
-
-      <div>
-        <label className={labelClass} htmlFor="email">
-          Student email (optional)
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          maxLength={200}
-          className={inputClass}
-          placeholder="Leave blank to send worksheets to your own email instead"
-        />
-      </div>
-
-      {isTutor && (
-        <div>
-          <label className={labelClass} htmlFor="parentEmail">
-            Parent email (optional)
-          </label>
-          <input
-            id="parentEmail"
-            name="parentEmail"
-            type="email"
-            maxLength={200}
-            className={inputClass}
-            placeholder="For sending parent progress reports"
-          />
-        </div>
-      )}
 
       <div>
         <label className={labelClass} htmlFor="weaknesses">
