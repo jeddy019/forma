@@ -28,4 +28,8 @@ CREATE INDEX IF NOT EXISTS idx_assignments_owner ON assignments(owner_id);
 CREATE INDEX IF NOT EXISTS idx_worksheets_assignment ON worksheets(assignment_id);
 
 ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
+-- B73 was applied live before this file was added to the repo, so the policy
+-- may already exist. DROP-then-CREATE makes the whole file re-runnable (the
+-- rest of it is IF NOT EXISTS already).
+DROP POLICY IF EXISTS assignments_own ON assignments;
 CREATE POLICY assignments_own ON assignments FOR ALL USING (auth.uid() = owner_id);
