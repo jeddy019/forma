@@ -5377,3 +5377,40 @@ existing add-daily-dials.sql (Wave D) and add-assignments.sql (B73) are
 still unapplied. Needs the user: hit the daily-quiz route locally (or wait
 for 06:00) to see the FamilyDailyReady email land in [founder-inbox] and
 inspect Resend logs.
+
+SESSION UPDATE (2026-08-30 close-out - SQL applied + corrected build backlog):
+
+Completed: the user ran the two outstanding SQL migrations. add-daily-dials.sql
+APPLIED cleanly (dials columns now live on student_profiles). add-assignments.sql
+errored with 42710 "policy assignments_own already exists" - correct behaviour:
+B73 applied the assignments table/indexes/policy live in 2026-08-28, and this
+file's CREATE POLICY was the only non-idempotent line (everything else is
+IF NOT EXISTS). Fixed in 501f551 (DROP POLICY IF EXISTS first) so the file is
+safe to re-run; no data migration was needed, the live DB already matches.
+
+Also performed a code-verified alignment of the "what is left to build" list
+against the actual repo (the earlier handoff wrongly listed Waves 1-3 as
+unbuilt). Verified by reading the code, not assuming:
+
+ALREADY BUILT (contradicting the earlier draft): W1 quiz core (api/quiz/generate,
+/q/[code], instant marking, api/quiz/solution + worked_solution, quiz-mode
+toggle in GenerateForm); W2 mastery (MasteryBars on /student, /dashboard/mastery
+tutor heat map, student progress dashboard with ScoresChart + streak.ts,
+daily streak); W3 SRS (srs/engine.ts, api/srs/track + reviewed, SrsSection
+"topics to review today", api/quiz/re-practice, StudyNow + api/quiz/study);
+W4 (B67 board picker, B68 board-filtered pullVerifiedQuestions, bulk-import UI
+at /admin/question-bank/import, admin curation page, algebraic.ts + mathjs,
+B72 AI tutor aiTutor.ts + api/quiz/explain); B73 assignment loop + B74 analytics.
+
+GENUINELY LEFT TO BUILD: (1) W5 remainder - cram mode (75), flexible task
+setting (76), accuracy-required mode (77), streak freeze (78); (2) W6 question
+bank CONTENT - pipeline exists but the ~2,000 questions still need extraction/
+curation (79-86); (3) W7 QA pass - integration test, mobile UX, performance
+audit (87-89); (4) launch prep - Resend domain + EMAIL_FROM, Flutterwave live
+keys + webhook URL, Vercel Pro + re-add generate-scheduled cron (W7); (5)
+cleanup - dead /signup form, orphaned Supabase-Auth paths, WorksheetReadyEmail,
+Monday-summary 'Forma Parent' label.
+
+Commit state: eecbe6a (W8 Waves A-E) + 501f551 (idempotent assignments SQL)
+both committed, NOT pushed - the last deployed Vercel build is ecfd067 which
+predates all of W8, so no cron fires until push + deploy.
