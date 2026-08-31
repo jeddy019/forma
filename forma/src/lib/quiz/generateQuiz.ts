@@ -25,7 +25,7 @@ import { splitMarkScheme } from '@/lib/ai/splitMarkScheme';
 import { resolveBranding } from '@/lib/branding';
 import { generateDigitalCode } from '@/lib/utils/digitalCode';
 import { blendWithBank } from '@/lib/questionBank/blendWithBank';
-import { EXPECTED_TYPE_ORDER, DAILY_TYPE_ORDER, type QuestionType } from '@/lib/ai/schema';
+import { resolveQuizShape } from '@/lib/quiz/quizShape';
 import { isActivePro } from '@/lib/payments/planStatus';
 import { sendFamilyDailyReadyEmail } from '@/lib/email/send';
 import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
@@ -77,15 +77,16 @@ export interface GenerateQuizOptions {
   fundamentalsTarget?: { subSkill: string; topic: string } | null;
   sessionNotes?: string;
   // W8 Wave D: overrides the length (else focus sets keeps 5, everything
-  // else 10). The daily quiz derives its count from the volume dial.
-  questionCount?: 5 | 10 | 15;
+  // else 10). The daily quiz derives its count from the volume dial; the
+  // W5 B75 cram mode defaults to 20.
+  questionCount?: 5 | 10 | 15 | 20;
   // W8 Wave D: forces the "N core questions, no warm-up/challenge" prose
   // (passes buildUserPrompt's dailyStyle through).
   dailyStyle?: boolean;
   // W8 Wave D: the auto-daily cron skips the ready-email (the founder digest
   // covers delivery). Defaults to true for every existing caller.
   sendReadyEmail?: boolean;
-  generatedFrom: 'quiz' | 're-practice' | 'study' | 'daily';
+  generatedFrom: 'quiz' | 're-practice' | 'study' | 'daily' | 'cram';
 }
 
 export interface GeneratedQuizRow {
@@ -104,19 +105,18 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
   const admin = createAdminClient();
 
   const isFocus = (options.focusSubSkills?.length ?? 0) > 0 || Boolean(options.fundamentalsTarget);
+  const isCram = options.generatedFrom === 'cram';
   const focusSubSkills = (options.focusSubSkills ?? []).map((s) => s.subSkill);
-  // Daily sets override the length (volume dial decides; focus elsewhere
-  // fixes it at the short 5).
-  const questionCount = options.questionCount ?? (isFocus ? 5 : 10);
-  // Daily quizzes are never warm-up or challenge - every question is a core
-  // question (DAILY TYPE ORDER rule), padded to the dial's count. Focus sets
-  // stay on the shared 5-core order.
-  const typeOrder: QuestionType[] =
-    options.generatedFrom === 'daily'
-      ? (new Array(questionCount).fill('core') as QuestionType[])
-      : isFocus
-        ? DAILY_TYPE_ORDER
-        : EXPECTED_TYPE_ORDER;
+  // B75: count + type order are decided by one pure helper (cram overrides the
+  // focus short-5 to a full 20-core board; daily follows the volume dial).
+  const shape = resolveQuizShape({
+    generatedFrom: options.generatedFrom,
+    focusSubSkills,
+    fundamentalsTarget: options.fundamentalsTarget,
+    questionCount: options.questionCount,
+  });
+  const questionCount = shape.questionCount;
+  const typeOrder = shape.typeOrder;
 
   // Per-owner free-tier check, mirroring the tutor route's atomic gate. The
   // RPC is SECURITY DEFINER so it runs as the table owner regardless of which
@@ -166,6 +166,7 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
         : (options.topicPrompt ?? ''),
     questionCount,
     dailyStyle: options.dailyStyle,
+    cramStyle: isCram ? true : undefined,
     subSkillDirective,
     focusSubSkills: isFocus ? focusSubSkills : undefined,
     examBoard: profile.exam_board ?? undefined,
@@ -238,9 +239,11 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<Genera
       .insert({
         owner_id: ownerId,
         student_id: profile.id,
-        prompt_used: isFocus
-          ? `Re-practise: ${focusSubSkills.join(', ')}`
-          : (options.topicPrompt ?? ''),
+        prompt_used: isCram
+          ? `Cram: ${focusSubSkills.join(', ')}`
+          : isFocus
+            ? `Re-practise: ${focusSubSkills.join(', ')}`
+            : (options.topicPrompt ?? ''),
         questions_json: questionsJson,
         mark_scheme_json: markSchemeJson,
         alignment_note: worksheet.alignment_note,

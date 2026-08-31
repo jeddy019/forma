@@ -13,6 +13,8 @@ import { isActivePro } from '@/lib/payments/planStatus';
 import { sendFamilyDailyReadyEmail } from '@/lib/email/send';
 import { resolveStudentFamilyEmails } from '@/lib/families/parentEmail';
 import { callMathEngine, matchMathEngineTopic } from '@/lib/ai/mathEngineClient';
+import type { GeneratedWorksheet } from '@/lib/ai/schema';
+import { mapWithConcurrency } from '@/lib/utils/concurrency';
 import type { Country } from '@/lib/constants';
 
 // Phase 6 Step 31: Group mode - "one worksheet, multiple students." One
@@ -109,74 +111,149 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Group mode requires all selected students to be at the same curriculum level.' }, { status: 400 });
   }
 
-  // Shared subject hint across the group (union, deduplicated) - no single
-  // student's own name goes into the prompt (see studentName below), since
-  // a group worksheet shouldn't read as personalised to one individual.
+  // Shared subject hint across the group (union, deduplicated) - used for the
+  // AI anchor prompt below. Each unique per-student set uses that student's
+  // own subjects instead.
   const subjectHint = [...new Set(students.flatMap((s) => s.subjects ?? []))];
-
-  const userPrompt = buildUserPrompt({
-    studentName: 'the student',
-    country: first.country,
-    curriculumLevel: first.curriculum_level,
-    yearLevel: first.year_level,
-    subjectHint,
-    // Session notes are per-student and this worksheet isn't - group mode
-    // deliberately doesn't pull any one student's notes in, same reasoning
-    // as not using any one student's name.
-    sessionNotes: 'none',
-    topicPrompt: sanitizedTopic,
-    examBoard: first.exam_board ?? undefined,
-  });
 
   // --- Deterministic routing (Phase 10) ---
   // Same pattern as /api/generate/route.ts but for group mode. The first
   // student's country determines the locale for the maths engine. Group mode
   // is tutor-only (always pro), so no free-tier check needed.
-  let worksheet;
-  const topicMatch = await matchMathEngineTopic(sanitizedTopic);
-  if (topicMatch.is_deterministic && topicMatch.matched_keys.length > 0) {
-    const engineResult = await callMathEngine({
-      curriculum: first.curriculum_level,
-      locale: first.country === 'canada_ontario' ? 'ontario' : first.country === 'united_states' ? 'us' : 'england',
-      difficulty: first.curriculum_level.includes('A-Level') ? 'higher' : 'standard',
-      year_level: first.year_level,
-      topic: sanitizedTopic,
-      question_count: 10,
-    });
+  let anchorWorksheet: GeneratedWorksheet | null = null;
 
-    if (engineResult && engineResult.questions.length === 10) {
-      worksheet = buildWorksheetFromDeterministic(engineResult.questions, {
-        subject: engineResult.subject,
-        topic: engineResult.topic,
-        curriculum: engineResult.curriculum,
-        year_level: engineResult.year_level,
-        difficulty: engineResult.difficulty_overall,
-        alignment_note: engineResult.alignment_note,
-      });
-      console.log(`[deterministic] Routed group ${sanitizedTopic} to maths engine (${topicMatch.matched_keys[0]}), 10 questions`);
-    } else {
-      console.log(`[deterministic] Engine returned ${engineResult?.questions?.length ?? 0}/10 questions, falling back to AI`);
+  // W5 B76 (flexible task setting): every student gets their OWN question set
+  // instead of one shared deck - different numbers/wording per student, so a
+  // group can't copy each other's answers. Indexed to the students array; a
+  // null slot falls back to the anchor set below.
+  const perStudentWorksheets = new Array<GeneratedWorksheet | null>(students.length);
+
+  const topicMatch = await matchMathEngineTopic(sanitizedTopic);
+  const ENGINE_CONCURRENCY = 3;
+  if (topicMatch.is_deterministic && topicMatch.matched_keys.length > 0) {
+    // Deterministic path: the engine supports per-request seeds (see
+    // mathEngineClient.ts), so each student gets a distinct but reproducible
+    // set at near-zero cost. The first successful set doubles as the anchor
+    // for any student whose call fails.
+    const engineResults = await mapWithConcurrency(students, ENGINE_CONCURRENCY, (student) =>
+      callMathEngine({
+        curriculum: first.curriculum_level,
+        locale: first.country === 'canada_ontario' ? 'ontario' : first.country === 'united_states' ? 'us' : 'england',
+        difficulty: first.curriculum_level.includes('A-Level') ? 'higher' : 'standard',
+        year_level: first.year_level,
+        topic: sanitizedTopic,
+        question_count: 10,
+        seed: Array.from(student.id.slice(0, 16)).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7),
+      })
+    );
+    for (let i = 0; i < students.length; i++) {
+      const engineResult = engineResults[i];
+      if (engineResult && engineResult.questions.length === 10) {
+        perStudentWorksheets[i] = buildWorksheetFromDeterministic(engineResult.questions, {
+          subject: engineResult.subject,
+          topic: engineResult.topic,
+          curriculum: engineResult.curriculum,
+          year_level: engineResult.year_level,
+          difficulty: engineResult.difficulty_overall,
+          alignment_note: engineResult.alignment_note,
+        });
+        anchorWorksheet = anchorWorksheet ?? perStudentWorksheets[i];
+      }
     }
+    console.log(
+      `[deterministic] Routed group ${sanitizedTopic} (${topicMatch.matched_keys[0]}) to maths engine, ${perStudentWorksheets.filter(Boolean).length}/${students.length} unique sets`
+    );
   }
 
   // --- AI fallback (existing path) ---
-  if (!worksheet) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
+  // When nothing deterministic came back, generate one ANCHOR set (the shared
+  // deck group mode produced before B76 - the safety net) and then attempt a
+  // unique set per student. Any student whose unique set fails keeps the
+  // anchor, so every student still gets a usable worksheet.
+  const AI_CONCURRENCY = 3;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS);
+
+  const buildAnchor = async (): Promise<void> => {
     try {
-      worksheet = await generateWorksheet(userPrompt, controller.signal);
+      const userPrompt = buildUserPrompt({
+        studentName: 'the student',
+        country: first.country,
+        curriculumLevel: first.curriculum_level,
+        yearLevel: first.year_level,
+        subjectHint,
+        sessionNotes: 'none',
+        topicPrompt: sanitizedTopic,
+        examBoard: first.exam_board ?? undefined,
+      });
+      const generated = await generateWorksheet(userPrompt, controller.signal);
+      anchorWorksheet = generated;
+      for (let i = 0; i < students.length; i++) {
+        perStudentWorksheets[i] = perStudentWorksheets[i] ?? generated;
+      }
     } catch (error) {
       if (controller.signal.aborted) {
-        return NextResponse.json({ error: 'This is taking longer than expected - please try again.' }, { status: 504 });
+        throw error;
       }
       console.error('Group worksheet generation failed', error);
-      return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
-    } finally {
-      clearTimeout(timeout);
+      throw error;
     }
+  };
+
+  // Unique per-student sets only matter when the deterministic path didn't
+  // already cover everyone; the anchor is still built first as the fallback.
+  const needsUniqueSets = perStudentWorksheets.some((w) => w === null) && !topicMatch.is_deterministic;
+
+  if (perStudentWorksheets.every((w) => w !== null)) {
+    // Deterministic sets for everyone - nothing else to generate.
+    clearTimeout(timeout);
+  } else {
+    await buildAnchor();
+    if (needsUniqueSets) {
+      const uniqueResults = await mapWithConcurrency(students, AI_CONCURRENCY, (student, i) =>
+        generateWorksheet(
+          buildUserPrompt({
+            // Each set is now genuinely this student's own - use their name
+            // and their own subjects (not the union), and ask for a variant
+            // distinct from every other set for the same topic.
+            studentName: student.name,
+            country: student.country,
+            curriculumLevel: student.curriculum_level,
+            yearLevel: student.year_level,
+            subjectHint: student.subjects ?? [],
+            sessionNotes: 'none',
+            topicPrompt: sanitizedTopic,
+            examBoard: student.exam_board ?? undefined,
+            uniqueVariant: true,
+          }),
+          controller.signal
+        ).then(
+          (generated) => {
+            perStudentWorksheets[i] = generated;
+            return generated;
+          },
+          (error) => {
+            if (controller.signal.aborted) {
+              throw error;
+            }
+            console.error(`Failed to generate unique set for student ${student.id} - falling back to the shared anchor`, error);
+            return null;
+          }
+        )
+      );
+      await Promise.all(uniqueResults);
+    }
+    clearTimeout(timeout);
   }
 
-  const { questionsJson, markSchemeJson } = splitMarkScheme(worksheet);
+  // The anchor (first deterministic set, else the AI anchor) defines the
+  // assignment's title/subject/topic and the shared email metadata.
+  const anchor = perStudentWorksheets.find((w) => w !== null && w.questions.length > 0);
+  if (!anchor) {
+    return NextResponse.json({ error: GENERIC_FAILURE_MESSAGE }, { status: 500 });
+  }
+
+  const { markSchemeJson } = splitMarkScheme(anchor);
 
   // Phase B Wave 5 (B73): group generation IS an assignment. One named row
   // in the new assignments table; every worksheet below is stamped with its
@@ -190,9 +267,9 @@ export async function POST(request: NextRequest) {
     .insert({
       id: assignmentId,
       owner_id: user.id,
-      title: `${worksheet.subject} - ${worksheet.topic}`,
-      subject: worksheet.subject,
-      topic: worksheet.topic,
+      title: `${anchor.subject} - ${anchor.topic}`,
+      subject: anchor.subject,
+      topic: anchor.topic,
     })
     .select('id')
     .single();
@@ -209,7 +286,17 @@ export async function POST(request: NextRequest) {
   const MAX_INSERT_ATTEMPTS = 3;
 
   const inserted: { id: string; digital_code: string; student_id: string }[] = [];
-  for (const student of students) {
+  for (let i = 0; i < students.length; i++) {
+    const student = students[i];
+    // W5 B76: this student's OWN set when it generated, else the shared
+    // anchor - every row is valid regardless, only diversity varies.
+    const set = perStudentWorksheets[i] ?? anchor;
+    if (!set || set.questions.length === 0) {
+      console.warn(`Skipping group worksheet for student ${student.id}: no usable question set`);
+      continue;
+    }
+    const { questionsJson } = splitMarkScheme(set);
+
     let row: { id: string; digital_code: string; student_id: string } | null = null;
     let insertError: { code?: string; message: string } | null = null;
     for (let attempt = 1; attempt <= MAX_INSERT_ATTEMPTS; attempt++) {
@@ -223,11 +310,11 @@ export async function POST(request: NextRequest) {
           prompt_used: sanitizedTopic,
           questions_json: questionsJson,
           mark_scheme_json: markSchemeJson,
-          alignment_note: worksheet.alignment_note,
+          alignment_note: set.alignment_note,
           digital_code: generateDigitalCode(),
-          subject: worksheet.subject,
-          topic: worksheet.topic,
-          difficulty: worksheet.difficulty_overall,
+          subject: set.subject,
+          topic: set.topic,
+          difficulty: set.difficulty_overall,
           paper_size: ownerRow?.paper_size ?? 'a4',
           generated_from: 'manual',
         })
@@ -258,8 +345,8 @@ export async function POST(request: NextRequest) {
         entries: [
           {
             name: student.name,
-            subject: worksheet.subject,
-            topic: worksheet.topic,
+            subject: anchor.subject,
+            topic: anchor.topic,
             url: `${appUrl}/s/${row.digital_code}`,
             digitalCode: row.digital_code,
           },
@@ -277,8 +364,8 @@ export async function POST(request: NextRequest) {
     {
       assignmentId,
       groupId: assignmentId,
-      subject: worksheet.subject,
-      topic: worksheet.topic,
+      subject: anchor.subject,
+      topic: anchor.topic,
       studentCount: inserted.length,
     },
     { status: 201 }

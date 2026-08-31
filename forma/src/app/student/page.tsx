@@ -11,7 +11,14 @@ import ScoresChart, { type ScorePoint } from '@/lib/ui/ScoresChart';
 import StudyNow from '@/lib/ui/StudyNow';
 import { toMasteryBars, masteryScore } from '@/lib/mastery/masteryView';
 import { isDue, nextDueLabel } from '@/lib/srs/engine';
-import { currentStreak } from '@/lib/streak/streak';
+import {
+  currentStreakWithFreeze,
+  splitFrozenDays,
+  joinFrozenDays,
+  appendFrozenDay,
+  freezeMonth,
+  dayLabel,
+} from '@/lib/streak/streak';
 import type { SkillMap } from '@/lib/mastery/types';
 import { BarChart3, FileText, Flame, LogOut, TrendingUp } from 'lucide-react';
 
@@ -143,6 +150,21 @@ export default async function StudentPortalPage({
 
   const reviewMap: Record<string, ReviewInfo> = {};
   const now = new Date();
+
+  // W5 B78 (streak freeze): load the student's stored frozen days. Guarded so
+  // the page still renders with no freeze before add-streak-freeze.sql has
+  // been applied (streak_freeze_days simply doesn't exist yet).
+  let frozenDays: string[] = [];
+  const { data: freezeRow, error: freezeError } = await admin
+    .from('student_profiles')
+    .select('streak_freeze_days')
+    .eq('id', student.id)
+    .maybeSingle<{ streak_freeze_days: string | null }>();
+  if (freezeError) {
+    console.warn('streak_freeze_days unavailable (migration pending?)', freezeError.message);
+  } else {
+    frozenDays = splitFrozenDays(freezeRow?.streak_freeze_days);
+  }
   for (const row of reviewSchedules ?? []) {
     const entry = { nextReviewAt: row.next_review_at };
     reviewMap[row.sub_skill] = {
@@ -172,10 +194,33 @@ export default async function StudentPortalPage({
     : { data: [] as ActivitySubmissionRow[] };
 
   const activitySubmissions = allSubmissions ?? [];
-  const streak = currentStreak(
+  const streakOutcome = currentStreakWithFreeze(
     activitySubmissions.map((s) => s.submitted_at),
+    frozenDays,
     now
   );
+  const streak = streakOutcome.streak;
+
+  // W5 B78: persist a just-consumed freeze exactly once (the next load finds
+  // the day already frozen and stays at plain > 0). Best-effort - a failure
+  // here just means the freeze re-bridges on a later load.
+  if (streakOutcome.dayToFreeze) {
+    const nextDays = appendFrozenDay(frozenDays, streakOutcome.dayToFreeze);
+    const { error: freezeUpdateError } = await admin
+      .from('student_profiles')
+      .update({ streak_freeze_days: joinFrozenDays(nextDays) })
+      .eq('id', student.id);
+    if (freezeUpdateError) {
+      console.warn('Failed to persist streak freeze', freezeUpdateError.message);
+    } else {
+      frozenDays = nextDays;
+    }
+  }
+
+  // "Protected this month" only reads true while the streak is actually alive -
+  // a genuine reset later (multi-day break) must not masquerade as protected.
+  const currentMonth = dayLabel(now).slice(0, 7);
+  const protectedThisMonth = streak > 0 && frozenDays.some((d) => freezeMonth(d) === currentMonth);
   // Most recent ~10 scored submissions, oldest-first for the chart.
   const chartScores: ScorePoint[] = activitySubmissions
     .filter((s): s is ActivitySubmissionRow & { score_percentage: number } => s.score_percentage != null)
@@ -210,9 +255,15 @@ export default async function StudentPortalPage({
             <div>
               <p className="text-[11px] uppercase tracking-[0.06em] text-[#9A9080]">Daily streak</p>
               <p className="text-2xl font-semibold text-[#1A1A18]">{streak} day{streak === 1 ? '' : 's'}</p>
-              <p className="text-xs text-[#5C5849]">Keep it going - practise every day.</p>
+              <p className="text-xs text-[#5C5849]">
+                {protectedThisMonth ? 'Protected this month.' : 'Keep it going - practise every day.'}
+              </p>
             </div>
-            <Flame className={`w-8 h-8 ${streak > 0 ? 'text-[#C8A84B]' : 'text-[#E0D9D0]'}`} strokeWidth={1.5} aria-hidden="true" />
+            <Flame
+              className={`w-8 h-8 ${protectedThisMonth || streak > 0 ? 'text-[#C8A84B]' : 'text-[#E0D9D0]'}`}
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           </div>
 
           <div className={`${cardClass} flex flex-col gap-2`}>

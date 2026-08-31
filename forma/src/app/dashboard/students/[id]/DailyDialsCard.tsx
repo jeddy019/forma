@@ -12,22 +12,29 @@ import type { PracticeVolume, DifficultyPosture, HolidayPosture } from '@/lib/da
 // holiday posture. Founder-side only (PRODUCT EXPERIENCE MODEL): a parent
 // asking for "more" gets the founder flipping these dials, never a control
 // of their own; a student never sees them.
+//
+// W5 B77 (accuracy-required mode): the same card hosts the per-student
+// accuracy switch - when on, the quiz player blocks the review screen until
+// every wrong sub-skill is re-practised correctly. One switch, one line.
 export default function DailyDialsCard({
   studentId,
   practiceVolume,
   difficultyPosture,
   holidayPosture,
+  accuracyRequired,
   lastDailyGeneratedAt,
 }: {
   studentId: string;
   practiceVolume: PracticeVolume;
   difficultyPosture: DifficultyPosture;
   holidayPosture: HolidayPosture;
+  accuracyRequired: boolean;
   lastDailyGeneratedAt: string | null;
 }) {
   const [volume, setVolume] = useState<PracticeVolume>(practiceVolume);
   const [posture, setPosture] = useState<DifficultyPosture>(difficultyPosture);
   const [holiday, setHoliday] = useState<HolidayPosture>(holidayPosture);
+  const [accuracy, setAccuracy] = useState<boolean>(accuracyRequired);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -40,13 +47,13 @@ export default function DailyDialsCard({
     setSaving(true);
     setError(null);
     setMessage(null);
-    const result = await saveDailyDialsAction(studentId, volume, posture, holiday);
+    const result = await saveDailyDialsAction(studentId, volume, posture, holiday, accuracy);
     setSaving(false);
     if (result.error) {
       setError(result.error);
       return;
     }
-    setMessage('Saved - applies from tomorrow morning\'s automatic quiz.');
+    setMessage('Saved - applies from the student\'s next practice.');
   }
 
   return (
@@ -111,6 +118,22 @@ export default function DailyDialsCard({
       <p className="text-xs text-[#9A9080]">
         Manual only - term dates differ across the countries, so holidays are never auto-detected.
       </p>
+
+      <label className="mt-1 flex items-start justify-between gap-3 border-t border-[#E0D9D0] pt-3 cursor-pointer select-none">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium text-[#1A1A18]">Accuracy required</span>
+          <span className="text-xs text-[#5C5849]">
+            Wrong answers must be re-practised until correctly answered before the student moves on.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={accuracy}
+          onChange={(event) => setAccuracy(event.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 rounded border-[#C4B9AC] accent-[#1A3D2E] cursor-pointer"
+          aria-label={`Accuracy required for ${studentId}`}
+        />
+      </label>
 
       <div className="flex items-center gap-3">
         <button type="button" onClick={handleSave} disabled={saving} className={primaryButtonClass}>

@@ -469,7 +469,8 @@ export async function saveDailyDialsAction(
   studentId: string,
   practiceVolume: string,
   difficultyPosture: string,
-  holidayPosture: string
+  holidayPosture: string,
+  accuracyRequired: boolean
 ): Promise<SaveDailyDialsResult> {
   const auth = await requireTutorPro();
   if (auth.error || !auth.userId) {
@@ -483,7 +484,8 @@ export async function saveDailyDialsAction(
     ? (difficultyPosture as DifficultyPosture)
     : null;
   const holiday = HOLIDAY_POSTURES.includes(holidayPosture as HolidayPosture) ? (holidayPosture as HolidayPosture) : null;
-  if (!volume || !posture || !holiday) {
+  const accuracy = typeof accuracyRequired === 'boolean' ? accuracyRequired : null;
+  if (!volume || !posture || !holiday || accuracy === null) {
     return { error: 'Invalid daily settings.' };
   }
 
@@ -492,7 +494,12 @@ export async function saveDailyDialsAction(
   // level - a student from another account simply doesn't match here.
   const { error } = await supabase
     .from('student_profiles')
-    .update({ practice_volume: volume, difficulty_posture: posture, holiday_posture: holiday })
+    .update({
+      practice_volume: volume,
+      difficulty_posture: posture,
+      holiday_posture: holiday,
+      accuracy_required: accuracy,
+    })
     .eq('id', studentId);
   if (error) {
     console.error('Failed to save daily dials', error);

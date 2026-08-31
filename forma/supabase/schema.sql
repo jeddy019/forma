@@ -37,6 +37,15 @@ CREATE TABLE student_profiles (
   email TEXT,
   -- Kumon Methodology: per-sub-skill mastery state. Empty until Phase 7.
   skill_map JSONB DEFAULT '{}'::jsonb,
+  -- W5 B78 (Streak freeze): comma-separated UTC 'YYYY-MM-DD' labels of days
+  -- a monthly freeze protected the daily streak. One day per month at most.
+  -- See src/lib/streak/streak.ts. Added by supabase/add-streak-freeze.sql.
+  streak_freeze_days TEXT,
+  -- W5 B77 (Accuracy-required): when TRUE the quiz player blocks the review
+  -- screen until every wrong sub-skill is re-practised correctly ("must get
+  -- correct before advancing"). Founder-side dial. Added by
+  -- supabase/add-accuracy-required.sql.
+  accuracy_required BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -76,7 +85,7 @@ CREATE TABLE worksheets (
   difficulty TEXT,
   paper_size TEXT DEFAULT 'a4',
   difficulty_feedback TEXT CHECK (difficulty_feedback IN ('too_easy','just_right','too_hard',NULL)),
-  generated_from TEXT DEFAULT 'manual' CHECK (generated_from IN ('manual','scheduled','daily')),
+  generated_from TEXT DEFAULT 'manual' CHECK (generated_from IN ('manual','scheduled','daily','quiz','re-practice','study','cram')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   -- Enforces the 30-day digital link expiry promised in User Challenges -
   -- see supabase/add-worksheet-expiry.sql for the standalone fix, applied

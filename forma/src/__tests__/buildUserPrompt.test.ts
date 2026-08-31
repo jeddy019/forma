@@ -60,4 +60,35 @@ describe('buildUserPrompt', () => {
     const prompt = buildUserPrompt({ ...base, examBoard: undefined });
     expect(prompt).not.toContain('Exam board');
   });
+
+  it('emits the high-intensity cram board structure with the focus sub-skills (B75)', () => {
+    const prompt = buildUserPrompt({
+      ...base,
+      cramStyle: true,
+      questionCount: 20,
+      focusSubSkills: ['elimination method', 'quadratic equations'],
+    });
+    expect(prompt).toContain('20 mixed core questions');
+    expect(prompt).toContain('high-intensity exam-week set');
+    expect(prompt).toContain('warm-up, no challenge');
+    expect(prompt).toContain('- elimination method');
+    expect(prompt).toContain('- quadratic equations');
+    expect(prompt).toContain("Set each question's sub_skill to exactly one of the listed names");
+    // Cram is all-core - it must never fall back to the warm-up/core/challenge
+    // or the short-5 focused wording.
+    expect(prompt).not.toContain('2 warm-up');
+    expect(prompt).not.toContain('6 core');
+    expect(prompt).not.toContain('5 questions, each on ONE of these exact sub-skills only');
+  });
+
+  it('emits the unique-variant instruction when uniqueVariant is set (B76)', () => {
+    const prompt = buildUserPrompt({ ...base, uniqueVariant: true });
+    expect(prompt).toContain('generate a DIFFERENT question set');
+    expect(prompt).toContain('every student in this assignment must receive distinct questions');
+  });
+
+  it('omits the unique-variant instruction by default', () => {
+    const prompt = buildUserPrompt({ ...base, uniqueVariant: undefined });
+    expect(prompt).not.toContain('Unique variant');
+  });
 });

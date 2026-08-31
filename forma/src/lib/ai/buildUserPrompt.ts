@@ -12,13 +12,19 @@ export interface WorksheetPromptParams {
   // 10-question worksheet. 5 selects the daily variant's question-structure
   // text below - callers also need to pass DAILY_TYPE_ORDER to
   // generateWorksheet/validateWorksheet separately (schema.ts), this only
-  // controls the prose the model reads. 15 is W8 Wave D's Deep volume.
-  questionCount?: 5 | 10 | 15;
+  // controls the prose the model reads. 15 is W8 Wave D's Deep volume, 20
+  // is W5 B75's cram-mode board.
+  questionCount?: 5 | 10 | 15 | 20;
   // W8 Wave D (automatic daily quiz): forces the "N core questions, no
   // warm-up, no challenge" prose regardless of count - the daily quiz is
   // never easy-tier and never ends on a labelled challenge. Mirrors the
   // all-core typeOrder the caller must also pass.
   dailyStyle?: boolean;
+  // W5 B75 (cram mode): exam-week high-intensity prose - "20 mixed core
+  // questions from the student's weak sub-skills, no warm-up, no challenge,
+  // timed." Mutually exclusive with dailyStyle (a caller picks one or the
+  // other, never both - the all-core typeOrder is passed separately).
+  cramStyle?: boolean;
   // Phase 7 Steps 40/41 shared mechanism: when present, appended as its own
   // paragraph instructing the model to target one specific sub-skill
   // instead of freely decomposing the topic - Step 40 (explicit tutor pick)
@@ -37,6 +43,12 @@ export interface WorksheetPromptParams {
   // present for England/US students who chose a board - left out entirely
   // otherwise (Ontario has no board, and "no board" is a valid choice).
   examBoard?: string;
+  // W5 B76 (flexible task setting): when every student in an assignment must
+  // receive a DIFFERENT question set (anti-cheating) rather than one shared
+  // deck, this tells the model the variant must not repeat another student's
+  // wording, numbers, or diagrams for the same topic. The sampled output is
+  // naturally distinct per call; this makes the intent explicit.
+  uniqueVariant?: boolean;
 }
 
 export function buildUserPrompt(params: WorksheetPromptParams): string {
@@ -58,8 +70,16 @@ decompose into any sub-skill not listed. Together cover all of the listed
 sub-skills.`
     : undefined;
 
-  const questionStructure =
-    params.focusSubSkills?.length
+  const questionStructure = params.cramStyle
+    ? `Question structure:
+${questionCount} mixed core questions, a high-intensity exam-week set (no
+warm-up, no challenge - every question at level or above), timed like a real
+exam. Draw the board from the exact sub-skills below:
+- ${params.focusSubSkills?.join('\n- ') ?? 'the student\'s weakest sub-skills'}
+Set each question's sub_skill to exactly one of the listed names - never
+rename them and never decompose into a sub-skill not listed. Mix the listed
+sub-skills across the questions rather than grouping them.`
+    : params.focusSubSkills?.length
       ? focusText ?? ''
       : params.dailyStyle
         ? `${questionCount} core questions, all at level - a focused daily practice set targeting the described weakness (no warm-up, no challenge questions).`
@@ -73,6 +93,10 @@ focused daily practice set, not a full topic decomposition.`
 2 challenge (above level - clearly labelled, students expect it to be harder)`;
 
   const subSkillDirectiveText = params.subSkillDirective ? `\n${params.subSkillDirective}` : '';
+
+  const uniqueVariantText = params.uniqueVariant
+    ? `\nUnique variant: generate a DIFFERENT question set from any other produced for this same topic - every student in this assignment must receive distinct questions, so change wording, numbers, and diagram parameters rather than repeating familiar examples.`
+    : '';
 
   // B67: only emit the exam-board line when a board was actually picked -
   // Ontario has no board and "no board" is a valid England/US choice, so an
@@ -91,6 +115,6 @@ ${questionStructure}
 Include coloured diagrams wherever they help understanding.
 In alignment_note write one sentence confirming suitability, naming the exam
 board where relevant (England only - Ontario and US do not have exam boards
-in this sense).${subSkillDirectiveText}
+in this sense).${subSkillDirectiveText}${uniqueVariantText}
 Return only the JSON object.`;
 }

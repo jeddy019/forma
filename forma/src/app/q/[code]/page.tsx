@@ -4,6 +4,7 @@ import type { DiagramSpec } from '@/lib/ai/schema';
 import { renderRichText } from '@/lib/render/richText';
 import { aiTutorAllowance } from '@/lib/payments/planStatus';
 import { resolveBranding } from '@/lib/branding';
+import { CRAM_TIME_LIMIT_SEC, type CramMeta } from '@/lib/quiz/cram';
 import QuizForm from './QuizForm';
 
 export interface QuizQuestionPart {
@@ -32,6 +33,8 @@ interface WorksheetRow {
   expires_at: string | null;
   first_opened_at: string | null;
   owner_id: string | null;
+  student_id: string | null;
+  generated_from: string | null;
   questions_json: {
     curriculum: string;
     year_level: string;
@@ -61,7 +64,7 @@ export default async function QuizPage({
   const admin = createAdminClient();
   const { data: worksheet } = await admin
     .from('worksheets')
-    .select('id, digital_code, subject, topic, alignment_note, expires_at, first_opened_at, owner_id, questions_json')
+    .select('id, digital_code, subject, topic, alignment_note, expires_at, first_opened_at, owner_id, student_id, generated_from, questions_json')
     .eq('digital_code', code)
     .single<WorksheetRow>();
 
@@ -112,6 +115,19 @@ export default async function QuizPage({
   const aiTutorEnabled = aiTutorAllowance(ownerRow?.plan, ownerRow?.plan_expires_at) > 0;
   const brand = resolveBranding(ownerRow);
 
+  // W5 B77 (accuracy-required mode): a per-student dial. The player blocks
+  // the review screen until every wrong sub-skill is re-practised correctly
+  // when the student's profile says so. Resolved server-side from the stored
+  // student_id (never a URL query the student could tamper with); guarded so
+  // a missing profile or pre-migration column simply turns the mode off.
+  const accuracyRequired = worksheet.student_id
+    ? ((await admin
+        .from('student_profiles')
+        .select('accuracy_required')
+        .eq('id', worksheet.student_id)
+        .maybeSingle<{ accuracy_required: boolean }>())?.data?.accuracy_required ?? false)
+    : false;
+
   const quizQuestions: QuizQuestion[] = questions.map((question) => ({
     id: question.id,
     type: question.type,
@@ -123,6 +139,12 @@ export default async function QuizPage({
       textHtml: renderRichText(part.text),
     })),
   }));
+
+  // W5 B75: a cram quiz carries a visible countdown timer in the player. The
+  // generated_from column decides - 'cram' boards are timed, everything else
+  // is not. Server-side truth from the stored row, never a URL query the
+  // student could tamper with.
+  const cramMeta: CramMeta | null = worksheet.generated_from === 'cram' ? { timeLimitSeconds: CRAM_TIME_LIMIT_SEC } : null;
 
   return (
     <div className="min-h-screen px-4 py-6 sm:px-6" style={{ backgroundColor: '#F7F4EF' }}>
@@ -145,10 +167,21 @@ export default async function QuizPage({
             ))}
           </div>
           <p className="text-[11px] italic text-[#9A9080] mb-1">{alignmentNoteText}</p>
+          {cramMeta && (
+            <p className="text-[11px] font-medium text-[#C0392B] uppercase tracking-wider">
+              Cram mode - {CRAM_TIME_LIMIT_SEC / 60} minute timer
+            </p>
+          )}
           <p className="text-sm text-[#5C5849]">{worksheet.topic}</p>
         </div>
 
-        <QuizForm digitalCode={worksheet.digital_code} questions={quizQuestions} aiTutorEnabled={aiTutorEnabled} />
+        <QuizForm
+          digitalCode={worksheet.digital_code}
+          questions={quizQuestions}
+          aiTutorEnabled={aiTutorEnabled}
+          cram={cramMeta}
+          accuracyRequired={accuracyRequired}
+        />
       </div>
     </div>
   );

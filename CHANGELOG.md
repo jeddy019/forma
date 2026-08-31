@@ -5414,3 +5414,233 @@ Monday-summary 'Forma Parent' label.
 Commit state: eecbe6a (W8 Waves A-E) + 501f551 (idempotent assignments SQL)
 both committed, NOT pushed - the last deployed Vercel build is ecfd067 which
 predates all of W8, so no cron fires until push + deploy.
+
+
+---
+
+SESSION UPDATE (2026-08-30, second pass - W5 cram mode, part 1):
+Completed: W5 Step 75 (cram mode) CODE-COMPLETE - the wrapper (generation +
+route + player) is built and unit-checked, pending one live DB constraint.
+Generation: buildUserPrompt gained a cramStyle branch (20 mixed core
+questions, high-intensity exam-week set, no warm-up/challenge, exact sub-skill
+board) and questionCount widened to 5|10|15|20; generateQuiz gained a cram
+generatedFrom + a new extracted pure helper src/lib/quiz/quizShape.ts
+(resolveQuizShape) so count/typeOrder (incl. the cram override of the focus
+short-5 to a full 20-core board) are one canonical, unit-tested source. Route:
+/api/quiz/cram (anonymous POST, resolves student from digitalCode, derives
+weakest sub-skills from skill_map via toMasteryBars, fallback to wrongSubSkills,
+calls generateQuiz with generatedFrom cram, questionCount 20, sendReadyEmail
+false); shared constants in src/lib/quiz/cram.ts (CRAM_QUESTION_COUNT=20,
+CRAM_TIME_LIMIT_SEC=1800). Player: /q/[code] now reads generated_from (added to
+the safe select) and passes cramMeta when the quiz is a cram board; QuizForm
+renders a countdown timer in the sticky bottom bar (red under 60s, auto-submits
+at 0 via a ref-tracked latest handleSubmit - set in an effect after render per
+react-hooks/refs), and a gold "Start cram mode" button on the review screen
+(POST /api/quiz/cram, routes to the fresh quiz). Tests: +6 quizShape (cram
+defaults 20 all-core, cram honours explicit count, daily all-core, focus
+short-5, standard 10, override) +1 buildUserPrompt cram prose = 307 total
+passing; tsc clean; eslint 0 errors.
+
+Verification: real end-to-end attempt against /api/quiz/cram with Aisha
+digital code VyX-sEvk6uE - the AI produced an authentic 20-question cram board
+("Cram: Elimination method, Ratio and proportion, Angles in triang...",
+difficulty higher, prompt "Re-practise: Elimination method, ..."), then the DB
+INSERT failed: 23514 violates check constraint worksheets_generated_from_check -
+the live DB only allows ('manual','scheduled','daily'), which means the
+pre-existing quiz / re-practice / study routes were silently failing to persist
+too. Confirmed in dev-server.log (failed-store row shows generated_from=cram at
+insert).
+
+Decisions: (1) fixed by one idempotent migration
+supabase/add-cram-generated-from.sql (drop + re-add the CHECK with the full
+in-use set manual/scheduled/daily/quiz/re-practice/study/cram) - AWAITING user
+application in the Supabase SQL editor; then cram must be re-verified
+end-to-end. (2) No pg driver / psql in the project, so a direct-DDL apply was
+rejected in favour of the user's manual editor apply (established workflow).
+(3) The countdown ref update lives in an effect (not render) to satisfy
+react-hooks/refs; render-body ref writes are forbidden by the codebase eslint.
+
+Next: after the user applies add-cram-generated-from.sql - re-run the cram
+happy path (expect a stored 20-question board + timer UI), then commit this
+work. Then continue W5 remainder: flexible task setting (76), accuracy-required
+mode (77), streak freeze (78).
+
+Commit state: cram code uncommitted (working tree) - will commit together with
+the re-verification once the DB migration is applied.
+
+
+---
+
+SESSION UPDATE (2026-08-30, third pass - W5 span: cram mode + streak freeze):
+Completed: cram mode (75) re-confirmed as code-complete but DB-blocked (the
+user has NOT yet applied add-cram-generated-from.sql - the live constraint
+still rejected generated_from='cram' on a second live attempt, 23514 again).
+So continued with W5 Step 78 (streak freeze), which builds purely on streak
+logic + the student portal and needs no cram dependency:
+- src/lib/streak/streak.ts: currentStreak refactored onto a shared
+  streakFromSet; new pure helpers freezeMonth, splitFrozenDays,
+  joinFrozenDays, appendFrozenDay, and currentStreakWithFreeze returning
+  { streak, dayToFreeze }. Semantics: a freeze only bridges a SINGLE missed
+  day (no activity today or yesterday but activity the day before that);
+  one freeze per calendar month keyed on the MISSED day's month (conservative
+  across a month boundary); previously-bridged days are stored as permanent
+  active days so the streak never needs re-bridging and the rescue is
+  idempotent on reload.
+- src/app/student/page.tsx: loads student_profiles.streak_freeze_days in a
+  GUARDED query (falls back to no-freeze before the migration applies, so the
+  portal never breaks); computes the streak with the freeze; persists a just-
+  consumed freeze best-effort (one write, next load sees it already frozen);
+  streak card subtitle flips to "Protected this month" only while the streak
+  is genuinely alive AND a freeze was spent this month, with a gold flame.
+- supabase/add-streak-freeze.sql: ADD COLUMN IF NOT EXISTS streak_freeze_days
+  TEXT (idempotent) - PENDING user application, same as add-cram-generated-
+  from.sql. Also mirrored the column into supabase/schema.sql and
+  CLAUDE.md's Database Schema.
+- Tests: +13 in src/__tests__/streak.test.ts (bridge single day, no bridge
+  for 2+ day holes, one-per-month, new-month spends its own freeze, frozen
+  day permanent, idempotent reload, storage helpers) = 320/320 passing;
+  tsc clean; eslint clean on touched files.
+
+Decisions: (1) streak-freeze state lives in a dedicated TEXT column rather
+than reusing skill_map - toMasteryBars iterates every skill_map key
+(entry.history), so a non-sub-skill key would crash the mastery view; a
+column is the clean, and CLAUDE.md-consistent, seam. (2) The freeze is
+AUTO-consumed on read (server component persists when dayToFreeze is non-
+null) rather than a deliberate user action - matches classic streak-freeze
+behaviour (protect the moment you'd lose it) and stays a pure, testable
+rule; a failure to persist simply re-bridges on a later load. (3) "Protected
+this month" is shown only when streak > 0 AND a freeze was spent this month
+- a later genuine reset must not masquerade as protected. (4) Pro-only by
+pricing spec but ungated, consistent with the de-pro founder model.
+
+Next: (a) user applies BOTH pending migrations (add-cram-generated-from.sql,
+add-streak-freeze.sql), then re-verify cram end-to-end and eyeball the
+streak card on /student; (b) continue W5 remainder: flexible task setting
+(76), accuracy-required mode (77).
+
+Commit state: cram + streak-freeze + build-status edits all uncommitted
+(working tree). Cram was NOT committed - the user has not asked, and per the
+working-style rule commits only happen when asked.
+
+
+## Session - W5 B76 Flexible Task Setting (unique question sets per student in group generation)
+
+### Completed
+- src/lib/ai/buildUserPrompt.ts: added `uniqueVariant?: boolean` to
+  WorksheetPromptParams. When true, appends an independent trailing paragraph
+  instructing the model to generate a DIFFERENT question set from any other
+  produced for the same topic - distinct wording, numbers, and diagram
+  parameters per student - so a group can't copy each other's answers.
+  Implemented as a separate line after the subSkillDirective paragraph, and
+  only when set (absent by default, so single-student generation and every
+  other path are byte-identical to before).
+- src/lib/utils/concurrency.ts (NEW): `mapWithConcurrency(items, limit, fn)` -
+  pure async map that never runs more than `limit` tasks in flight, preserving
+  order and propagating rejections. Used to bound the group route's per-student
+  generation bursts.
+- src/app/api/generate/group/route.ts: rewrote the generation core so each
+  selected student gets their OWN question set instead of one shared deck.
+  - Deterministic path: now calls the maths engine once PER STUDENT with a
+    per-student seed derived from the student's id (the engine already accepts
+    `seed` - see mathEngineClient.ts), bounded to 3 concurrent calls via
+    mapWithConcurrency. Each set is distinct and reproducible; the first
+    successful set doubles as the anchor for any student whose call fails.
+  - AI fallback: still builds one ANCHOR set first (the pre-B76 shared deck -
+    the safety net every student falls back to), then generates a unique set
+    per student with `uniqueVariant: true` and that student's OWN name +
+    subjects (not the union), bounded to 3 concurrent calls. A failed unique
+    set keeps the anchor, so every student still gets a usable row.
+  - Insert loop now keys each worksheet row to ITS student's own generated set
+    (perStudentWorksheets[i] ?? anchor), storing that set's questions_json,
+    alignment_note, subject, topic, difficulty - the mark scheme is split from
+    whichever set each row uses. Assignment title/subject/topic and email
+    metadata come from the anchor.
+  - Removed the previously-unused shared `userPrompt` construction.
+- src/__tests__/concurrency.test.ts (NEW): 5 tests - order preservation,
+  peak concurrency never exceeds limit, empty input, limit clamped to >=1,
+  rejection propagation.
+- src/__tests__/buildUserPrompt.test.ts: +2 tests - uniqueVariant emits the
+  distinct-set paragraph, omitted by default.
+
+### Verification
+- 327/327 tests pass (was 320; +5 concurrency, +2 uniqueVariant). tsc --noEmit
+  clean. eslint clean on all touched files. Dev server compiled the route
+  without error (group route not exercised live - requires auth + the maths
+  engine, which isn't running locally).
+
+### Decisions
+- (1) Unique per-student variability comes "for free" from distinct AI calls
+  plus the explicit uniqueVariant line - no schema change, and the 
+  deterministic path uses the engine's existing per-request `seed` param, so
+  no migration or new infrastructure is needed. This makes B76 verifiable
+  immediately, unlike the blocked cram/streak features.
+- (2) Concurrency is bounded at 3 for both engines (matches the Puppeteer
+  concurrency rule's spirit) so a 10-student group doesn't burst 10 generation
+  calls at the backend at once; the maths engine seeds make the deterministic
+  path near-zero cost.
+- (3) Every student keeps a usable worksheet even when their unique set fails
+  - the anchor is the guaranteed fallback, so flexible task setting never
+  introduces a new failure mode.
+
+### Next
+- (a) User applies BOTH pending migrations (add-cram-generated-from.sql,
+  add-streak-freeze.sql), then re-verify cram end-to-end and eyeball the
+  streak card on /student; (b) then W5 step 77 (accuracy-required mode) -
+  needs a placement decision first (per-student dial vs per-quiz toggle),
+  then W6 bank content, W7 QA, launch prep.
+
+Commit state: B76 edits uncommitted (working tree); commits only when asked.
+
+## Session - W5 B77 Accuracy-Required Mode (must get correct before advancing)
+
+Placement decided with the user: **per-student dial** on the founder's
+DailyDials card, not a per-quiz toggle. The student never sees this control -
+it only changes the review screen's behaviour.
+
+### Built
+- `supabase/add-accuracy-required.sql` (NEW): `ALTER TABLE student_profiles
+  ADD COLUMN IF NOT EXISTS accuracy_required BOOLEAN NOT NULL DEFAULT FALSE;`
+  - mirrored into `supabase/schema.sql` AND the `student_profiles` block in
+    CLAUDE.md. Also widened CLAUDE.md + schema.sql's stale
+    `worksheets.generated_from` CHECK to the full live set
+    (manual/scheduled/daily/quiz/re-practice/study/cram) so the doc matches the
+    already-applied add-cram-generated-from.sql.
+- `DailyDialsCard.tsx`: added `accuracyRequired` prop + an "Accuracy required"
+  checkbox (founder-side switch). Save message generalised from "applies from
+  tomorrow morning's automatic quiz" to "applies from the student's next
+  practice" so the dial covers both the daily quiz and ad-hoc quiz paths.
+- `actions.ts` (`saveDailyDialsAction`): fifth arg `accuracyRequired: boolean`,
+  validated + written to `accuracy_required`.
+- `[id]/page.tsx`: `accuracy_required` added to StudentRow, the profile select,
+  and the DailyDialsCard props.
+- `q/[code]/page.tsx`: reads the worksheet's stored `student_id`, looks up the
+  profile's `accuracy_required` server-side (admin client, guarded -> default
+  false so a missing profile/pre-migration column just turns it off; never a
+  client-tamperable query param), passes `accuracyRequired` to QuizForm.
+- `QuizForm.tsx`: new optional `accuracyRequired` prop; computes
+  `accuracyLocked = accuracyRequired && inReview && wrongSubSkills.length > 0`.
+  While locked: gold lock icon + "Keep going until it is right" title +
+  blocking copy, the "Re-practice wrong answers" button is the ONLY CTA, the
+  cram offer is hidden, and a "stays locked until you get everything correct"
+  note appears. The re-practice route (`/api/quiz/re-practice`) is confirmed as
+  the correct machinery - it resolves the student SERVER-SIDE from the stored
+  student_id, generates a focused set on the wrong sub-skills, and inserts with
+  `generated_from: 're-practice'` (now admitted by the widened constraint).
+
+### Verification
+- `npx tsc --noEmit` clean. eslint 0 errors on all touched files (3 pre-existing
+  hook-dependency warnings in QuizForm, none introduced here). Focused vitest
+  run on buildUserPrompt/concurrency/quizShape/streak = 41/41 pass. (The full
+  suite's 25-pass-then-worker-crash is vitest worker-pool resource thrash in
+  this environment, not a code failure - the same files pass in isolation.)
+
+### Next
+- (a) User applies `add-accuracy-required.sql` in the Supabase SQL editor
+  (same pattern as the prior add-*.sql files), then flips the dial on a student
+  and confirms the review lock + re-practice loop in a real quiz; eyeball the
+  /student streak card in a logged-in browser (portal login still browser-only).
+- (b) Then W6 bank content, W7 QA, launch prep; revisit the two saved items
+  (founder-digest deliverable address; question tag/generation mismatch).
+
+Commit state: W5 workstream (B75 cram, B76 flexible task setting, B77 accuracy,
+B78 streak freeze) - committed together when asked.

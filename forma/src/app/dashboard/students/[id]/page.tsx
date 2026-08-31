@@ -32,6 +32,7 @@ interface StudentRow extends EditableStudent {
   practice_volume: PracticeVolume;
   difficulty_posture: DifficultyPosture;
   holiday_posture: HolidayPosture;
+  accuracy_required: boolean;
   last_daily_generated_at: string | null;
 }
 
@@ -76,7 +77,7 @@ export default async function StudentDetailPage({
   const { data: student } = await supabase
     .from('student_profiles')
     .select(
-      'id, name, country, curriculum_level, year_level, exam_board, subjects, weaknesses, report_note, report_attentive, last_report_sent_at, practice_volume, difficulty_posture, holiday_posture, last_daily_generated_at'
+      'id, name, country, curriculum_level, year_level, exam_board, subjects, weaknesses, report_note, report_attentive, last_report_sent_at, practice_volume, difficulty_posture, holiday_posture, accuracy_required, last_daily_generated_at'
     )
     .eq('id', studentId)
     .single<StudentRow>();
@@ -213,6 +214,7 @@ export default async function StudentDetailPage({
             practiceVolume={student.practice_volume}
             difficultyPosture={student.difficulty_posture}
             holidayPosture={student.holiday_posture}
+            accuracyRequired={student.accuracy_required}
             lastDailyGeneratedAt={student.last_daily_generated_at}
           />
 

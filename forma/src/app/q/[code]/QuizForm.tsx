@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb, RefreshCw, MessageCircle, Send, Bot } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb, RefreshCw, MessageCircle, Send, Bot, Timer, Zap, Lock } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 import { renderDiagramSvg } from '@/lib/diagrams/renderDiagramSpec';
 import { renderRichText } from '@/lib/render/richText';
+import type { CramMeta } from '@/lib/quiz/cram';
 import type { QuizQuestion } from './page';
 
 type Phase = 'idle' | 'submitting' | 'success' | 'review' | 'error';
@@ -56,10 +57,19 @@ export default function QuizForm({
   digitalCode,
   questions,
   aiTutorEnabled,
+  cram = null,
+  accuracyRequired = false,
 }: {
   digitalCode: string;
   questions: QuizQuestion[];
   aiTutorEnabled: boolean;
+  cram?: CramMeta | null;
+  // W5 B77 (accuracy-required mode): when the student's profile has the dial
+  // on, the review screen locks until every wrong sub-skill has been
+  // re-practised correctly - "must get correct before advancing". The
+  // re-practice loop below IS the retry-with-new-variant mechanism; this flag
+  // only decides whether that retry is presented as the required path.
+  accuracyRequired?: boolean;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
@@ -75,6 +85,23 @@ export default function QuizForm({
   // disturbing the (already submitted) quiz below it.
   const [rePractising, setRePractising] = useState(false);
   const [rePracticeError, setRePracticeError] = useState<string | null>(null);
+
+  // W5 B75 (cram mode): a timed exam-week board. Counts down from the
+  // server-provided limit and auto-submits whatever is answered when it
+  // reaches zero - the review honestly reflects how far the student got.
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(cram?.timeLimitSeconds ?? 0);
+
+  // W5 B75: self-serve "Cram mode" from the review phase (parallel to
+  // re-practice), only offered when the quiz just taken isn't already a cram
+  // board (no infinite cram loops).
+  const [cramming, setCramming] = useState(false);
+  const [cramError, setCramError] = useState<string | null>(null);
+
+  // Guards the timer effect so an in-flight auto-submit never fires twice.
+  const cramSubmittedRef = useRef(false);
+  // Always points at the latest handleSubmit so the cram countdown submits the
+  // freshest answers, not the ones from mount.
+  const handleSubmitRef = useRef<() => void>(() => {});
 
   // The sub-skills the student got wrong, derived from the review-phase checks
   // (a question counts if any of its parts was marked incorrect). Deduplicated
@@ -120,6 +147,33 @@ export default function QuizForm({
     }
   }
 
+  // W5 B75: start a timed cram board over the student's weak sub-skills.
+  // The route resolves the student + weak sub-skills server-side from the
+  // current quiz's code (never client-supplied identity), the same pattern
+  // as re-practice.
+  async function handleCram() {
+    if (cramming || cram) return;
+    setCramming(true);
+    setCramError(null);
+    try {
+      const res = await fetch('/api/quiz/cram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digitalCode, wrongSubSkills }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCramError(data.error ?? 'Could not start cram mode - please try again.');
+        return;
+      }
+      router.push(`/q/${data.quiz?.digital_code}`);
+    } catch {
+      setCramError('Connection lost. Please try again.');
+    } finally {
+      setCramming(false);
+    }
+  }
+
   const answersRef = useRef(answers);
   useEffect(() => {
     answersRef.current = answers;
@@ -136,6 +190,28 @@ export default function QuizForm({
       revealTimers.clear();
     };
   }, []);
+
+  // W5 B75 (cram mode): countdown that auto-submits on expiry. Uses a ref to
+  // the latest handleSubmit so the submission sees the most recent answers,
+  // not the ones captured when the quiz first mounted.
+  useEffect(() => {
+    if (!cram || cramSubmittedRef.current) return;
+    const interval = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (!cramSubmittedRef.current) {
+            cramSubmittedRef.current = true;
+            handleSubmitRef.current();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cram]);
 
   async function loadSolution(key: string, questionId: string, partIndex: number) {
     if (solutions[key]?.state === 'loaded') return;
@@ -390,6 +466,13 @@ export default function QuizForm({
     }
   }
 
+  // Keep the ref in sync with the latest handleSubmit (no deps = after every
+  // render) so the cram countdown submits the freshest answers. Updated in an
+  // effect, not during render, per react-hooks/refs.
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  });
+
   if (!currentQuestion) return null;
 
   const totalMarks = currentQuestion.parts.reduce((sum, part) => sum + part.marks, 0);
@@ -397,6 +480,15 @@ export default function QuizForm({
   const typeLabel = currentQuestion.type === 'warm-up' ? 'Warm-up' : currentQuestion.type === 'challenge' ? 'Challenge' : null;
   const typeColor = currentQuestion.type === 'warm-up' ? 'text-[#C8A84B]' : currentQuestion.type === 'challenge' ? 'text-[#1A3D2E]' : 'text-[#9A9080]';
   const inReview = phase === 'review';
+
+  // W5 B77: the review is blocked whenever accuracy is required on this
+  // student AND they still have sub-skills to correct. While locked, the
+  // re-practice button below is the only way forward.
+  const accuracyLocked = accuracyRequired && inReview && wrongSubSkills.length > 0;
+
+  const cramMinutes = Math.floor(remainingSeconds / 60);
+  const cramSeconds = remainingSeconds % 60;
+  const timerLabel = `${cramMinutes}:${cramSeconds.toString().padStart(2, '0')}`;
 
   return (
     <div
@@ -406,12 +498,18 @@ export default function QuizForm({
     >
       {inReview && (
         <div className={`${cardClass} text-center animate-fade-up !p-5`}>
-          <CheckCircle2 className="w-8 h-8 text-[#1A3D2E] mx-auto mb-2" strokeWidth={1.5} aria-hidden="true" />
+          {accuracyLocked ? (
+            <Lock className="w-8 h-8 text-[#C8A84B] mx-auto mb-2" strokeWidth={1.5} aria-hidden="true" />
+          ) : (
+            <CheckCircle2 className="w-8 h-8 text-[#1A3D2E] mx-auto mb-2" strokeWidth={1.5} aria-hidden="true" />
+          )}
           <h2 className="text-lg font-semibold text-[#1A1A18] mb-1" style={{ fontFamily: 'var(--font-fira)' }}>
-            Quiz submitted
+            {accuracyLocked ? 'Keep going until it is right' : 'Quiz submitted'}
           </h2>
           <p className="text-sm text-[#5C5849] mb-3">
-            You reached {answeredCount} of {questions.length} questions. Review your answers and tap Show solution on any you got stuck on.
+            {accuracyLocked
+              ? `You need to get every question right before moving on. Re-practise the ${wrongSubSkills.length === 1 ? 'sub-skill' : 'sub-skills'} you got wrong - a fresh set will be generated for you.`
+              : `You reached ${answeredCount} of ${questions.length} questions. Review your answers and tap Show solution on any you got stuck on.`}
           </p>
           {wrongSubSkills.length > 0 && (
             <div className="flex flex-col items-center gap-2">
@@ -425,6 +523,28 @@ export default function QuizForm({
                 {rePractising ? 'Building your re-practice quiz...' : 'Re-practice wrong answers'}
               </button>
               {rePracticeError && <p className="text-xs text-[#C0392B] animate-fade-up">{rePracticeError}</p>}
+              {accuracyLocked && (
+                <p className="text-xs italic text-[#9A9080]">
+                  Keep practising until you get everything correct - this screen stays locked in the meantime.
+                </p>
+              )}
+            </div>
+          )}
+          {!cram && !accuracyLocked && (
+            <div className="mt-3 pt-3 border-t border-[#E0D9D0] flex flex-col items-center gap-2">
+              <p className="text-[11px] italic text-[#9A9080]">
+                Exam week? Push your weakest sub-skills under timed pressure, exam-style.
+              </p>
+              <button
+                type="button"
+                onClick={handleCram}
+                disabled={cramming}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-sm font-medium bg-[#C8A84B] text-white hover:bg-[#B8963C] active:scale-[0.98] transition-all duration-micro ease-premium disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <Zap className={`w-4 h-4 ${cramming ? 'animate-pulse' : ''}`} strokeWidth={2} aria-hidden="true" />
+                {cramming ? 'Building your cram board...' : 'Start cram mode'}
+              </button>
+              {cramError && <p className="text-xs text-[#C0392B] animate-fade-up">{cramError}</p>}
             </div>
           )}
         </div>
@@ -691,13 +811,25 @@ export default function QuizForm({
       {/* Sticky bottom bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#F7F4EF]/95 backdrop-blur-sm border-t border-[#E0D9D0] px-4 py-3 sm:px-6">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-          <span className="text-xs text-[#9A9080]">
-            {inReview
-              ? 'Reviewing your answers'
-              : answeredCount === questions.length
-                ? 'All questions answered.'
-                : `${questions.length - answeredCount} left`}
-          </span>
+          {cram && !inReview ? (
+            <span
+              className={`flex items-center gap-1.5 text-xs font-semibold tabular-nums ${
+                remainingSeconds <= 60 ? 'text-[#C0392B]' : 'text-[#1A3D2E]'
+              }`}
+              aria-live="polite"
+            >
+              <Timer className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
+              {timerLabel}
+            </span>
+          ) : (
+            <span className="text-xs text-[#9A9080]">
+              {inReview
+                ? 'Reviewing your answers'
+                : answeredCount === questions.length
+                  ? 'All questions answered.'
+                  : `${questions.length - answeredCount} left`}
+            </span>
+          )}
           {isLast && !inReview && (
             <button
               type="button"
