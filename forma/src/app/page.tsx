@@ -79,8 +79,11 @@ export default function Home() {
                 site reviewed for this section (Maths Genie's "I'm a parent"/
                 "I'm an educator" split, Dr Frost's "For Teachers"/"For
                 Students" nav): a visitor should not have to guess whether
-                this product is for them. role= pre-selects SignupForm's own
-                "I am a" field rather than being a cosmetic label only. */}
+                this product is for them. Since public signup is closed
+                (founder model, W6) all three entries route to a login gate -
+                /login (founder/tutor/parent) and /student/login - the
+                founder provisions accounts directly rather than offering
+                self-serve registration. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[#5C5849] pt-2">
               <span className="text-[#9A9080]">I&apos;m a:</span>
               <Link href="/login" className="font-medium text-[#1A3D2E] hover:underline">

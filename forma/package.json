@@ -11,7 +11,6 @@
     "generate:print-fonts": "node scripts/generate-print-font-assets.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.117.1",
     "@fontsource/fira-code": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/playfair-display": "^5.3.0",
@@ -28,8 +27,7 @@
     "qrcode-generator": "^2.0.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "resend": "^6.20.0",
-    "sharp": "^0.35.3"
+    "resend": "^6.20.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -3,9 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, ChevronLeft, ChevronRight, XCircle, Lightbulb, RefreshCw, MessageCircle, Send, Bot, Timer, Zap, Lock } from 'lucide-react';
-import 'katex/dist/katex.min.css';
 import { renderDiagramSvg } from '@/lib/diagrams/renderDiagramSpec';
-import { renderRichText } from '@/lib/render/richText';
 import type { CramMeta } from '@/lib/quiz/cram';
 import type { QuizQuestion } from './page';
 
@@ -18,7 +16,7 @@ interface PartCheck {
 }
 
 interface PartSolution {
-  steps: string[];
+  stepsHtml: string[];
   state: 'loading' | 'loaded';
   revealed: number;
 }
@@ -26,6 +24,7 @@ interface PartSolution {
 interface TutorMessage {
   role: 'user' | 'assistant';
   content: string;
+  contentHtml?: string;
 }
 
 interface TutorChat {
@@ -215,21 +214,21 @@ export default function QuizForm({
 
   async function loadSolution(key: string, questionId: string, partIndex: number) {
     if (solutions[key]?.state === 'loaded') return;
-    setSolutions((prev) => ({ ...prev, [key]: { steps: [], state: 'loading', revealed: 0 } }));
-    let steps: string[] = [];
+    setSolutions((prev) => ({ ...prev, [key]: { stepsHtml: [], state: 'loading', revealed: 0 } }));
+    let stepsHtml: string[] = [];
     try {
       const res = await fetch('/api/quiz/solution', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ digitalCode, questionId, partIndex }),
       });
-      const data = (await res.json()) as { steps?: string[] };
-      if (res.ok && Array.isArray(data.steps)) steps = data.steps;
+      const data = (await res.json()) as { stepsHtml?: string[] };
+      if (res.ok && Array.isArray(data.stepsHtml)) stepsHtml = data.stepsHtml;
     } catch {
       // fall through with empty steps
     }
-    setSolutions((prev) => ({ ...prev, [key]: { steps, state: 'loaded', revealed: 0 } }));
-    if (steps.length > 0) revealSequence(key, steps.length);
+    setSolutions((prev) => ({ ...prev, [key]: { stepsHtml, state: 'loaded', revealed: 0 } }));
+    if (stepsHtml.length > 0) revealSequence(key, stepsHtml.length);
   }
 
   // Reveals a step-by-step solution line by line: the first line appears
@@ -239,13 +238,13 @@ export default function QuizForm({
     const existing = revealTimersRef.current.get(key);
     if (existing) clearTimeout(existing);
     let line = 1;
-    setSolutions((prev) => ({ ...prev, [key]: { state: 'loaded', steps: prev[key]?.steps ?? [], revealed: 1 } }));
+    setSolutions((prev) => ({ ...prev, [key]: { state: 'loaded', stepsHtml: prev[key]?.stepsHtml ?? [], revealed: 1 } }));
     const tick = () => {
       line += 1;
       setSolutions((prev) => {
         const sol = prev[key];
         if (!sol || sol.state !== 'loaded') return prev;
-        return { ...prev, [key]: { ...sol, revealed: Math.min(sol.revealed + 1, sol.steps.length) } };
+        return { ...prev, [key]: { ...sol, revealed: Math.min(sol.revealed + 1, sol.stepsHtml.length) } };
       });
       if (line < total) {
         const timer = setTimeout(tick, 700);
@@ -280,7 +279,7 @@ export default function QuizForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ digitalCode, questionId, partIndex, history: nextMessages }),
       });
-      const data = (await res.json()) as { reply?: string; error?: string };
+      const data = (await res.json()) as { replyHtml?: string; error?: string };
       if (res.status === 429) {
         setTutorChats((prev) => ({
           ...prev,
@@ -297,7 +296,11 @@ export default function QuizForm({
       }
       setTutorChats((prev) => ({
         ...prev,
-        [key]: { messages: [...nextMessages, { role: 'assistant' as const, content: data.reply ?? '' }], state: 'done', error: '' },
+        [key]: {
+          messages: [...nextMessages, { role: 'assistant' as const, content: '', contentHtml: data.replyHtml ?? '' }],
+          state: 'done',
+          error: '',
+        },
       }));
     } catch {
       setTutorChats((prev) => ({
@@ -670,14 +673,14 @@ export default function QuizForm({
                       </button>
                       {solutions[key]?.state === 'loaded' && (
                         <div className="mt-2 flex flex-col gap-1.5">
-                          {solutions[key]?.steps.slice(0, solutions[key]?.revealed ?? 0).map((step, i) => (
+                          {solutions[key]?.stepsHtml.slice(0, solutions[key]?.revealed ?? 0).map((stepHtml, i) => (
                             <div
                               key={i}
                               className="animate-fade-up rounded-[8px] bg-[#E8F2ED]/60 border border-[#E0D9D0] px-3 py-2 text-sm text-[#1A1A18] rich-text"
-                              dangerouslySetInnerHTML={{ __html: renderRichText(step) }}
+                              dangerouslySetInnerHTML={{ __html: stepHtml }}
                             />
                           ))}
-                          {solutions[key]?.steps.length === 0 && (
+                          {solutions[key]?.stepsHtml.length === 0 && (
                             <p className="text-xs italic text-[#9A9080]">No worked solution for this part.</p>
                           )}
                         </div>
@@ -710,7 +713,7 @@ export default function QuizForm({
                                         : 'self-start bg-[#E8F2ED]/60 border border-[#E0D9D0] text-[#1A1A18] max-w-[90%] rich-text'
                                     }`}
                                     dangerouslySetInnerHTML={
-                                      msg.role === 'assistant' ? { __html: renderRichText(msg.content) } : undefined
+                                      msg.role === 'assistant' ? { __html: msg.contentHtml ?? '' } : undefined
                                     }
                                   >
                                     {msg.role === 'user' ? msg.content : null}

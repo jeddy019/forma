@@ -1,6 +1,8 @@
-// Stub page - just enough for the signup page's required privacy notice
-// link (Legal Requirements: DATA AND MINORS) to point somewhere real. Not a
-// full privacy policy.
+// Short privacy notice - the landing footer links here (Legal Requirements:
+// DATA AND MINORS: child data is stored, so there must be a real privacy
+// page, and one in the footer). Not a full legal policy - deliberately brief
+// and plain-language. Mentions the 24-month deletion and on-request deletion
+// per the same requirement.
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: '#F7F4EF' }}>

@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
 // Phase 3 Step 17 - Marking Logic (CLAUDE.md), Tier 2: AI-assisted marking
@@ -6,25 +5,20 @@ import OpenAI from 'openai';
 // writing) that Tier 1 can't auto-mark.
 //
 // PROVIDER: OpenAI (gpt-5.6-terra) is the standing default here, same as
-// generateWorksheet.ts and generateParentReport.ts - not a temporary
-// workaround pending an Anthropic restoration. Found live in a 2026-08-19
-// audit that this file was the one AI-calling path in the project that
-// never got the OpenAI swap those two did - it was still constructing
-// `new Anthropic()` directly with no fallback, meaning every Tier 2 call
-// was silently failing (caught by /api/submit's Promise.allSettled into a
-// null result, logged, never surfaced) for as long as the Anthropic
-// account has been unusable. Fixed the same way those two files already
-// were: OpenAI is the active call, the original Anthropic call is kept
-// below as markExtendedPartAnthropic, inactive, for a clean swap back if
-// the Anthropic account is ever the deliberate choice again. Tech Stack's
+// generateWorksheet.ts and generateParentReport.ts. Found live in a
+// 2026-08-19 audit that this file was the one AI-calling path in the
+// project that never got the OpenAI swap those two did - it was still
+// constructing `new Anthropic()` directly with no fallback, meaning every
+// Tier 2 call was silently failing (caught by /api/submit's
+// Promise.allSettled into a null result, logged, never surfaced) for as
+// long as the Anthropic account has been unusable. Fixed the same way
+// those two files already were: OpenAI is the active call. Tech Stack's
 // "claude-sonnet-4-6 for AI-assisted marking only" is superseded by this -
 // gpt-5.6-terra (the same model already used for generation) is the
 // standard now, not a second/different model tier.
 const openaiClient = new OpenAI();
-const anthropicClient = new Anthropic();
 
 const OPENAI_MODEL = 'gpt-5.6-terra';
-const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 512;
 
 const CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const;
@@ -132,28 +126,3 @@ export async function markExtendedPart(input: Tier2Input, signal: AbortSignal): 
   return toResult(parsed, input.marks);
 }
 
-// INACTIVE - the original Anthropic call path. Restore by swapping this
-// back in as markExtendedPart's body if Anthropic is ever the deliberate
-// choice again; anthropicClient/ANTHROPIC_MODEL above are kept in place for
-// exactly this, same pattern as generateWorksheet.ts's own inactive path.
-async function markExtendedPartAnthropic(input: Tier2Input, signal: AbortSignal): Promise<Tier2Result> {
-  const response = await anthropicClient.messages.create(
-    {
-      model: ANTHROPIC_MODEL,
-      max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(input) }],
-      output_config: { format: { type: 'json_schema', schema: RESPONSE_SCHEMA } },
-    },
-    { signal }
-  );
-
-  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
-  if (!textBlock) {
-    throw new Error('AI marking response had no text content.');
-  }
-
-  const parsed = JSON.parse(textBlock.text) as { marks_awarded: number; reasoning: string; confidence: Confidence };
-  return toResult(parsed, input.marks);
-}
-void markExtendedPartAnthropic;

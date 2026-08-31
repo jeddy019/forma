@@ -3,13 +3,13 @@ import { primaryButtonClass, secondaryButtonClass } from '@/lib/ui/formStyles';
 
 // FOUNDER MODEL W6 (de-pro, decided 2026-08-29): public self-serve signup is
 // closed. Forma is the founder's own practice system running a small number
-// of families at a time (roadmap: "close public signup"); there is no free
-// tier and no self-serve plan to quote, so the old self-serve SignupForm is
-// retired. New families come through the founder directly, and existing
-// accounts keep logging in normally. SignupForm.tsx is retained, unused, in
-// this directory (and actions.ts's sendWelcomeEmailAction with it) for the
-// day the SaaS sale reopens self-serve signup - that form, and the
-// /dashboard/families cap, is where it returns.
+// of families at a time; there is no free tier and no self-serve plan to
+// quote, so the old self-serve SignupForm is retired. New families come
+// through the founder directly, and existing accounts keep logging in
+// normally. (The student, parent, and founder login routes all stay live -
+// /login, /student/login, /parent/login - just no self-serve registration.)
+// If the SaaS sale ever reopens self-serve signup, a fresh SignupForm is
+// rebuilt then; the old one was removed as dead code 2026-08-31.
 export default function SignupPage() {
   return (
     <main className="min-h-screen bg-[#F7F4EF] px-6 py-16 flex items-center justify-center">

@@ -38,7 +38,6 @@ type Phase = 'idle' | 'loading' | 'success' | 'error';
 type DifficultyFeedback = 'too_easy' | 'just_right' | 'too_hard';
 type DocumentType = 'worksheet' | 'mark_scheme';
 type PaperFormat = 'A4' | 'Letter';
-type GenerationMode = 'worksheet' | 'quiz';
 
 // Design System > LOADING STATE - cycled every 3 seconds while generating.
 const LOADING_MESSAGES = [

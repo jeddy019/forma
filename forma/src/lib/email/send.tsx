@@ -1,7 +1,5 @@
 import { getResendClient, emailFrom } from './resend';
 import { unsubscribeHeaders } from '@/emails/components/EmailLayout';
-import WelcomeEmail, { type WelcomeEmailProps } from '@/emails/Welcome';
-import WorksheetReadyEmail, { type WorksheetReadyEmailProps } from '@/emails/WorksheetReady';
 import WeeklyDeliveryEmail, { type WeeklyDeliveryEmailProps } from '@/emails/WeeklyDelivery';
 import MondayParentSummaryEmail, { type MondayParentSummaryEmailProps } from '@/emails/MondayParentSummary';
 import TutorParentReportEmail, { type TutorParentReportEmailProps } from '@/emails/TutorParentReport';
@@ -22,10 +20,10 @@ import { familyReadySubject } from './familyReadySubject';
 // show a soft notice; nothing here is fatal by design.
 //
 // Only emails 3, 4, and 5 pass unsubscribeHeaders() (Legal Requirements:
-// "Include the List-Unsubscribe header in emails 3, 4, and 5") - 1, 2, 6, 7,
-// 8 are one-off transactional sends the recipient directly triggered or
-// expects (welcome, a worksheet they just requested, billing), not the
-// recurring/summary category that requirement is aimed at.
+// "Include the List-Unsubscribe header in emails 3, 4, and 5") - the
+// recurring/summary category that requirement is aimed at. The one-off
+// transactional sends (billing, schedule alerts, digests) each triggered
+// by or expected by the recipient do not carry it.
 
 interface EmailAttachment {
   filename: string;
@@ -61,19 +59,6 @@ async function send(args: {
     return false;
   }
   return true;
-}
-
-export function sendWelcomeEmail(to: string, props: WelcomeEmailProps): Promise<boolean> {
-  return send({ to, subject: 'Welcome to Forma', brandName: props.brandName, react: <WelcomeEmail {...props} /> });
-}
-
-export function sendWorksheetReadyEmail(to: string, props: WorksheetReadyEmailProps): Promise<boolean> {
-  return send({
-    to,
-    subject: `${props.studentName}'s ${props.subject} worksheet is ready`,
-    brandName: props.brandName,
-    react: <WorksheetReadyEmail {...props} />,
-  });
 }
 
 export function sendWeeklyDeliveryEmail(to: string, props: WeeklyDeliveryEmailProps): Promise<boolean> {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { renderRichText } from '@/lib/render/richText';
 
 // Phase B Wave 1 (B4): returns the worked step-by-step solution for a single
 // quiz part, for the post-submission review screen. Same server-side model as
@@ -13,6 +14,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // attempted it - revealing steps before submission would hand over the answer
 // mid-quiz. Older worksheets authored before worked_solution existed return
 // an empty steps array and the UI simply omits the reveal for that part.
+//
+// Returns stepsHtml, each step already rendered through renderRichText
+// server-side (KaTeX/mhchem inline, fenced code as monospace) so the quiz
+// client carries NO KaTeX bundle - the page only consumes the HTML. See
+// richText.ts; the KaTeX CSS ships globally in globals.css.
 export const runtime = 'nodejs';
 
 const DIGITAL_CODE_PATTERN = /^[A-Za-z0-9_-]{6,32}$/;
@@ -79,5 +85,5 @@ export async function POST(request: NextRequest) {
   const schemeQuestion = worksheet.mark_scheme_json?.questions?.find((q) => q.id === questionId);
   const steps = schemeQuestion?.parts?.[partIndex]?.worked_solution ?? [];
 
-  return NextResponse.json({ steps }, { status: 200 });
+  return NextResponse.json({ stepsHtml: steps.map((step) => renderRichText(step)) }, { status: 200 });
 }

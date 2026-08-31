@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getAiTutorReply, type AiTutorMessage } from '@/lib/quiz/aiTutor';
 import { aiTutorAllowance } from '@/lib/payments/planStatus';
 import { stripHtmlTags } from '@/lib/ai/sanitize';
+import { renderRichText } from '@/lib/render/richText';
 import type { AnswerFormat } from '@/lib/ai/schema';
 
 // Phase B Wave 4 (B72): AI tutor chat - the post-quiz "Why is this wrong?"
@@ -243,5 +244,5 @@ export async function POST(request: NextRequest) {
     console.error('Failed to log AI tutor usage', error);
   }
 
-  return NextResponse.json({ reply }, { status: 200 });
+  return NextResponse.json({ replyHtml: renderRichText(reply) }, { status: 200 });
 }
