@@ -5644,3 +5644,90 @@ it only changes the review screen's behaviour.
 
 Commit state: W5 workstream (B75 cram, B76 flexible task setting, B77 accuracy,
 B78 streak freeze) - committed together when asked.
+
+---
+
+## Session - 2026-09-01 Cleanup + Security + Speed
+
+Three threads in one pass, each verified independently, then committed.
+
+### 1. Code/dead-dependency cleanup (commits eebd1d3 -> 6fdd7cb)
+- Stopped Next.js 16 auto-regenerating AGENTS.md/CLAUDE.md agent-rules blocks:
+  `agentRules: false` added to next.config.ts. (AGENTS.md was Next generating
+  files on every `next dev` - the user asked why it kept appearing.)
+- Deleted dead code: `src/app/api/auth/callback/route.ts` (orphaned Supabase
+  Auth path - students no longer log in via email; also the reason the
+  quiz/study, srs/track, srs/reviewed `.ilike('email', user.email)` filters
+  could never match), dormant signup files `signup/SignupForm.tsx` +
+  `signup/actions.ts` (kept around since /signup was closed in de-pro), unused
+  `emails/Welcome.tsx` + `emails/WorksheetReady.tsx` (no call sites -
+  WorksheetReadyEmail/sendWorksheetReadyEmail confirmed dead), orphaned
+  `src/lib/ai/routeQuestion.ts`, and the unused `GenerationMode` type in
+  GenerateForm.
+- Dropped unused deps from package.json: `@anthropic-ai/sdk` (inactive swap
+  path is hard-commented dead code, not a live import), `sharp` (confirmed via
+  the module graph not a direct dep of ours - it stays in the lock as Next's
+  optionalDependency). Lock re-reconciled.
+- Verified: tsc clean, eslint 0 errors (4 pre-existing QuizForm warnings at
+  the time), 327/327 tests, next build passes.
+
+### 2. Security - plaintext credential leak resolved for good
+The demo student's password `formaStudent2026!`, the founder gmail, and the
+`demo-student@forma.app` address sat in the **public** repo's file history. A
+prior git-filter-repo attempt had silently failed, so CLAUDE.md was still in
+pushed history. This pass:
+- Scrubbed the strings from the working CLAUDE.md + CHANGELOG.md (kept the
+  synthetic `demo-tutor@forma.app` - it is not personal data).
+- Re-ran git-filter-repo over the whole history removing those exact strings
+  + inverting the CLAUDE.md path, force-pushed the rewritten `master`
+  (now at 6fdd7cb -> 4f404f3).
+- Verified remote clean: `git fetch` shows no secret string in any commit.
+- GitHub secret-scanning: **0 open + 0 resolved alerts** (checked both states,
+  `?state=all` returns 400 so query each).
+- The user deleted the demo-student Supabase Auth user themselves (credential
+  is dead end to end).
+- Full pre-rewrite backup bundle at
+  `C:\Users\Jedidiah\AppData\Local\Temp\opencode\forma-git-backup-20260901-001755\forma.bundle`.
+
+### 3. Speed - the dashboard no longer feels flat-slow (commit 4f404f3)
+Root cause was serial Supabase round-trips, not bundle size (verified: no
+katex-JS/mathjs in any client bundle). Two fixes + one delivery fix:
+- **Dashboard layout streams**: `{children}` now wrapped in a `<Suspense>`
+  boundary whose fallback is the existing dashboard skeleton, so the shell
+  (nav, page doodles, page chrome) paints immediately and each page's data
+  fetch resolves independently - linear-style "instant chrome" instead of a
+  blank page for the whole serial auth+data chain.
+- **students/[id] parallelised**: the 5 independent reads (student profile,
+  family link, topics-practised worksheets, owner plan gate, portal account)
+  now fire in one `Promise.all` instead of 5 sequential awaits - each was a
+  separate Supabase round-trip, so serialising cost ~5x the latency it needed.
+- **Founder digest delivery**: the daily-quiz cron's morning digest now reads
+  a new `FOUNDER_DIGEST_EMAIL` env override and only falls back to
+  `owner.email` when it is unset. This finally routes the founder digest to the
+  founder's real, Resend-deliverable inbox instead of demo-tutor@forma.app
+  which the free tier 403s (the Wave E gap flagged 2026-08-30).
+  Set locally in .env.local to jeddy019@gmail.com; **must be set in Vercel env
+  for production** (I cannot reach Vercel secrets from here).
+- Verified: tsc clean, eslint 0 errors (the 3 remaining are pre-existing
+  QuizForm warnings), 327/327 tests, production build passes.
+- Committed as `4f404f3 Speed + founder digest delivery`, pushed to origin.
+
+### Decisions
+- Founder digest is env-driven, not hardcoded to a personal address in code,
+  so a second tutor owner ever appearing still gets their own digest while the
+  override catches the founder's.
+- Removed `.env.local`'s FOUNDER_DIGEST_EMAIL set locally, but CLAUDE.md/CHANGELOG
+  never carry the actual email (docs use "the founder inbox" / the file is
+  gitignored).
+
+### Next
+- (a) User reviews + deletes the 5 untracked scratch files
+  (scratch-aisha-report-enriched.pdf/.png, scratch-aisha-report.pdf,
+  scratch-aisha-session-brief.pdf, weekly-report-sample.png).
+- (b) Set FOUNDER_DIGEST_EMAIL in Vercel.
+- (c) W6 bank content, W7 QA, launch prep; revisit question tag/generation
+  mismatch.
+- (d) Replay the "overbuilt for current reality" discussion + plan the new
+  modes (surprise-me / dare / bridge-the-gap), all-subjects, and the
+  year-group/country/exam-board (board from Year 10+) decisions before any
+  more building.
