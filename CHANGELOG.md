@@ -5731,3 +5731,59 @@ katex-JS/mathjs in any client bundle). Two fixes + one delivery fix:
   modes (surprise-me / dare / bridge-the-gap), all-subjects, and the
   year-group/country/exam-board (board from Year 10+) decisions before any
   more building.
+
+---
+
+## Session - 2026-09-01 (second pass) - Parent dashboard proof-of-engagement
+
+Direct continuation of the Completion Plan conversation. The user made the
+strategic call: build to completion, THEN test with real users, THEN launch.
+No features cut - the features are the moat. "Overbuilt" resolved as a
+SEQUENCING issue (stop adding new mode ideas, finish what exists, don't rip
+out). Locked the FULL COMPLETION PLAN into CLAUDE.md (new "Completion Plan"
+section above Current Build Status) - see there for the 9-step build order.
+
+Decisions locked this session:
+- FLAUTERWAVE stays DORMANT until the SaaS-to-tutors tier opens. Under the
+  founder model parents pay directly and the founder marks invoices, so no
+  parent ever hits a Flutterwave checkout. Keys/webhook stay sandbox until
+  then. No launch action.
+- SURPRISE-ME remodelled: pick year + subject -> random mixed question set
+  drawing from BOTH the question bank and AI generation. Ship AI-generation-
+  only first, bank blends in as W6 content grows. "Dare" and "bridge-the-gap"
+  REJECTED (already solved - students can type any topic + pick any year).
+- STREAK FREEZE (B78): nice-to-have on the student page only, not load-bearing.
+- ACCURACY-REQUIRED (B77): set ON BY DEFAULT (user: "no reason to turn it
+  off"). Flip migration default to TRUE + backfill when applied.
+- Dashboards are the price justification, build them before launch. Student
+  dashboard (Today's practice/streak/mastery/recent/done/re-practice/SRS) and
+  parent dashboard both required.
+
+### Built tonight (parent dashboard proof-of-engagement)
+Added to each child card on /parent:
+- **Daily streak** (Flame icon, gold) - computed with `currentStreak` from the
+  child's submission activity (any practice submission = activity). Quiet
+  number, not gamified, matching the student-side simple counter.
+- **"N practices this week"** (CheckCircle icon, green) - submissions within
+  the last 7 days.
+Added a couple of conditional render branches so the row shows either the
+streak (when alive) or just the weekly count (when streak is 0 but the child
+practised this week). Pure read from data /parent already fetches - NO SQL,
+NO schema change.
+
+### Verification
+tsc clean (full project). No new tests needed (pure view read; existing
+parent-data flow untouched). Committed with CHANGELOG + CLAUDE.md lock-in.
+
+### Next (resume here)
+1. Accuracy-required default ON - edit supabase/add-accuracy-required.sql
+   DEFAULT FALSE -> DEFAULT TRUE + backfill UPDATE, and the player's lock
+   logic already follows the stored value so no code change needed.
+2. Apply all pending SQL migrations (add-accuracy-required, and re-check
+   add-report-attentive/add-portal-accounts/add-daily-dials/add-cram-
+   generated-from/add-streak-freeze are all applied - last pass said applied).
+3. Vercel env: FOUNDER_DIGEST_EMAIL + full checklist; delete scratch files.
+4. Surprise-me mode (remodelled).
+5. Complete the student dashboard.
+6. W6 bank content, W7 QA, launch prep.
+Revisit the question tag/generation mismatch sometime before launch.

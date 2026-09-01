@@ -10,7 +10,8 @@ import ScoresChart, { type ScorePoint } from '@/lib/ui/ScoresChart';
 import { toMasteryBars, masteryScore, type MasteryBar } from '@/lib/mastery/masteryView';
 import type { SkillMap } from '@/lib/mastery/types';
 import { invoicePeriodLabel } from '@/lib/invoices/familyBilling';
-import { Home, LogOut, Receipt, FileText } from 'lucide-react';
+import { currentStreak } from '@/lib/streak/streak';
+import { Home, LogOut, Receipt, FileText, Flame, CheckCircle } from 'lucide-react';
 
 // W8 Wave B slice 2 (parent portal): the VIEW-ONLY proof portal for one
 // family - a parent opens it (kind 'parent' portal account, provisioned by
@@ -87,6 +88,8 @@ interface ChildView {
   curriculum_level: string | null;
   year_level: string | null;
   average: number | null;
+  streak: number;
+  doneThisWeek: number;
   chartScores: ScorePoint[];
   masteryBars: MasteryBar[];
   worksheets: (WorksheetRow & { score: number | null })[];
@@ -187,9 +190,22 @@ export default async function ParentPortalPage() {
     const masteryBars = toMasteryBars(student.skill_map);
     const average = masteryScore(masteryBars);
 
+    // Proof-of-engagement line: the child's running daily streak (any practice
+    // submission counts as activity) and how much they completed this week.
+    // This is the "is my child actually practising" signal that justifies the
+    // price - shown as a quiet number, not gamified (Permission Summary's
+    // streak is a simple counter, never XP/flame-spam).
+    const now = new Date();
+    const streak = currentStreak((submissions ?? []).map((s) => s.submitted_at), now);
+    const weekAgo = new Date(now);
+    weekAgo.setDate(now.getDate() - 7);
+    const doneThisWeek = (submissions ?? []).filter((s) => new Date(s.submitted_at) >= weekAgo).length;
+
     children.push({
       ...student,
       locale: localeForCountry(student.country),
+      streak,
+      doneThisWeek,
       worksheets: (worksheets ?? []).slice(0, RECENT_WORKSHEETS_PER_CHILD).map((w) => ({
         ...w,
         score: latestScoreByWorksheet.get(w.id)?.score_percentage ?? null,
@@ -248,6 +264,27 @@ export default async function ParentPortalPage() {
                 </p>
               )}
             </div>
+
+            {child.streak > 0 && (
+              <div className="flex items-center gap-4 text-sm text-[#5C5849]">
+                <span className="flex items-center gap-1.5">
+                  <Flame className="w-4 h-4 text-[#B8963C]" strokeWidth={1.75} aria-hidden="true" />
+                  {child.streak}-day streak
+                </span>
+                {child.doneThisWeek > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-[#1A3D2E]" strokeWidth={1.75} aria-hidden="true" />
+                    {child.doneThisWeek} {child.doneThisWeek === 1 ? 'practice' : 'practices'} this week
+                  </span>
+                )}
+              </div>
+            )}
+            {child.streak === 0 && child.doneThisWeek > 0 && (
+              <div className="text-sm text-[#5C5849] flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-[#1A3D2E]" strokeWidth={1.75} aria-hidden="true" />
+                {child.doneThisWeek} {child.doneThisWeek === 1 ? 'practice' : 'practices'} this week
+              </div>
+            )}
 
             {child.chartScores.length > 0 && (
               <div className="flex flex-col gap-2">
