@@ -71,62 +71,73 @@ export default async function StudentDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // RLS (profiles_own: auth.uid() = owner_id) means this simply returns no
-  // row if studentId belongs to a different tutor/parent - notFound() below
-  // covers both "doesn't exist" and "isn't yours" without distinguishing them.
-  const { data: student } = await supabase
-    .from('student_profiles')
-    .select(
-      'id, name, country, curriculum_level, year_level, exam_board, subjects, weaknesses, report_note, report_attentive, last_report_sent_at, practice_volume, difficulty_posture, holiday_posture, accuracy_required, last_daily_generated_at'
-    )
-    .eq('id', studentId)
-    .single<StudentRow>();
+  // Fire all the independent reads at once instead of awaiting them one at a
+  // time (they only depend on studentId / user.id, never on each other) - each
+  // is a separate Supabase round-trip, so serialising cost the page 6-7x the
+  // latency it needed. The workspace then resolves whichever finish first.
+  const [studentQuery, familyQuery, worksheetQuery, ownerQuery, portalQuery] = await Promise.all([
+    // RLS (profiles_own: auth.uid() = owner_id) means this simply returns no
+    // row if studentId belongs to a different tutor/parent - notFound() below
+    // covers both "doesn't exist" and "isn't yours" without distinguishing them.
+    supabase
+      .from('student_profiles')
+      .select(
+        'id, name, country, curriculum_level, year_level, exam_board, subjects, weaknesses, report_note, report_attentive, last_report_sent_at, practice_volume, difficulty_posture, holiday_posture, accuracy_required, last_daily_generated_at'
+      )
+      .eq('id', studentId)
+      .single<StudentRow>(),
 
-  if (!student) notFound();
+    // W4: the family this student belongs to, if any (at most one - student_id
+    // is UNIQUE on family_members). family_members_own RLS means only this
+    // student's owner sees the link, and the nested families row only resolves
+    // when the caller owns that family too - so a wrong-owner viewer gets
+    // nothing rather than a family name leak.
+    supabase
+      .from('family_members')
+      .select('family:families(id, name, parent_email)')
+      .eq('student_id', studentId)
+      .maybeSingle<{ family: { id: string; name: string; parent_email: string | null } | null }>(),
 
-  // W4: the family this student belongs to, if any (at most one - student_id
-  // is UNIQUE on family_members). family_members_own RLS means only this
-  // student's owner sees the link, and the nested families row only resolves
-  // when the caller owns that family too - so a wrong-owner viewer gets
-  // nothing rather than a family name leak.
-  const { data: familyLink } = await supabase
-    .from('family_members')
-    .select('family:families(id, name, parent_email)')
-    .eq('student_id', studentId)
-    .maybeSingle<{ family: { id: string; name: string; parent_email: string | null } | null }>();
+    // Phase 6 Step 35: "Topics practiced" - no fixed syllabus denominator
+    // (per the user - see CHANGELOG.md), just distinct topics with
+    // worksheet and question counts. Not tutor-pro gated: unlike session
+    // notes, this isn't listed anywhere in Permissions Summary as a paid
+    // entitlement, and it's only a read of data that already exists
+    // regardless of plan.
+    supabase
+      .from('worksheets')
+      .select('subject, topic, questions_json')
+      .eq('student_id', studentId)
+      .limit(WORKSHEET_HISTORY_LIMIT)
+      .returns<WorksheetForTopicsRow[]>(),
 
-  // Phase 6 Step 35: "Topics practiced" - no fixed syllabus denominator
-  // (per the user - see CHANGELOG.md), just distinct topics with
-  // worksheet and question counts. Not tutor-pro gated: unlike session
-  // notes, this isn't listed anywhere in Permissions Summary as a paid
-  // entitlement, and it's only a read of data that already exists
-  // regardless of plan.
-  const { data: worksheetRows } = await supabase
-    .from('worksheets')
-    .select('subject, topic, questions_json')
-    .eq('student_id', studentId)
-    .limit(WORKSHEET_HISTORY_LIMIT)
-    .returns<WorksheetForTopicsRow[]>();
+    supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single<{ role: string; plan: string; plan_expires_at: string | null }>(),
+
+    // Portal login state for this student. portal_accounts is deny-all RLS
+    // (Security Rules 1's service-role pattern), so this read uses the admin
+    // client - the student was already proven owned by the RLS lookup above.
+    // Only the username and last-reset date ever leave the DB; the scrypt hash
+    // never does (and the plaintext password is only ever in a provisioning
+    // action's response).
+    createAdminClient()
+      .from('portal_accounts')
+      .select('username, password_reset_at')
+      .eq('student_id', studentId)
+      .maybeSingle<{ username: string; password_reset_at: string | null }>(),
+  ]);
+
+  const studentData = studentQuery.data;
+  if (!studentData) notFound();
+  const student = studentData;
+
+  const familyLink = familyQuery.data ?? null;
   const topicsCovered = computeTopicsCovered(
-    (worksheetRows ?? [])
+    (worksheetQuery.data ?? [])
       .filter((w): w is WorksheetForTopicsRow & { subject: string; topic: string } => Boolean(w.subject && w.topic))
       .map((w) => ({ subject: w.subject, topic: w.topic, questionCount: w.questions_json?.questions?.length ?? 0 }))
   );
 
-  const { data: ownerRow } = await supabase.from('users').select('role, plan, plan_expires_at').eq('id', user.id).single();
-  const canUseSessionNotes = ownerRow?.role === 'tutor' && isActivePro(ownerRow?.plan, ownerRow?.plan_expires_at);
-
-  // Portal login state for this student. portal_accounts is deny-all RLS
-  // (Security Rules 1's service-role pattern), so this read uses the admin
-  // client - the student was already proven owned by the RLS lookup above.
-  // Only the username and last-reset date ever leave the DB; the scrypt hash
-  // never does (and the plaintext password is only ever in a provisioning
-  // action's response).
-  const { data: portalAccount } = await createAdminClient()
-    .from('portal_accounts')
-    .select('username, password_reset_at')
-    .eq('student_id', studentId)
-    .maybeSingle<{ username: string; password_reset_at: string | null }>();
+  const canUseSessionNotes = ownerQuery.data?.role === 'tutor' && isActivePro(ownerQuery.data?.plan, ownerQuery.data?.plan_expires_at);
 
   let notes: SessionNoteRow[] = [];
   let totalPages = 1;
@@ -141,6 +152,8 @@ export default async function StudentDetailPage({
     notes = noteRows ?? [];
     totalPages = count ? Math.max(1, Math.ceil(count / PAGE_SIZE)) : 1;
   }
+
+  const portalAccount = portalQuery.data ?? null;
 
   return (
     <div className="flex flex-col gap-8">

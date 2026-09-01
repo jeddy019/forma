@@ -302,8 +302,14 @@ export async function GET(request: NextRequest) {
     // The digest always goes out - even when every student skipped or failed,
     // the founder must see that a morning passed and what state it left
     // things in (planes never fly silently on the founder's dashboard).
-    if (owner.email) {
-      const sendResult = await sendDailyQuizDigestEmail(owner.email, {
+    // It goes to the owner's email unless FOUNDER_DIGEST_EMAIL is set, in
+    // which case the single-deliverable founder address wins (Resend's free
+    // testing tier 403s anything but the founder's verified inbox - see
+    // CLAUDE.md's email/DIGEST notes).
+    const digestTo =
+      (process.env.FOUNDER_DIGEST_EMAIL || (owner.email as string | null)) ?? null;
+    if (digestTo) {
+      const sendResult = await sendDailyQuizDigestEmail(digestTo, {
         dateLabel: now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
         generated: entries,
         skippedCount: results.skippedPaused + results.skippedAlready + results.skippedNoHistory,
@@ -311,7 +317,7 @@ export async function GET(request: NextRequest) {
         brandName: resolveBranding(owner).name,
       });
       if (sendResult) results.digestsSent++;
-      else console.error(`Failed to send daily digest to ${owner.email}`);
+      else console.error(`Failed to send daily digest to ${digestTo}`);
     }
   }
 

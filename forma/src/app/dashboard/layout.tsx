@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
@@ -6,6 +7,7 @@ import { ensureUserProfile } from '@/lib/supabase/ensureUserProfile';
 import { DashboardSidebar } from './DashboardNav';
 import { PageDoodles } from '@/lib/ui/PageDoodles';
 import { resolveBranding } from '@/lib/branding';
+import DashboardHomeLoading from './loading';
 
 async function signOutAction() {
   'use server';
@@ -54,7 +56,13 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       <DashboardSidebar role={role} userEmail={user?.email ?? null} brandName={brandName} signOutAction={signOutAction} />
       <main className="relative flex-1 min-w-0 px-6 md:px-10 py-8">
         <PageDoodles />
-        <div className="relative max-w-4xl mx-auto animate-fade-up">{children}</div>
+        <div className="relative max-w-4xl mx-auto animate-fade-up">
+          {/* Stream the shell (header/nav above) immediately and let each page's
+              data fetch resolve independently - linear-style: chrome paints
+              first, content fills in instead of a blank screen for the whole
+              serial Supabase chain. */}
+          <Suspense fallback={<DashboardHomeLoading />}>{children}</Suspense>
+        </div>
       </main>
     </div>
   );
